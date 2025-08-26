@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: autohea
+Version: 0.0.2
+Summary: An automatically tools for high energy astrophysics
+Author-email: Xinxiang Sun <sunxx@nao.cas.cn>
+License: GPL-3.0
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: scipy
+Requires-Dist: astropy
+Requires-Dist: astro-gdt
+Requires-Dist: astro-gdt-fermi
+Requires-Dist: astro-elisa
+Requires-Dist: emcee
+Dynamic: license-file
+
+# AutoHEA
+An automatically tools for high energy astrophysics.
