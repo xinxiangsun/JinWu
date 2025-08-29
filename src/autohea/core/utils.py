@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
-LastEditors: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
-LastEditTime: 2025-08-15 13:30:37
+LastEditors: Xinxiang Sun sunxx@nao.cas.cn
+LastEditTime: 2025-08-29 16:34:40
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -126,7 +126,7 @@ class RedshiftExtrapolator():
     max_z = extrapolator.compute(snr_target=7)
     """
     
-    def __init__(self, nh ,z0 , model: str, par: list,  arfpath: list | Path | str, rmfpath: list | Path | str, bkgpath: list | Path | str,
+    def __init__(self ,z0 , model: str, par: list,  arfpath: list | Path | str, rmfpath: list | Path | str, bkgpath: list | Path | str,
                  srcnum, bkgnum,duration, area_ratio: float = 1/12):
         '''
         对于EP的数据处理而言, alpha的默认值大约是1/12, 但是在实际的数据处理中
@@ -136,7 +136,7 @@ class RedshiftExtrapolator():
         self._bkgnum= bkgnum
         self._area_ratio = area_ratio
         self._z0 = z0
-        self._nh = nh
+        # self._nh = nh
         self._model = model
         self._par = par
         self._duration = duration
@@ -190,17 +190,17 @@ class RedshiftExtrapolator():
 
 
 
-    @property
-    def nh(self):
-        """中性氢柱密度的属性访问器"""
-        return self._nh
+    # @property
+    # def nh(self):
+    #     """中性氢柱密度的属性访问器"""
+    #     return self._nh
     
 
-    @nh.setter
-    def nh(self, value):
-        if value < 0:
-            raise ValueError("中性氢柱密度必须大于等于0")
-        self._nh = value
+    # @nh.setter
+    # def nh(self, value):
+    #     if value < 0:
+    #         raise ValueError("中性氢柱密度必须大于等于0")
+    #     self._nh = value
     
     
     @property
@@ -298,7 +298,7 @@ class RedshiftExtrapolator():
             if first_z_comp is not None and hasattr(last_comp_obj, 'Redshift'):
                 last_comp_obj.Redshift.link = first_z_comp.Redshift
         
-        # 冻结所有参数
+        # 最后冻结所有参数（确保模型不在外部被修改）
         for pobj in param_objs:
             pobj.frozen = True
     
@@ -454,9 +454,11 @@ class RedshiftExtrapolator():
 
         for i, z in enumerate(z_grid):
             # 设置红移参数
-            self._par_z.values = z
-            
-            # 设置归一化：应用完整的XSPEC红移外推公式
+            # 仅当模型包含 Redshift 参数时设置它；否则跳过并只调整归一化
+            if hasattr(self, "_par_z") and (self._par_z is not None):
+                self._par_z.values = z
+
+            # 设置归一化：应用完整的XSPEC红移外推公式（无论是否存在 Redshift 参数，都调整 norm）
             self._par_norm.values = original_norm * total_factor[i]
             
             # 🔬 能谱卷积核心过程（基于trysimulation.ipynb的完整实现）
