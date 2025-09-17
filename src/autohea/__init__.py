@@ -1,7 +1,12 @@
 '''
 Date: 2025-02-25 15:02:36
+<<<<<<< HEAD
 LastEditors: Xinxiang Sun sunxinxiang24@mails.ucas.ac.cn
 LastEditTime: 2025-05-02 15:25:34
+=======
+LastEditors: error: error: git config user.name & please set dead value or install git && error: git config user.email & please set dead value or install git & please set dead value or install git
+LastEditTime: 2025-08-16 15:21:36
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 FilePath: /research/autohea/src/autohea/__init__.py
 '''
 """
@@ -20,4 +25,8 @@ from . import missions
 from . import response
 from . import timing
 # 定义公开接口
+<<<<<<< HEAD
 __all__ = ['core', 'spectrum', 'missions', 'response']
+=======
+__all__ = ['core', 'spectrum', 'missions', 'response', 'timing']
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd

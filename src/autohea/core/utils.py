@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-17 16:45:38
+LastEditTime: 2025-09-17 18:53:55
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -756,37 +756,30 @@ class GeneralRelativity:
         self._v = None
         pass
 
-    # 使用 astropy 原生单位
-    _UNIT_CM = u.cm  # type: ignore[attr-defined]
-    _UNIT_S = u.s  # type: ignore[attr-defined]
-    _UNIT_VEL = _UNIT_CM / _UNIT_S
-
     @property
-    @u.quantity_input(v=_UNIT_VEL)
     def v(self):
         return self._v
-    
 
     @v.setter
-    @u.quantity_input(value=_UNIT_VEL)
     def v(self, value):
-
-        if value< 0:
-            raise ValueError("速度必须大于等于0")
-        if isinstance(value, u.Quantity):
-            self._v = value.to(self._UNIT_VEL)
+        if hasattr(value, 'unit'):  # 检查是否为Quantity对象
+            if value.value < 0:
+                raise ValueError("速度必须大于等于0")
+            self._v = value.to(u.meter/u.second)  # type: ignore
         else:
-            self._v = value * self._UNIT_VEL
+            if value < 0:
+                raise ValueError("速度必须大于等于0")
+            self._v = value * u.meter/u.second  # type: ignore
 
     def time_dilation(self, t_rest, frame_from="静止系", frame_to="运动系"):
-        """=
+        """
         计算时间膨胀效应，并注明变换
         :param t_rest: 静止系下的时间（Quantity）
         :param frame_from: 原参考系
         :param frame_to: 目标参考系
         :return: 运动系下的时间（Quantity）
         """
-        result = self.lorentz_factor * t_rest  # type: ignore[attr-defined]
+        result = self.lorentz_factor * t_rest
         print(f"时间膨胀: 从 {frame_from} 到 {frame_to}，输入 {t_rest}，输出 {result}")
         return result
 
@@ -798,13 +791,15 @@ class GeneralRelativity:
         :param frame_to: 目标参考系
         :return: 运动系下的长度（Quantity）
         """
-        result = l_rest / self.lorentz_factor  # type: ignore[attr-defined]
+        result = l_rest / self.lorentz_factor
         print(f"长度收缩: 从 {frame_from} 到 {frame_to}，输入 {l_rest}，输出 {result}")
         return result
 
     @property
     def beta(self):
-        return (self.v / const.c.to(self._UNIT_VEL)).decompose().value  # type: ignore[attr-defined]
+        if self._v is None:
+            raise ValueError("速度未设置")
+        return (self._v / c).decompose().value
 
     @property
     def lorentz_factor(self):
@@ -853,61 +848,139 @@ class GeneralRelativity:
             "tobs_teng": (
                 r"\Delta t_{\text{obs}} = \frac{1-\beta\cos\theta}{1-\beta} \Delta t_{\text{eng}}."
             ),
-
-            "isotropic_energy": (
-                r"\text{isotropic energy}: E_{\text{iso}} = 4\pi d_L^2(z) S_{\text{bol}}, \text{where } d_L = d_c (1+z)"
+            "intensity": (
+                r"\text{辐射强度变换:}\quad I_\nu(\nu) = \mathcal{D}^3 I'_{\nu'}(\nu')"
             ),
-
-            "energy_budget": (
-                r"\text{Energy budget: } "
-                r"E_k \propto t \propto [L_{\text{shock}} / l_{\text{dec}}]^{-3/2} \propto L^{-3/2}_x, "
-                r"\text{ where } l_{\text{dec}} \propto t^{1/2} \propto L_x^{-3/4}"
-            ),
-
-            "afterglow_light_curve": (
-                r"\text{Afterglow lightcurve: } F_\nu \propto t^{-\delta} \nu^{-\beta}, "
-                r"\text{ where } \delta = 3(\beta+1)/4 \text{ (ISM)}, \delta = 3\beta/4 \text{ (wind)}"
-            ),
-
-            "closure_relations": (
-                r"\text{Closure relations: } \alpha = (3-2s)\beta/2-1/2 \text{ (normal)}, "
-                r"\alpha = (2-3s)\beta/2 + (s-2)/2 \text{ (slow cooling)}"
-            ),
-
-            "jet_break": (
-                r"\text{Jet break: } t_{\text{jet}} \propto \theta_j^{8/3} E_k^{1/3} n^{-1/3}, "
-                r"\text{ where } \theta_j = \text{jet opening angle}"
-            ),
-
-            "magnetic_field": (
-                r"\text{Magnetic field: } B = \sqrt{8\pi \epsilon_B n m_p c^2 \gamma_{\text{sh}}^2}, "
-                r"\text{ where } \gamma_{\text{sh}} \text{ is shock Lorentz factor}"
-            ),
-
-            "synchrotron_frequency": (
-                r"\text{Synchrotron frequencies: } "
-                r"\nu_m = \gamma_m^2 \frac{eB}{2\pi m_e c}, \quad "
-                r"\nu_c = \frac{3 e B \gamma_c^2}{4 \pi m_e c}"
-            ),
-
-            "cooling_frequency": (
-                r"\text{Cooling frequency: } \gamma_c = \frac{6\pi m_e c}{\sigma_T B^2 t}, "
-                r"\text{ where } \sigma_T \text{ is Thomson cross section}"
-            ),
-
-            "spectral_breaks": (
-                r"\text{Spectral breaks: } "
-                r"\text{if } \nu_m < \nu_c: F_\nu \propto \nu^{1/3} (\nu < \nu_m), \nu^{-(p-1)/2} (\nu_m < \nu < \nu_c), \nu^{-p/2} (\nu > \nu_c); "
-                r"\text{if } \nu_c < \nu_m: F_\nu \propto \nu^{1/3} (\nu < \nu_c), \nu^{-1/2} (\nu_c < \nu < \nu_m), \nu^{-p/2} (\nu > \nu_m)"
-            )
+            
         }
-        
+        header = r"\text{带'}\text{的是共动系，不带的是近邻观测者系}\\"
+        note = r"\text{尤其需要特别注意的事情是: 近邻观测者系仍然需要经过宇宙学的变换才能得到观测的结果}"
+        note2 = r"\text{另外由于视超光速效应,引擎系下两束光的间隔在辐射过程中会导致间隔观测到的信号间隔变短,这完全不涉及相对论}"
         if formula_type == "all":
-            for key, formula in formulas.items():
-                print(f"\n{key.upper()}:")
-                display(Math(formula))
-        elif formula_type in formulas:
-            display(Math(formulas[formula_type]))
+            display(Math(header))
+            display(Math(note))
+            display(Math(note2))
+            for key in formulas:
+                display(Math(formulas[key]))
         else:
-            print(f"Unknown formula type: {formula_type}")
-            print(f"Available types: {list(formulas.keys())}")
+            display(Math(header))
+            display(Math(note))
+            display(Math(note2))
+            display(Math(formulas.get(formula_type, r"\text{未知公式类型}")))
+    
+
+    @classmethod
+    def show_radiation_transform(cls, formula_type="all"):
+        """
+        展示常用的辐射变换公式
+        :param formula_type: 可选"all"或指定公式名
+        """
+        formulas = {
+            "flux1": (
+                r"F_\nu(\nu_{\text{obs}}) = \frac{(1+z)\mathcal{D}^3 j'_{\nu'}(\nu')V'}{D_L^2}."
+            ),
+            "flux2": (
+                r"F_\nu(\nu_{\text{obs}}) = \frac{(1+z)L_{\nu,\text{iso}}(\nu)}{4\pi D_L^2},"
+            ),
+            "l_iso": (
+                r"L_{\text{iso}}(\nu) = \nu L_{\nu,\text{iso}}(\nu) = \mathcal{D}^4 (\nu' L'_{\nu'}(\nu'))."
+            ),
+            "l_nu_iso": (
+                r"L_{\nu,\text{iso}}(\nu) = \mathcal{D}^3 L'_{\nu'}(\nu')."
+            ),
+            "l_nu": (
+                r"L_\nu(\nu) = \mathcal{D} L'_{\nu'}(\nu')."
+            ),
+            "l":(
+                r"L(\nu) = \mathcal{D}^2 L'_{\nu'}(\nu')."
+            ),
+            "intensity": (
+                r"I_\nu(\nu) = \mathcal{D}^3 I'_{\nu'}(\nu'),"
+            ),
+            "emissivity": (
+                r"j_\nu(\nu) = \mathcal{D}^2 j'_{\nu'}(\nu'),"
+            ),
+            "absorption": (
+                r"\alpha_\nu(\nu) = \mathcal{D}^{-1} \alpha'_{\nu'}(\nu')."
+            ),
+        }
+        header = r"\text{带'}\text{的是共动系，不带的是近邻观测者系}\\"
+        if formula_type == "all":
+            display(Math(header))
+            for key in formulas:
+                display(Math(formulas[key]))
+        else:
+            display(Math(header))
+            display(Math(formulas.get(formula_type, r"\text{未知公式类型}")))
+
+
+
+    @classmethod
+    def show_grmhd_equations(cls):
+        """
+        显示理想磁流体的GRMHD方程组（MHD守恒形式）
+        """
+        eqs = [
+            r"\frac{\partial (\gamma \rho)}{\partial t} + \nabla \cdot (\gamma \rho \mathbf{v}) = 0",
+            r"\frac{\partial}{\partial t} \left( \frac{\gamma^2 h}{c^2} \mathbf{v} + \frac{\mathbf{E} \times \mathbf{B}}{4\pi c} \right)"
+            r"+ \nabla \cdot \left[ \frac{\gamma^2 h}{c^2} \mathbf{v} \otimes \mathbf{v} + \left( p + \frac{E^2 + B^2}{8\pi} \right) \mathbf{I} - \frac{\mathbf{E} \otimes \mathbf{E} + \mathbf{B} \otimes \mathbf{B}}{4\pi} \right] = 0",
+            r"\frac{\partial}{\partial t} \left( \gamma^2 h - p - \gamma \rho c^2 + \frac{B^2 + E^2}{8\pi} \right)"
+            r"+ \nabla \cdot \left[ (\gamma^2 h - \gamma \rho c^2) \mathbf{v} + \frac{c}{4\pi} \mathbf{E} \times \mathbf{B} \right] = 0",
+            r"\frac{\partial \mathbf{B}}{\partial t} + c \nabla \times \mathbf{E} = 0"
+        ]
+        display(Math(r"注意方程组中\otimes表示张量积,通过假设E=B=0, GRMHD方程可以演化为一般的广义相对论流体力学方程"))
+        for eq in eqs:
+            display(Math(eq))
+
+
+
+
+
+
+
+
+
+class HydroDynamics:
+    """
+    用于描述经典或相对论流体力学的类
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def show_shock_jump_conditions(cls):
+        """
+        展示流体力学的激波跳变条件（Rankine-Hugoniot conditions）
+        """
+        from IPython.display import display, Math
+
+        display(Math(r"\text{激波跳变条件（Rankine-Hugoniot conditions）:}"))
+        eqs = [
+            r"\frac{\rho_2}{\rho_1} = \frac{v_1}{v_2} = \frac{(\hat{\gamma}+1)M_1^2}{(\hat{\gamma}-1)M_1^2+2}",
+            r"\frac{p_2}{p_1} = \frac{2\hat{\gamma} M_1^2 - \hat{\gamma} + 1}{\hat{\gamma} + 1}",
+            r"\frac{T_2}{T_1} = \frac{p_2 \rho_1}{p_1 \rho_2} = \frac{(2\hat{\gamma} M_1^2 - \hat{\gamma} + 1)[(\hat{\gamma}-1)M_1^2+2]}{(\hat{\gamma}+1)^2 M_1^2}"
+        ]
+        for eq in eqs:
+            display(Math(eq))
+
+
+    
+    
+
+
+
+
+
+
+class SFH:
+    def __init__(self):
+        """
+        星系形成历史（SFH）类，用于处理和分析星系的形成和演化历史。
+        """
+        pass
+
+
+
+
+

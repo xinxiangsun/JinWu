@@ -18,20 +18,37 @@ class HeasoftEnvManager:
         初始化类实例。
 
         :param headas_init_path: HEASoft 初始化脚本的路径（可选）。
+<<<<<<< HEAD
                                  如果未提供，则自动从 ~/.zshrc 读取 HEADAS 变量。
+=======
+                                 如果未提供，则自动查找HEASoft安装。
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
         """
         if headas_init_path is not None:
             self.headas_init_path = headas_init_path
         else:
+<<<<<<< HEAD
             self.headas_init_path = self._get_headas_from_zshrc()
             if self.headas_init_path is None:
                 # fallback 默认路径
                 self.headas_init_path = "/Users/xinxiang/heasoft-6.35.1/aarch64-apple-darwin24.5.0/headas-init.sh"
+=======
+            # 首先尝试从配置文件读取
+            self.headas_init_path = self._get_headas_from_zshrc()
+            if self.headas_init_path is None:
+                # 如果配置文件中没有，则自动查找
+                self.headas_init_path = self._find_headas_automatically()
+            if self.headas_init_path is None:
+                # 最后的fallback
+                self.headas_init_path = "/home/xinxiang/miniconda3/envs/hea/heasoft/headas-init.sh"
+        
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
         self.original_env = os.environ.copy()  # 保存原始环境变量
 
     @staticmethod
     def _get_headas_from_zshrc(zshrc_path=os.path.expanduser("~/.zshrc")):
         """
+<<<<<<< HEAD
         从~/.zshrc中读取HEADAS变量，并拼接 headas-init.sh
         """
         if not os.path.exists(zshrc_path):
@@ -42,6 +59,56 @@ class HeasoftEnvManager:
                 if m:
                     headas_dir = m.group(1).strip().strip('"').strip("'")
                     return os.path.join(headas_dir, "headas-init.sh")
+=======
+        从~/.zshrc或~/.bashrc中读取HEADAS变量，并拼接 headas-init.sh
+        """
+        # 尝试多个配置文件
+        config_files = [
+            zshrc_path,
+            os.path.expanduser("~/.bashrc"),
+            os.path.expanduser("~/.bash_profile")
+        ]
+        
+        for config_file in config_files:
+            if os.path.exists(config_file):
+                with open(config_file, "r") as f:
+                    for line in f:
+                        m = re.match(r'(?:export\s+)?HEADAS=(.*)', line.strip())
+                        if m:
+                            headas_dir = m.group(1).strip().strip('"').strip("'")
+                            return os.path.join(headas_dir, "headas-init.sh")
+        
+        # 如果配置文件中没有找到，尝试从当前环境变量
+        if "HEADAS" in os.environ:
+            return os.path.join(os.environ["HEADAS"], "headas-init.sh")
+            
+        return None
+
+    @staticmethod
+    def _find_headas_automatically():
+        """
+        自动查找HEASoft安装路径
+        """
+        # 常见的HEASoft安装位置
+        common_paths = [
+            "/home/xinxiang/miniconda3/envs/hea/heasoft/headas-init.sh",
+            "/opt/heasoft/headas-init.sh",
+            "/usr/local/heasoft/headas-init.sh",
+            "/Users/xinxiang/heasoft-6.35.1/aarch64-apple-darwin24.5.0/headas-init.sh"
+        ]
+        
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+                
+        # 尝试在conda环境中查找
+        conda_prefix = os.environ.get('CONDA_PREFIX')
+        if conda_prefix:
+            conda_headas = os.path.join(conda_prefix, "heasoft", "headas-init.sh")
+            if os.path.exists(conda_headas):
+                return conda_headas
+        
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
         return None
 
     def init_heasoft(self):
@@ -49,7 +116,11 @@ class HeasoftEnvManager:
         初始化 HEASoft 环境变量并更新当前进程的环境。
         """
         # 检查初始化脚本是否存在
+<<<<<<< HEAD
         if not os.path.isfile(self.headas_init_path):
+=======
+        if self.headas_init_path is None or not os.path.isfile(self.headas_init_path):
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
             raise FileNotFoundError(f"HEASoft 初始化脚本未找到: {self.headas_init_path}")
 
         try:
@@ -93,7 +164,17 @@ class HeasoftEnvManager:
     @staticmethod
     def init_heasoft_in_notebook():
         """在 Jupyter 中捕获 HEASoft 环境变量"""
+<<<<<<< HEAD
         headas_init = "/Users/xinxiang/heasoft-6.35.1/aarch64-apple-darwin24.5.0/headas-init.sh"
+=======
+        # 首先尝试conda环境中的HEASoft
+        conda_headas = "/home/xinxiang/miniconda3/envs/hea/heasoft/headas-init.sh"
+        if os.path.isfile(conda_headas):
+            headas_init = conda_headas
+        else:
+            # fallback到原始macOS路径
+            headas_init = "/Users/xinxiang/heasoft-6.35.1/aarch64-apple-darwin24.5.0/headas-init.sh"
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
         
         # 1. 检查初始化脚本是否存在
         if not os.path.isfile(headas_init):

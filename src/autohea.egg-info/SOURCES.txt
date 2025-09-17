@@ -2,7 +2,10 @@ LICENSE
 README.md
 pyproject.toml
 src/autohea/__init__.py
+<<<<<<< HEAD
 src/autohea/arf.py
+=======
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 src/autohea.egg-info/PKG-INFO
 src/autohea.egg-info/SOURCES.txt
 src/autohea.egg-info/dependency_links.txt
@@ -10,7 +13,10 @@ src/autohea.egg-info/requires.txt
 src/autohea.egg-info/top_level.txt
 src/autohea/core/__init__.py
 src/autohea/core/arf.py
+<<<<<<< HEAD
 src/autohea/core/download.py
+=======
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 src/autohea/core/file.py
 src/autohea/core/fit.py
 src/autohea/core/heasoft.py
@@ -18,6 +24,10 @@ src/autohea/core/plot.py
 src/autohea/core/rmf.py
 src/autohea/core/rsp.py
 src/autohea/core/time.py
+<<<<<<< HEAD
+=======
+src/autohea/core/utils.py
+>>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 src/autohea/missions/__init__.py
 src/autohea/missions/EP/WXT/wxtarf.py
 src/autohea/missions/fermi/__init__.py
