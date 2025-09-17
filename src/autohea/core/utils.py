@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-17 17:15:39
+LastEditTime: 2025-09-17 19:10:32
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -744,63 +744,7 @@ class RedshiftExtrapolator():
         print(f"外推结果: SNR={snr_target} 对应红移 z ≈ {z_extrapolated:.2f}")
         print(f"外推依据: SNR = {slope:.3f} × z + {intercept:.2f}")
         
-        return float(z_extrapolated)        
-
-
-
-
-
-#  def compute(self, norm0, z0, par3, par5, snrrate1, snr_li_ma):
-        
-#         soxsarf = soxs.AuxiliaryResponseFile(str(self.arfpath))
-#         for i, z in enumerate(self.redshift_grid):
-#             par3.values = z
-#             par5.values = norm0 * ((1+z0)/(1+z))**self.alpha * self.factor[i]
-#             spec = soxs.Spectrum.from_pyxspec_model(self.model)
-#             newspec = spec.new_spec_from_band(0.5, 4.0)
-#             newspec.rmf = str(self.rmfpath)
-#             newspec.arf = str(self.arfpath)
-#             newspec.bkg = str(self.bkgpath)
-#             newspec.exposure = (155, "s")
-#             newspec.backExposure = (155, "s")
-#             cspec = newspec * soxsarf
-#             self.rate[i] = cspec.rate.sum().value + self.bkgrate/12
-#             self.snr1[i] = snrrate1(self.rate[i], self.bkgrate, self.lctime, alpha=1/12)
-#             self.snr_lima[i] = snr_li_ma(n_src=self.rate[i]*155, n_bkg=self.bkgrate*155, alpha=1/12)
-    
-#     def find_last_snr_above(self, snr_arr, threshold):
-#         idx = np.where(snr_arr > threshold)[0]
-#         if len(idx) == 0:
-#             return None, None
-#         last_idx = idx[-1]
-#         return self.redshift_grid[last_idx], snr_arr[last_idx]
-    
-#     def find_first_rate_below(self, threshold, scale=1):
-#         idx = np.where(self.rate*scale < threshold)[0]
-#         if len(idx) == 0:
-#             return None, None
-#         first_idx = idx[0]
-#         return self.redshift_grid[first_idx], self.rate[first_idx]
-    
-#     def plot_snr(self, snr_cut=3, savefile=None):
-#         snr_cut_idx = np.where((self.snr1 < snr_cut) | (self.snr_lima < snr_cut))[0]
-#         if len(snr_cut_idx) > 0:
-#             cut_idx = snr_cut_idx[0]
-#         else:
-#             cut_idx = len(self.redshift_grid)
-#         plt.figure(figsize=(10, 6))
-#         plt.plot(self.redshift_grid[:cut_idx], self.snr1[:cut_idx], label='SNR1', color='blue', linewidth=1.5)
-#         plt.plot(self.redshift_grid[:cut_idx], self.snr_lima[:cut_idx], label='SNR_LiMa', color='orange', linewidth=1.5)
-#         plt.axhline(y=7, color='red', linestyle='--', label='SNR=7')
-#         plt.axhline(y=snr_cut, color='green', linestyle='--', label=f'SNR={snr_cut}')
-#         plt.xlabel('Redshift', fontsize=14)
-#         plt.ylabel('SNR', fontsize=14)
-#         plt.title(f'SNR1 and SNR_LiMa vs Redshift (SNR≥{snr_cut})', fontsize=16)
-#         plt.legend(fontsize=12)
-#         plt.grid(alpha=0.3)
-#         plt.show()
-#         if savefile:
-#             plt.savefig(savefile, dpi=300, bbox_inches='tight')
+        return float(z_extrapolated)
 
 
 class GeneralRelativity:

@@ -1,30 +1,20 @@
 Metadata-Version: 2.4
 Name: autohea
-Version: 0.0.2
+Version: 0.0.1
 Summary: An automatically tools for high energy astrophysics
-<<<<<<< HEAD
 Author-email: Xinxiang Sun <sunxinxiang24@mails.ucas.ac.cn>
-=======
-Author-email: Xinxiang Sun <sunxx@nao.cas.cn>
->>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 License: GPL-3.0
+Project-URL: Homepage, https://github.com/yourusername/autohea
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: numpy
-<<<<<<< HEAD
-=======
-Requires-Dist: scipy
->>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 Requires-Dist: astropy
 Requires-Dist: astro-gdt
 Requires-Dist: astro-gdt-fermi
 Requires-Dist: astro-elisa
 Requires-Dist: emcee
-<<<<<<< HEAD
 Requires-Dist: scipy
-=======
->>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 Dynamic: license-file
 
 # AutoHEA
