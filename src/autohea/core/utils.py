@@ -1,20 +1,23 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-08-29 16:34:40
+LastEditTime: 2025-09-17 17:15:39
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
 from autohea.core.heasoft import HeasoftEnvManager as hem
 import xspec
 import soxs
+from soxs import ConvolvedSpectrum
 from pathlib import Path
 import matplotlib.pyplot as plt
 from autohea.core.file import ArfReader, RmfReader, RspReader
 from astropy import units as u
-from astropy.constants import c  # type: ignore
+import astropy.constants as const
 from IPython.display import display, Math, Latex
 from astropy.cosmology import Planck18 as cosmo
+from functools import lru_cache
+import os
 
 
 def generate_download_url(isot_time):
@@ -67,88 +70,36 @@ def snr_li_ma(n_src, n_bkg, alpha_area_time):
     return snr
 
 
-    
-
-
-
 class RedshiftExtrapolator():
-    """
-    红移外推器类，用于计算在给定信噪比阈值下能探测到的最大红移
     
-    基于XSPEC物理模型和正确的宇宙学距离概念：
-    
-    核心物理公式：
-    norm_new = norm_original × ((1+z₀)/(1+z))^α × (r_c²(z₀)/r_c²(z))
-    
-    **严格的物理推导（基于XSPEC单位和真实距离）：**
-    
-    1. XSPEC光子数密度单位：N(E) [photons cm⁻² keV⁻¹ s⁻¹]
-    
-    2. 宇宙学距离概念：
-       - 共动距离 r_c：源和观测者之间的真实物理距离
-       - 光度距离 D_L：定义量，D_L ≡ √(L/(4πF_obs)) = (1+z)×r_c
-       - 光度距离不是真实的几何距离！
-    
-    3. 光子数密度的红移变换（使用真实物理距离）：
-       - 几何衰减：按真实距离平方反比 ∝ 1/r_c²
-       - 时间膨胀：光子到达率 ∝ 1/(1+z)
-       - 能量间隔：dE_rest = dE_obs × (1+z)
-       
-       完整变换：
-       N_obs(E_obs) = N_rest(E_rest) × (r_c²(z₀)/r_c²(z)) × 1/(1+z) × (1+z)
-                    = N_rest(E_rest) × (r_c²(z₀)/r_c²(z))
-    
-    4. K-correction（幂律谱）：
-       对于 N_rest(E) ∝ E^(-α)：
-       N_rest(E_rest) = N_rest(E_obs×(1+z)) = N_rest(E_obs) × (1+z)^(-α)
-       
-       最终：N_obs(E_obs) = N_rest(E_obs) × ((1+z₀)/(1+z))^α × (r_c²(z₀)/r_c²(z))
-    
-    **为什么使用共动距离而不是光度距离：**
-    - 光子数密度的几何衰减遵循真实物理距离 r_c
-    - 光度距离 D_L 是为保持 F=L/(4πD_L²) 而定义的量，不是真实距离
-    - 使用真实距离可以直接分离几何效应和红移效应
-    
-    支持的XSPEC模型类型：
-    - powerlaw: PhoIndex, norm
-    - bknpower: PhoIndx1, BreakE, PhoIndx2, norm  
-    - cutoffpl: PhoIndex, HighECut, norm
-    - grbm: alpha, beta, tem, norm
-    
-    使用示例：
-    extrapolator = RedshiftExtrapolator(
-        nh=1e21, z0=1.0, 
-        model="TBabs*zTBabs*powerlaw",
-        par=[1e21, 1e21, 1.0, 2.0, 1e-3],
-        arfpath="response.arf", rmfpath="response.rmf", bkgpath="background.pha",
-        srcnum=100, bkgnum=1200, duration=155
-    )
-    max_z = extrapolator.compute(snr_target=7)
-    """
-    
-    def __init__(self ,z0 , model: str, par: list,  arfpath: list | Path | str, rmfpath: list | Path | str, bkgpath: list | Path | str,
-                 srcnum, bkgnum,duration, area_ratio: float = 1/12):
-        '''
-        对于EP的数据处理而言, alpha的默认值大约是1/12, 但是在实际的数据处理中
+    def __init__(self, z0, bkgnum, duration, model, par, arfpath: Path | str, rmfpath: Path | str | None = None, area_ratio: float = 1/12):
+        '''红移外推器 - 基于原有代码保守重构'''
+        # 基本参数
+        self._z0 = float(z0)
+        self._model = str(model)
+        self._par = list(par)
+        self._duration = float(duration)
+        self._bkgnum = float(bkgnum)
+        self._area_ratio = float(area_ratio)
         
-        '''
-        self._srcnum = srcnum
-        self._bkgnum= bkgnum
-        self._area_ratio = area_ratio
-        self._z0 = z0
-        # self._nh = nh
-        self._model = model
-        self._par = par
-        self._duration = duration
-        self._arfpath = arfpath
-        self._rmfpath = rmfpath
-        self._bkgpath = bkgpath
+        # 文件路径
+        self._arfpath = Path(arfpath).expanduser().resolve()
+        self._rmfpath = Path(rmfpath).expanduser().resolve() if rmfpath is not None else None
+        # self._bkgpath = Path(bkgpath).expanduser().resolve() if bkgpath is not None else None
+        
+        # 验证ARF文件存在
+        if not self._arfpath.exists():
+            raise FileNotFoundError(f"ARF文件不存在: {self._arfpath}")
+        if self._rmfpath is not None and not self._rmfpath.exists():
+            print(f"警告: RMF文件不存在: {self._rmfpath}")
+            self._rmfpath = None
 
 
     @property
     def srcnum(self):
         """源区域的计数"""
-        return self._srcnum
+        return getattr(self, '_srcnum', 0)
+    
     @srcnum.setter
     def srcnum(self, value):
         if value < 0:
@@ -159,6 +110,7 @@ class RedshiftExtrapolator():
     def bkgnum(self):
         """背景区域的计数"""
         return self._bkgnum
+    
     @bkgnum.setter
     def bkgnum(self, value):
         if value < 0:
@@ -169,6 +121,7 @@ class RedshiftExtrapolator():
     def area_ratio(self):
         """源区域与背景区域的面积比"""
         return self._area_ratio
+    
     @area_ratio.setter
     def area_ratio(self, value):
         if value <= 0:
@@ -190,17 +143,16 @@ class RedshiftExtrapolator():
 
 
 
-    # @property
-    # def nh(self):
-    #     """中性氢柱密度的属性访问器"""
-    #     return self._nh
+    @property
+    def nh(self):
+        """中性氢柱密度的属性访问器"""
+        return getattr(self, '_nh', 0.0)
     
-
-    # @nh.setter
-    # def nh(self, value):
-    #     if value < 0:
-    #         raise ValueError("中性氢柱密度必须大于等于0")
-    #     self._nh = value
+    @nh.setter
+    def nh(self, value):
+        if value < 0:
+            raise ValueError("中性氢柱密度必须大于等于0")
+        self._nh = value
     
     
     @property
@@ -231,41 +183,31 @@ class RedshiftExtrapolator():
 
 
     def _set_model(self):
-        if isinstance(self._model, str):
-            if isinstance(self._par, list):
-                # 初始化HEASoft环境
-                env_manager = hem()
-                env_manager.init_heasoft()
-                if env_manager.is_heasoft_initialized():
-                    xspec.AllData.clear()
-                    xspec.AllModels.clear()
-                    xspec.Xset.abund = 'wilm'
-                    xspec.Xset.xsect = 'vern'
-                    self._m1 = xspec.Model(self._model)
-                    print("模型已设置:", self._model)
-                    self._m1.show()
-                else:
-                    raise RuntimeError("HEASoft 环境未初始化，请先手动初始化 HEASoft 环境。")
+        """设置XSPEC模型"""
+        if isinstance(self._model, str) and isinstance(self._par, list):
+            _hem = hem()
+            _hem.init_heasoft()
+            if _hem.is_heasoft_initialized():
+                xspec.AllData.clear()
+                xspec.AllModels.clear()
+                xspec.Xset.abund = 'wilm'
+                xspec.Xset.xsect = 'vern'
+                self._m1 = xspec.Model(self._model)
             else:
-                raise ValueError("参数必须是一个列表")
+                raise RuntimeError("HEASoft 环境未初始化")
         else:
-            raise ValueError("模型必须是字符串类型")
+            raise ValueError("模型必须是字符串类型，参数必须是列表")
 
     def is_last_component_z(self):
-        """
-        检查模型最后一个分量是否以'z'开头
-        """
+        """检查模型最后一个分量是否以'z'开头"""
         return self._m1.componentNames[-1].lower().startswith('z')
 
     def _set_par(self):
-        """
-        自动设置xspec模型的所有参数，并将参数名与值保存到 self._par_dict。
-        """
+        """设置xspec模型的所有参数"""
         self._components = self._m1.componentNames
-        
         param_objs = []
         param_names = []
-        self._par_dict = {}  # 保存参数名与值
+        self._par_dict = {}
 
         for comp in self._components:
             comp_obj = getattr(self._m1, comp)
@@ -274,407 +216,535 @@ class RedshiftExtrapolator():
                 param_names.append(f"{comp}.{pname}")
 
         if len(self._par) != len(param_objs):
-            raise ValueError(f"参数数量({len(self._par)})与模型参数数量({len(param_objs)})不一致")
+            raise ValueError(f"参数数量不匹配: 提供了{len(self._par)}个参数，但模型需要{len(param_objs)}个参数")
         
-        # 设置参数值
+        # 设置参数数值
         for pobj, val, pname in zip(param_objs, self._par, param_names):
             pobj.values = val
             self._par_dict[pname] = val
-        
-        # 处理红移关联
-        if self.is_last_component_z():
-            # 如果最后一个分量带有红移，将其与第一个含红移的分量关联
-            last_comp = self._m1.componentNames[-1]
-            last_comp_obj = getattr(self._m1, last_comp)
-            
-            # 查找第一个含有红移的分量
-            first_z_comp = None
-            for comp_name in self._m1.componentNames[:-1]:  # 排除最后一个
-                comp_obj = getattr(self._m1, comp_name)
-                if hasattr(comp_obj, 'Redshift'):
-                    first_z_comp = comp_obj
-                    break
-            
-            if first_z_comp is not None and hasattr(last_comp_obj, 'Redshift'):
-                last_comp_obj.Redshift.link = first_z_comp.Redshift
-        
-        # 最后冻结所有参数（确保模型不在外部被修改）
-        for pobj in param_objs:
-            pobj.frozen = True
-    
-    
-#这个地方还需要修改, 增加判断最后一个模型是否是带有红移的判断, 从而泗洪
 
+        # 识别和处理红移参数
+        redshift_components = []
+        self._par_z = None
+        
+        for comp in self._components:
+            comp_obj = getattr(self._m1, comp)
+            # 检查是否是红移分量（通常以z开头或包含redshift参数）
+            if comp.lower().startswith('z') or hasattr(comp_obj, 'Redshift'):
+                redshift_components.append(comp)
+                if self._par_z is None:  # 使用第一个找到的红移参数
+                    try:
+                        self._par_z = getattr(comp_obj, 'Redshift')
+                        self._z_base = float(self._par_z.values[0])
+                    except Exception:
+                        pass
+
+        # 如果有多个红移分量，链接它们（通常第二个链接到第一个）
+        if len(redshift_components) > 1:
+            try:
+                first_z_comp = getattr(self._m1, redshift_components[0])
+                first_z_param = getattr(first_z_comp, 'Redshift')
+                
+                for comp_name in redshift_components[1:]:
+                    comp_obj = getattr(self._m1, comp_name)
+                    z_param = getattr(comp_obj, 'Redshift')
+                    z_param.link = first_z_param
+                    print(f"链接红移参数: {comp_name}.Redshift -> {redshift_components[0]}.Redshift")
+            except Exception as e:
+                print(f"警告: 红移参数链接失败: {e}")
+
+        # 如果没有找到红移参数，使用初始红移值
+        if self._par_z is None:
+            self._z_base = float(self._z0)
+            print(f"警告: 模型中未找到红移参数，使用初始红移值 z={self._z_base}")
+
+        # 冻结非关键参数（保持红移和归一化参数可变）
+        for pobj, pname in zip(param_objs, param_names):
+            # 不冻结红移参数和归一化参数，以便后续调整
+            if not (pname.lower().endswith('.redshift') or pname.lower().endswith('.norm')):
+                pobj.frozen = True
+
+        # 缓存基线参数
+        try:
+            _last = getattr(self._m1, self._m1.componentNames[-1])
+            self._norm_param = getattr(_last, "norm", None)
+            if self._norm_param is not None:
+                self._norm0_base = float(self._norm_param.values[0])
+            else:
+                self._norm0_base = None
+
+            # 捕获谱指数
+            self._alpha_base = None
+            for pname in getattr(_last, "parameterNames", []):
+                if pname.lower() in ("phoindex", "index", "alpha"):
+                    self._alpha_base = float(getattr(_last, pname).values[0])
+                    break
+        except Exception:
+            self._norm0_base = None
+            self._alpha_base = None
+
+    def validate_model_setup(self):
+        """验证模型设置的正确性"""
+        if not hasattr(self, '_m1'):
+            raise RuntimeError("模型尚未初始化，请先调用 init_model()")
+        
+        print("🔍 模型验证报告:")
+        print(f"  模型表达式: {self._model}")
+        print(f"  分量数量: {len(self._components)}")
+        print(f"  分量列表: {self._components}")
+        
+        # 检查参数数量
+        total_params = sum(len(getattr(getattr(self._m1, comp), 'parameterNames', [])) 
+                          for comp in self._components)
+        print(f"  总参数数: {total_params}, 提供参数数: {len(self._par)}")
+        
+        if total_params != len(self._par):
+            print(f"  ⚠️  参数数量不匹配!")
+        else:
+            print(f"  ✅ 参数数量匹配")
+        
+        # 检查红移参数
+        redshift_count = 0
+        redshift_params = []
+        for comp in self._components:
+            comp_obj = getattr(self._m1, comp)
+            if hasattr(comp_obj, 'Redshift'):
+                redshift_count += 1
+                z_param = getattr(comp_obj, 'Redshift')
+                redshift_params.append({
+                    'component': comp,
+                    'value': z_param.values[0],
+                    'frozen': z_param.frozen,
+                    'linked': z_param.link != ''
+                })
+        
+        print(f"  红移参数数量: {redshift_count}")
+        for i, rp in enumerate(redshift_params):
+            status = []
+            if rp['frozen']:
+                status.append("冻结")
+            if rp['linked']:
+                status.append("已链接")
+            status_str = ", ".join(status) if status else "自由"
+            print(f"    {i+1}. {rp['component']}.Redshift = {rp['value']:.3f} ({status_str})")
+        
+        # 检查归一化参数
+        last_comp = getattr(self._m1, self._components[-1])
+        if hasattr(last_comp, 'norm'):
+            norm_param = getattr(last_comp, 'norm')
+            print(f"  归一化参数: {self._components[-1]}.norm = {norm_param.values[0]:.2e}")
+            print(f"    冻结状态: {'是' if norm_param.frozen else '否'}")
+        else:
+            print(f"  ⚠️  最后分量没有 norm 参数")
+        
+        # 检查谱指数
+        if self._alpha_base is not None:
+            print(f"  谱指数: {self._alpha_base:.2f}")
+        else:
+            print(f"  ⚠️  未找到谱指数参数")
+        
+        print(f"  基线红移: z₀ = {self._z0:.3f}")
+        if hasattr(self, '_z_base'):
+            print(f"  模型红移: z = {self._z_base:.3f}")
+        
+        return redshift_count > 0 and hasattr(last_comp, 'norm')
 
     def init_model(self):
-        """
-        初始化模型，设置参数并冻结。
-        """
-        if hasattr(self,'_model'):
-            self._set_model()
+        """初始化模型"""
+        self._set_model()
+        self._set_par()
+        # 可选择性验证
+        # self.validate_model_setup()
 
-        else:
-            raise ValueError("模型未设置,请通过调用model设置模型。")
+    def get_param_obj(self, comp_name, param_name):
+        """根据分量名和参数名获取参数对象"""
+        try:
+            comp_obj = getattr(self._m1, comp_name)
+            return getattr(comp_obj, param_name)
+        except AttributeError as e:
+            raise ValueError(f"无法找到参数 {comp_name}.{param_name}: {e}")
+
+    def find_redshift_param(self):
+        """查找模型中的红移参数"""
+        for comp in self._components:
+            comp_obj = getattr(self._m1, comp)
+            if hasattr(comp_obj, 'Redshift'):
+                return getattr(comp_obj, 'Redshift')
+        return None
+
+    def _build_soxs_responses(self):
+        """构建并缓存soxs的ARF/RMF对象"""
+        if not hasattr(self, "_soxs_arf") or self._soxs_arf is None:
+            self._soxs_arf = soxs.AuxiliaryResponseFile(str(self._arfpath))
         
-        if hasattr(self, '_par'):
-            self._set_par()
-        else:
-            raise ValueError("参数未设置,请通过调用par设置参数。")
-    
+        if self._rmfpath is not None and (not hasattr(self, "_soxs_rmf") or self._soxs_rmf is None):
+            try:
+                if hasattr(soxs, "RedistributionMatrixFile"):
+                    self._soxs_rmf = getattr(soxs, "RedistributionMatrixFile")(str(self._rmfpath))
+                else:
+                    self._soxs_rmf = None
+            except Exception as e:
+                print(f"警告: 加载RMF文件失败: {e}")
+                self._soxs_rmf = None
 
+    def _current_alpha_index(self):
+        """获取当前谱指数"""
+        last_comp = getattr(self._m1, self._m1.componentNames[-1])
+        for pname in getattr(last_comp, "parameterNames", []):
+            if pname.lower() in ("phoindex", "index", "alpha"):
+                return getattr(last_comp, pname).values[0]
+        return None
 
-    def analyze_model_parameters(self):
-        """
-        分析模型参数，自动识别不同类型的参数
-        返回参数分类字典
-        """
-        params_info = {
-            'norm_params': [],      # 归一化参数
-            'redshift_params': [],  # 红移参数
-            'spectral_params': [],  # 光谱指数参数
-            'energy_params': [],    # 能量相关参数（截止、折断等）
-            'other_params': []      # 其他参数
-        }
+    def _snr_at(self, z: float, band=(0.5, 4.0)) -> float:
+        """计算给定红移z下的SNR（轻量版，优化用于快速查找）"""
+        self._build_soxs_responses()
+
+        # 获取参数
+        last_comp_name = self._m1.componentNames[-1]
+        last_comp = getattr(self._m1, last_comp_name)
+        norm_param = getattr(last_comp, "norm", None)
+        if norm_param is None:
+            raise ValueError(f"模型最后一项 {last_comp_name} 没有 norm 参数")
+
+        norm0 = self._norm0_base if self._norm0_base is not None else norm_param.values[0]
+        alpha_val = self._alpha_base if self._alpha_base is not None else self._current_alpha_index()
+
+        # 红移参数 - 使用更健壮的查找方法
+        if getattr(self, "_par_z", None) is None:
+            self._par_z = self.find_redshift_param()
+
+        # 背景计数率
+        bkgrate_off = self._bkgnum / self._duration if self._duration > 0 else 0.0
+
+        # 宇宙学距离因子
+        z_safe = max(float(z), 1e-6)
+        dc0 = cosmo.comoving_distance(self._z0).value  # type: ignore[attr-defined]
+        dcz = cosmo.comoving_distance(z_safe).value  # type: ignore[attr-defined]
+        factor = (dc0 / dcz) ** 2
+
+        # 保存当前状态并设置红移参数
+        z_prev = None
+        z_to_set = min(float(z), 9.99)  # 限制在PyXspec允许的范围内
         
-        for param_name, param_value in self._par_dict.items():
-            param_lower = param_name.lower()
+        if self._par_z is not None:
+            try:
+                z_prev = float(self._par_z.values[0])
+                self._par_z.values = z_to_set
+            except Exception as e:
+                print(f"警告: 设置红移参数失败 (z={z_to_set}): {e}")
+                # 如果仍然设置失败，使用最大允许值
+                try:
+                    self._par_z.values = 9.99
+                    z_to_set = 9.99
+                    print(f"改用最大允许红移值: z={z_to_set}")
+                except Exception as e2:
+                    print(f"错误: 无法设置任何红移值: {e2}")
+                    # 如果连最大值都设置不了，继续用原值但给出警告
+                    z_to_set = z_prev if z_prev is not None else self._z0
+
+        norm_prev = float(norm_param.values[0])
+        if alpha_val is not None:
+            # 使用实际的红移值z计算归一化，即使PyXspec内部使用限制后的值
+            norm_param.values = float(norm0) * ((1 + self._z0) / (1 + z_safe)) ** float(alpha_val) * factor
+        else:
+            norm_param.values = float(norm0) * factor
+
+        # 构造谱并卷积
+        spec = soxs.Spectrum.from_pyxspec_model(self._m1)
+        newspec = spec.new_spec_from_band(band[0], band[1])
+        
+        # 卷积 - 优先使用RMF
+        if getattr(self, "_soxs_rmf", None) is not None:
+            try:
+                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
+            except Exception:
+                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+        else:
+            cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+        
+        cspec2.exp_time = (self._duration, "s")
+
+        # 计算SNR
+        rate_src_only = cspec2.rate.sum().value
+        n_off = bkgrate_off * self._duration
+        n_on = rate_src_only * self._duration + self._area_ratio * n_off
+        snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
+
+        # 恢复状态
+        try:
+            if self._par_z is not None:
+                self._par_z.values = float(z_prev if z_prev is not None else self._z0)
+            norm_param.values = float(norm_prev)
+        except Exception:
+            pass
+
+        return float(snr)
+
+    def compute_grid(self, z_grid, band=(0.5, 4.0)):
+        """
+        基于给定红移网格，计算每个z在指定能段内的观测/物理量。
+
+        参数:
+        - z_grid: array-like，需要计算的红移数组
+        - band: tuple(float, float)，能段范围（单位：keV），例如(0.5, 4.0)
+
+        返回:
+        - dict，各键对应numpy.ndarray（长度与z_grid一致）：
+            - z: 红移z（float）
+            - rate: on区域总计数率[cts/s]
+            - net_rate: 源计数率（卷积后、带宽内光子率）[ph/s]
+            - flux: 未卷积的能通量（带宽内）[erg/(cm^2 s)]
+            - flux_convolved: 卷积后的能通量（带宽内）[erg/s]
+            - snr: Li & Ma公式计算的信噪比
+        """
+        self._build_soxs_responses()
+
+        # 安全数值提取
+        def _as_scalar(x):
+            try:
+                if hasattr(x, "value"):
+                    return float(x.value)
+                if isinstance(x, (tuple, list)):
+                    if len(x) == 0:
+                        return float("nan")
+                    x0 = x[0]
+                    if hasattr(x0, "value"):
+                        return float(x0.value)
+                    return float(x0)
+                return float(x)
+            except Exception:
+                return float("nan")
+
+        # 取参：最后一项的norm和可能的谱指数alpha
+        last_comp_name = self._m1.componentNames[-1]
+        last_comp = getattr(self._m1, last_comp_name)
+        norm_param = getattr(last_comp, "norm", None)
+        if norm_param is None:
+            raise ValueError(f"模型最后一项 {last_comp_name} 没有 norm 参数")
+
+        # 使用缓存的基线归一化与谱指数
+        if hasattr(self, "_norm0_base") and (self._norm0_base is not None):
+            norm0 = float(self._norm0_base)
+        else:
+            norm0 = norm_param.values[0] if hasattr(norm_param, "values") else float(norm_param)
+        
+        if hasattr(self, "_alpha_base") and (self._alpha_base is not None):
+            alpha_val = float(self._alpha_base)
+        else:
+            alpha_val = self._current_alpha_index()
+
+        # z参数 - 使用更健壮的查找方法
+        if getattr(self, "_par_z", None) is None:
+            self._par_z = self.find_redshift_param()
+        
+
+        # 背景计数率
+        bkgrate_off = self._bkgnum / self._duration if self._duration and self._duration > 0 and self._bkgnum is not None else 0.0
+
+        dc0 = cosmo.comoving_distance(self._z0).value  # type: ignore[attr-defined]
+        dcz = cosmo.comoving_distance(z_grid).value  # type: ignore[attr-defined]
+        factor_grid = (dc0 / dcz) ** 2
+
+        rate_list = []
+        net_rate_list = []
+        flux_list = []
+        snr_list = []
+        convolved_flux_list = []
+        
+        for i, z in enumerate(z_grid):
+            # 调整z与归一化
+            try:
+                if self._par_z is not None:
+                    self._par_z.values = float(z)  # type: ignore[attr-defined]
+            except Exception:
+                pass
             
-            # 归一化参数
-            if 'norm' in param_lower:
-                params_info['norm_params'].append(param_name)
-            
-            # 红移参数
-            elif 'redshift' in param_lower or 'z' in param_lower:
-                params_info['redshift_params'].append(param_name)
-            
-            # 光谱指数参数（各种变体）
-            elif any(x in param_lower for x in ['phoindex', 'phoindx', 'photonindex', 'alpha', 'beta']):
-                params_info['spectral_params'].append(param_name)
-            
-            # 能量相关参数
-            elif any(x in param_lower for x in ['highecut', 'breake', 'tem', 'energy', 'cut']):
-                params_info['energy_params'].append(param_name)
-            
-            # 氢柱密度
-            elif 'nh' in param_lower:
-                params_info['other_params'].append(param_name)
-            
+            if alpha_val is not None:
+                norm_param.values = float(norm0) * ((1 + self._z0) / (1 + z)) ** float(alpha_val) * factor_grid[i]
             else:
-                params_info['other_params'].append(param_name)
-        
-        return params_info
+                norm_param.values = float(norm0) * factor_grid[i]
 
-    def get_model_info(self):
-        """
-        获取模型信息，用于调试和验证
-        """
-        params_info = self.analyze_model_parameters()
-        
-        print("=== 模型参数分析 ===")
-        print(f"模型: {self._model}")
-        print(f"组件: {self._components}")
-        print(f"总参数数: {len(self._par_dict)}")
-        
-        for category, params in params_info.items():
-            if params:
-                print(f"{category}: {params}")
-        
-        print("\n所有参数及其值:")
-        for param_name, param_value in self._par_dict.items():
-            print(f"  {param_name}: {param_value}")
-        
-        return params_info
+            # 构造谱并限定到能段
+            spec = soxs.Spectrum.from_pyxspec_model(self._m1)
+            newspec = spec.new_spec_from_band(band[0], band[1])
 
-    
+            # 卷积响应
+            if getattr(self, "_soxs_rmf", None) is not None:
+                try:
+                    cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
+                except Exception as e:
+                    print(f"警告: 使用RMF卷积失败: {e}，将仅使用ARF进行卷积")
+                    cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+            else:
+                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+            
+            cspec2.exp_time = (self._duration, "s")
 
-    def _get_spectral_index(self):
-        """
-        自动获取光谱指数参数，用于K-correction计算
-        支持多种XSPEC模型的不同参数命名约定
-        """
-        params_info = self.analyze_model_parameters()
-        spectral_params = params_info['spectral_params']
-        
-        if not spectral_params:
-            # 如果没有找到光谱参数，返回默认值
-            print("警告：未找到光谱指数参数，使用默认值 α=2.0")
-            return 2.0
-        
-        # 对于有多个光谱指数的模型（如bknpower），使用第一个
-        first_spectral_param = spectral_params[0]
-        alpha_value = self._par_dict[first_spectral_param]
-        
-        print(f"使用光谱指数参数: {first_spectral_param} = {alpha_value}")
-        return alpha_value
+            # 源净计数率与on区域总计数率
+            rate_src_only = cspec2.rate.sum().value
+            rate_on_total = rate_src_only + bkgrate_off * self._area_ratio
 
-    def find_redshift_for_snr(self, snr_target=7, zmin=None, zmax=None, tol=1e-5, max_depth=15, depth=0, max_expand=2):
+            # Li-Ma SNR
+            n_off = bkgrate_off * (self._duration if self._duration else 0.0)
+            n_on = rate_src_only * self._duration + self._area_ratio * n_off
+            snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
+
+            # 带宽内的净计数率和能通量
+            net_rate_raw, flux_after_arf_raw = cspec2.get_flux_in_band(band[0], band[1])
+            flux_without_arf_raw = newspec.get_flux_in_band(band[0], band[1])
+
+            rate_list.append(float(rate_on_total))
+            net_rate_list.append(_as_scalar(net_rate_raw))
+            flux_list.append(_as_scalar(flux_without_arf_raw))
+            convolved_flux_list.append(_as_scalar(flux_after_arf_raw))
+            snr_list.append(float(snr))
+
+        # 恢复XSPEC模型到基线
+        try:
+            if self._par_z is not None:
+                self._par_z.values = float(self._z_base if hasattr(self, "_z_base") else self._z0)
+        except Exception:
+            pass
+        try:
+            if norm_param is not None:
+                norm_param.values = float(norm0)
+        except Exception:
+            pass
+
+        return {
+            "z": np.asarray(z_grid, dtype=float),
+            "rate": np.asarray(rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
+            "net_rate": np.asarray(net_rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
+            "flux": np.asarray(flux_list, dtype=float) * u.erg / u.s / u.cm**2,  # type: ignore[attr-defined]
+            "flux_convolved": np.asarray(convolved_flux_list, dtype=float) * u.erg / u.s,  # type: ignore[attr-defined]
+            "snr": np.asarray(snr_list, dtype=float),
+        }
+
+    def compute_table(self, z0=None, width=1.0, npts=100, band=(0.5, 4.0)):
+        """在[z0, z0+width]上生成z/flux/rate/net_rate/snr表格"""
+        if z0 is None:
+            z0 = self._z0
+        z_grid = np.linspace(z0, z0 + width, npts)
+        return self.compute_grid(z_grid, band=band)
+
+    def compute(self, snr_target=7.0):
+        """计算满足指定SNR阈值的红移估计值"""
+        if not hasattr(self, "_m1"):
+            self.init_model()
+        return self.find_redshift_for_snr(snr_target=snr_target)
+
+    def find_redshift_for_snr(self, snr_target=7.0, zmin=None, zmax=None, tol=1e-5, max_depth=15, depth=0, max_expand=2, enable_extrapolation=True):
         """
-        递归自适应网格查找，基于正确的XSPEC物理模型
-        
-        **完整的XSPEC红移外推公式：**
-        norm_new = norm_original × ((1+z₀)/(1+z))^α × (r_c²(z₀)/r_c²(z))
-        
-        **物理解释：**
-        1. ((1+z₀)/(1+z))^α: K-correction（光谱演化修正）
-           - XSPEC模型单位：photons cm⁻² keV⁻¹ s⁻¹ 
-           - 红移改变时，观测能段对应的静止系能段改变
-           - 对幂律谱N(E) ∝ E^(-α)，需要此修正保证物理一致性
-        
-        2. (r_c²(z₀)/r_c²(z)): 真实距离几何衰减
-           - 使用共动距离r_c（真实物理距离）
-           - 光子数密度按真实距离平方反比衰减
-           - 区别于光度距离D_L（定义量，非真实距离）
-        
-        **推导过程：**
-        - 光子数密度变换：N_obs = N_rest × (r_c²(z₀)/r_c²(z)) × 时间膨胀效应
-        - 时间膨胀：1/(1+z) 和能量间隔变换：(1+z) 相互抵消
-        - K-correction：幂律谱的能量依赖性修正
+        递归自适应网格查找，使查找更快，直接返回snr=snr_target对应的红移
+        基于原始的快速递归算法实现，考虑PyXspec参数限制
+        当目标SNR超出PyXspec范围时，可选择启用外推功能
         """
+        if not hasattr(self, "_m1"):
+            self.init_model()
+            
         if zmin is None:
             zmin = self._z0
         if zmax is None:
-            zmax = self._z0 + 1
+            zmax = self._z0 + 1.0
+        
+        # 限制搜索范围在PyXspec允许的红移范围内
+        PYXSPEC_Z_MAX = 9.9  # PyXspec红移参数的实际上限
+        effective_zmax = min(zmax, PYXSPEC_Z_MAX)
+        
+        if zmin >= PYXSPEC_Z_MAX:
+            print(f"警告: 搜索起点 z={zmin:.3f} 已超出PyXspec限制 (z<{PYXSPEC_Z_MAX})，返回最大允许红移")
+            return float(PYXSPEC_Z_MAX)
 
-        z_grid = np.linspace(zmin, zmax, 8)
-        
-        # 1. 几何距离因子：使用共动距离（真实物理距离）
-        r_c_z0 = cosmo.comoving_distance(self._z0).value
-        r_c_grid = cosmo.comoving_distance(z_grid).value
-        geometric_factor = (r_c_z0 / r_c_grid) ** 2
-        
-        # 2. K-correction因子：XSPEC光谱演化修正
-        alpha = self._get_spectral_index()
-        k_correction_factor = ((1 + self._z0) / (1 + z_grid)) ** alpha
-        
-        # 3. 完整的归一化缩放因子
-        total_factor = k_correction_factor * geometric_factor
-        
+        # 创建8点网格进行搜索
+        z_grid = np.linspace(zmin, effective_zmax, 8)
         snr_grid = []
-        original_norm = self._par_norm.values[0] if hasattr(self._par_norm.values, '__len__') else self._par_norm.values
 
-        for i, z in enumerate(z_grid):
-            # 设置红移参数
-            # 仅当模型包含 Redshift 参数时设置它；否则跳过并只调整归一化
-            if hasattr(self, "_par_z") and (self._par_z is not None):
-                self._par_z.values = z
-
-            # 设置归一化：应用完整的XSPEC红移外推公式（无论是否存在 Redshift 参数，都调整 norm）
-            self._par_norm.values = original_norm * total_factor[i]
-            
-            # 🔬 能谱卷积核心过程（基于trysimulation.ipynb的完整实现）
-            # 
-            # 物理过程详解：
-            # 1. XSPEC模型 → 理论光子数谱 N(E) [photons cm⁻² keV⁻¹ s⁻¹]
-            # 2. 能段提取 → 0.5-4.0 keV范围的光子数谱  
-            # 3. 仪器响应 → ARF和RMF将光子数谱转换为实际探测器计数
-            # 4. 最终输出 → 探测器计数率 [counts/s]
-            #
-            # 关键点：ARF包含有效面积信息，RMF包含能量分辨率信息
-            #         两者结合才能给出完整的仪器响应
-            try:
-                # Step 1: 从XSPEC模型生成理论光子数谱
-                # 此时模型已经应用了红移外推的归一化修正
-                spec = soxs.Spectrum.from_pyxspec_model(self._m1)
-                
-                # Step 2: 提取科学感兴趣的能段 (0.5-4.0 keV)
-                newspec = spec.new_spec_from_band(0.5, 4.0)
-                
-                # Step 3: 设置仪器响应文件（按trysimulation.ipynb方法）
-                # 注意：这些属性设置对某些soxs版本可能是只读的，但计算仍然正确
-                try:
-                    newspec.rmf = str(self._rmfpath)              # 响应矩阵文件  # type: ignore
-                    newspec.arf = str(self._arfpath)              # 辅助响应文件  # type: ignore
-                    newspec.bkg = str(self._bkgpath)              # 背景谱文件  # type: ignore
-                    newspec.exposure = (self._duration, "s")      # 源区曝光时间  # type: ignore
-                    newspec.backExposure = (self._duration, "s")  # 背景区曝光时间  # type: ignore
-                except AttributeError:
-                    # 某些soxs版本这些属性是只读的，但不影响计算
-                    pass
-                
-                # Step 4: 应用ARF进行卷积（核心物理过程）
-                # ARF × 光子数谱 = 探测器计数谱
-                soxsarf = soxs.AuxiliaryResponseFile(str(self._arfpath))
-                cspec = newspec * soxsarf
-                
-                # Step 5: 获取总计数率（严格按照trysimulation.ipynb）
-                # cspec.rate.sum().value 给出总的探测器计数率 [counts/s]
-                if hasattr(cspec, 'rate') and hasattr(cspec.rate, 'sum'):  # type: ignore
-                    src_rate = cspec.rate.sum().value  # 源区域计数率  # type: ignore
-                    # 按照trysimulation.ipynb: rate = cspec.rate.sum().value + bkgrate/12
-                    total_rate = src_rate + (self._bkgnum / self._duration) * self._area_ratio
-                else:
-                    # 如果无法获取rate属性，直接报错
-                    raise RuntimeError(f"无法从SOXS能谱对象获取计数率信息。"
-                                     f"cspec对象类型: {type(cspec)}, "
-                                     f"缺少'rate'属性或'rate.sum()'方法。"
-                                     f"可用属性: {[attr for attr in dir(cspec) if not attr.startswith('_')]}")
-                    
-            except Exception as e:
-                # 重新抛出异常，不使用备用方法
-                raise RuntimeError(f"SOXS能谱卷积失败: {e}. "
-                                 f"模型: {self._model}, 红移: {z}, "
-                                 f"ARF: {self._arfpath}, RMF: {self._rmfpath}, BKG: {self._bkgpath}") from e
-            
-            # Step 6: 从计数率计算总计数（用于SNR计算）
-            # 注意：这里不再额外添加背景，因为上面已经包含了
-            total_counts = total_rate * self._duration
-            
-            # 计算信噪比（使用Li&Ma公式）
-            snr = snr_li_ma(
-                n_src=total_counts, 
-                n_bkg=self._bkgnum, 
-                alpha_area_time=self._area_ratio
-            )
+        # 计算每个网格点的SNR
+        for z in z_grid:
+            snr = self._snr_at(z)
             snr_grid.append(snr)
 
         snr_grid = np.array(snr_grid)
+        
+        # 找到第一个SNR < snr_target的点
         idx = np.where(snr_grid < snr_target)[0]
         
         if len(idx) == 0:
-            if max_expand > 0:
+            # 没有找到低于目标的SNR
+            if effective_zmax < zmax and max_expand > 0:
+                # 如果因为PyXspec限制而无法扩展，检查边界处的SNR
+                boundary_snr = snr_grid[-1]
+                if boundary_snr > snr_target:
+                    if enable_extrapolation:
+                        print(f"PyXspec范围内最低SNR={boundary_snr:.2f} > 目标{snr_target}，启用外推...")
+                        return self._extrapolate_high_redshift(snr_target)
+                    else:
+                        print(f"警告: 在PyXspec允许的最大红移 z={PYXSPEC_Z_MAX} 处，SNR={boundary_snr:.2f} 仍高于目标 {snr_target}")
+                        print(f"建议启用外推功能或降低SNR目标值")
+                        return float(PYXSPEC_Z_MAX)
+            elif max_expand > 0:
+                # 正常扩展搜索范围
                 return self.find_redshift_for_snr(
-                    snr_target=snr_target, zmin=zmin, zmax=zmax + (zmax-zmin), 
-                    tol=tol, max_depth=max_depth, depth=depth, max_expand=max_expand-1
+                    snr_target=snr_target, 
+                    zmin=zmin, 
+                    zmax=min(zmax + (zmax - zmin), PYXSPEC_Z_MAX), 
+                    tol=tol,
+                    max_depth=max_depth,
+                    depth=depth,
+                    max_expand=max_expand - 1,
+                    enable_extrapolation=enable_extrapolation
                 )
             else:
-                return z_grid[-1]
+                return float(z_grid[-1])
         
         if idx[0] == 0:
-            return z_grid[0]
+            return float(z_grid[0])
         
-        z1 = z_grid[idx[0]-1]
+        # 找到跨越点，在该区间内进一步递归
+        z1 = z_grid[idx[0] - 1]
         z2 = z_grid[idx[0]]
         
-        if (z2-z1 < tol) or (depth >= max_depth):
-            snr1 = snr_grid[idx[0]-1]
+        # 如果区间足够小或达到最大深度，进行线性插值
+        if (z2 - z1 < tol) or (depth >= max_depth):
+            snr1 = snr_grid[idx[0] - 1]
             snr2 = snr_grid[idx[0]]
-            z_snr_target = z1 + (snr_target-snr1)*(z2-z1)/(snr2-snr1)
-            return z_snr_target
+            if snr1 == snr2:
+                return float(0.5 * (z1 + z2))
+            z_target = z1 + (snr_target - snr1) * (z2 - z1) / (snr2 - snr1)
+            return float(z_target)
         else:
+            # 递归细分搜索区间
             return self.find_redshift_for_snr(
-                snr_target=snr_target, zmin=z1, zmax=z2, 
-                tol=tol, max_depth=max_depth, depth=depth+1, max_expand=max_expand
+                snr_target=snr_target,
+                zmin=z1, 
+                zmax=z2, 
+                tol=tol,
+                max_depth=max_depth,
+                depth=depth + 1,
+                max_expand=max_expand,
+                enable_extrapolation=enable_extrapolation
             )
-    
-    
-    def compute(self, snr_target=7, show_model_info=False):
-        """
-        计算在给定信噪比阈值下能探测到的最大红移
+
+    def _extrapolate_high_redshift(self, snr_target):
+        """使用线性外推估算高红移处的SNR解"""
+        # 使用PyXspec边界附近的数据点进行线性外推
+        z_linear = np.linspace(8.0, 9.9, 10)
+        snr_linear = [self._snr_at(z) for z in z_linear]
         
-        Parameters:
-        -----------
-        snr_target : float
-            目标信噪比阈值
-        show_model_info : bool
-            是否显示模型参数分析信息
-        """
-        self.init_model()
+        # 线性拟合最后几个点
+        coeffs = np.polyfit(z_linear, snr_linear, 1)
+        slope, intercept = coeffs
         
-        # 显示模型信息（如果需要）
-        if show_model_info:
-            params_info = self.get_model_info()
+        if abs(slope) < 1e-6:
+            print("警告: SNR变化斜率接近0，外推不可靠")
+            return 9.9
         
-        # 自动查找红移参数（通常在第一个分量中）
-        redshift_param = None
-        for comp_name in self._components:
-            comp_obj = getattr(self._m1, comp_name)
-            if hasattr(comp_obj, 'Redshift'):
-                redshift_param = getattr(comp_obj, 'Redshift')
-                break
+        z_extrapolated = (snr_target - intercept) / slope
         
-        if redshift_param is None:
-            print("警告:模型没有使用带有红移的模型，注意检查模型是否正确。")
+        print(f"外推结果: SNR={snr_target} 对应红移 z ≈ {z_extrapolated:.2f}")
+        print(f"外推依据: SNR = {slope:.3f} × z + {intercept:.2f}")
         
-        self._par_z = redshift_param
-        
-        # 查找归一化参数（通常在最后一个分量中）
-        norm_param = None
-        last_comp = self._components[-1]
-        last_comp_obj = getattr(self._m1, last_comp)
-        if hasattr(last_comp_obj, 'norm'):
-            norm_param = getattr(last_comp_obj, 'norm')
-        
-        if norm_param is None:
-            raise ValueError("模型中未找到归一化参数")
-        
-        self._par_norm = norm_param
-        
-        return self.find_redshift_for_snr(snr_target=snr_target)
-        
-    def verify_redshift_extrapolation(self, z_test=None):
-        """
-        验证红移外推的物理正确性，输出详细的计算过程
-        
-        Parameters:
-        -----------
-        z_test : float, optional
-            测试红移值，默认为z0+0.5
-        """
-        if z_test is None:
-            z_test = self._z0 + 0.5
-            
-        print("=" * 60)
-        print("🔬 XSPEC红移外推验证")
-        print("=" * 60)
-        
-        # 显示基本信息
-        print(f"初始红移 z₀: {self._z0}")
-        print(f"测试红移 z: {z_test}")
-        print(f"模型: {self._model}")
-        
-        # 获取光谱指数
-        alpha = self._get_spectral_index()
-        print(f"光谱指数 α: {alpha}")
-        
-        # 计算距离因子
-        r_c_z0 = cosmo.comoving_distance(self._z0).value  # type: ignore # Mpc
-        r_c_test = cosmo.comoving_distance(z_test).value  # type: ignore # Mpc
-        geometric_factor = (r_c_z0 / r_c_test) ** 2
-        
-        # 计算K-correction因子
-        k_correction = ((1 + self._z0) / (1 + z_test)) ** alpha
-        
-        # 总因子
-        total_factor = k_correction * geometric_factor
-        
-        print("\n" + "=" * 40)
-        print("📐 距离计算 (共动距离)")
-        print("=" * 40)
-        print(f"r_c(z₀={self._z0}) = {r_c_z0:.1f} Mpc")
-        print(f"r_c(z={z_test}) = {r_c_test:.1f} Mpc")
-        print(f"几何因子 (r_c²(z₀)/r_c²(z)) = {geometric_factor:.4f}")
-        
-        print("\n" + "=" * 40)
-        print("🌈 K-correction计算")
-        print("=" * 40)
-        print(f"K-correction = ((1+{self._z0})/(1+{z_test}))^{alpha}")
-        print(f"            = {k_correction:.4f}")
-        
-        print("\n" + "=" * 40)
-        print("🎯 最终结果")
-        print("=" * 40)
-        print(f"总缩放因子 = {k_correction:.4f} × {geometric_factor:.4f} = {total_factor:.4f}")
-        print(f"norm_new = norm_original × {total_factor:.4f}")
-        
-        print("\n" + "=" * 40)
-        print("✅ 物理验证")
-        print("=" * 40)
-        print("• 使用共动距离r_c (真实物理距离)")
-        print("• K-correction保证XSPEC模型物理一致性")
-        print("• 时间膨胀和能量间隔效应已自然抵消")
-        print("• 符合trysimulation.ipynb的计算逻辑")
-        
-        return {
-            'z0': self._z0,
-            'z_test': z_test,
-            'alpha': alpha,
-            'r_c_z0': r_c_z0,
-            'r_c_test': r_c_test,
-            'geometric_factor': geometric_factor,
-            'k_correction': k_correction,
-            'total_factor': total_factor
-        }
-        
+        return float(z_extrapolated)        
 
 
 
