@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autohea"
+version = "0.0.2"
+description = "An automatically tools for high energy astrophysics"
+readme = "README.md"
+license = { text = "GPL-3.0" }
+authors = [
+    { name = "Xinxiang Sun", email = "sunxx@nao.cas.cn" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "astropy",
+    "astro-gdt",
+    "astro-gdt-fermi",
+    "astro-elisa",
+    "emcee",
+    "scipy"
+]
+
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
