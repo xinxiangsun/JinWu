@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-24 18:29:16
+LastEditTime: 2025-09-24 20:11:04
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -192,6 +192,7 @@ class RedshiftExtrapolator():
                 xspec.AllModels.clear()
                 xspec.Xset.abund = 'wilm'
                 xspec.Xset.xsect = 'vern'
+                xspec.Xset.cosmo = '67.66 0 0.6888463055445441'
                 self._m1 = xspec.Model(self._model)
             else:
                 raise RuntimeError("HEASoft 环境未初始化")
@@ -351,6 +352,7 @@ class RedshiftExtrapolator():
 
     def init_model(self):
         """初始化模型"""
+        xspec.Xset.cosmo = ''
         self._set_model()
         self._set_par()
         # 可选择性验证
