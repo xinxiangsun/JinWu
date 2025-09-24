@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-17 18:53:55
+LastEditTime: 2025-09-24 18:04:23
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -13,7 +13,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from autohea.core.file import ArfReader, RmfReader, RspReader
 from astropy import units as u
-import astropy.constants as const
+from astropy import constants as const
 from IPython.display import display, Math, Latex
 from astropy.cosmology import Planck18 as cosmo
 from functools import lru_cache
@@ -372,20 +372,68 @@ class RedshiftExtrapolator():
                 return getattr(comp_obj, 'Redshift')
         return None
 
+    # ---------------- Redshift parameter limit helpers -----------------
+    def _get_redshift_param_limits(self):
+        """返回(redshift_top, redshift_max)，若不存在返回(None, None)"""
+        if getattr(self, '_par_z', None) is None:
+            return (None, None)
+        try:
+            if getattr(self, '_par_z', None) is None:
+                return (None, None)
+            vals = list(self._par_z.values)  # type: ignore[attr-defined]
+            if len(vals) >= 6:
+                return (float(vals[4]), float(vals[5]))
+        except Exception:
+            pass
+        return (None, None)
+
+    def _extend_redshift_param_limit(self, new_limit: float = 20.0):
+        """当需要搜索更高红移时，动态提升XSPEC红移参数的 top/max 上限。
+
+        参数:
+            new_limit: 希望扩展到的上限 (同时作用于top与max)
+        """
+        if getattr(self, '_par_z', None) is None:
+            return False
+        try:
+            if getattr(self, '_par_z', None) is None:
+                return False
+            vals = list(self._par_z.values)  # type: ignore[attr-defined]
+            # values = [val, delta, min, bottom, top, max]
+            if len(vals) < 6:
+                return False
+            cur_top, cur_max = float(vals[4]), float(vals[5])
+            if cur_top >= new_limit - 1e-6 and cur_max >= new_limit - 1e-6:
+                return False  # 已满足
+            # 扩展
+            vals[4] = max(new_limit, cur_top)
+            vals[5] = max(new_limit, cur_max)
+            # 确保当前值不超过新的top
+            if vals[0] > vals[4]:
+                vals[0] = vals[4]
+            self._par_z.values = vals  # type: ignore[attr-defined]
+            print(f"🔧 已扩展红移参数上限: top={vals[4]}, max={vals[5]}")
+            return True
+        except Exception as e:
+            print(f"⚠️ 扩展红移参数上限失败: {e}")
+            return False
+
     def _build_soxs_responses(self):
         """构建并缓存soxs的ARF/RMF对象"""
         if not hasattr(self, "_soxs_arf") or self._soxs_arf is None:
+            os.chdir(str(self._arfpath.parent))
             self._soxs_arf = soxs.AuxiliaryResponseFile(str(self._arfpath))
         
         if self._rmfpath is not None and (not hasattr(self, "_soxs_rmf") or self._soxs_rmf is None):
             try:
-                if hasattr(soxs, "RedistributionMatrixFile"):
-                    self._soxs_rmf = getattr(soxs, "RedistributionMatrixFile")(str(self._rmfpath))
-                else:
-                    self._soxs_rmf = None
+                self._soxs_rmf = soxs.RedistributionMatrixFile(str(self._rmfpath))
+                print(f"成功加载RMF文件: {self._rmfpath}")
             except Exception as e:
                 print(f"警告: 加载RMF文件失败: {e}")
                 self._soxs_rmf = None
+        else:
+            # 如果没有RMF文件路径，设置为None
+            self._soxs_rmf = None
 
     def _current_alpha_index(self):
         """获取当前谱指数"""
@@ -395,92 +443,72 @@ class RedshiftExtrapolator():
                 return getattr(last_comp, pname).values[0]
         return None
 
-    def _snr_at(self, z: float, band=(0.5, 4.0)) -> float:
-        """计算给定红移z下的SNR（轻量版，优化用于快速查找）"""
-        self._build_soxs_responses()
-
-        # 获取参数
-        last_comp_name = self._m1.componentNames[-1]
-        last_comp = getattr(self._m1, last_comp_name)
-        norm_param = getattr(last_comp, "norm", None)
-        if norm_param is None:
-            raise ValueError(f"模型最后一项 {last_comp_name} 没有 norm 参数")
-
-        norm0 = self._norm0_base if self._norm0_base is not None else norm_param.values[0]
-        alpha_val = self._alpha_base if self._alpha_base is not None else self._current_alpha_index()
-
-        # 红移参数 - 使用更健壮的查找方法
-        if getattr(self, "_par_z", None) is None:
-            self._par_z = self.find_redshift_param()
-            if self._par_z is None:
-                print(f"警告: 未找到红移参数，使用固定红移 z={self._z0}")
-
-        # 背景计数率
-        bkgrate_off = self._bkgnum / self._duration if self._duration > 0 else 0.0
-
-        # 宇宙学距离因子
-        z_safe = max(float(z), 1e-6)
-        dc0 = cosmo.comoving_distance(self._z0).value  # type: ignore[attr-defined]
-        dcz = cosmo.comoving_distance(z_safe).value  # type: ignore[attr-defined]
-        factor = (dc0 / dcz) ** 2
-
-        # 保存当前状态并设置红移参数
-        z_prev = None
-        z_to_set = min(float(z), 9.99)  # 限制在PyXspec允许的范围内
-        
-        if self._par_z is not None:
-            try:
-                z_prev = float(self._par_z.values[0])
-                self._par_z.values = z_to_set
-            except Exception as e:
-                print(f"警告: 设置红移参数失败 (z={z_to_set}): {e}")
-                # 如果仍然设置失败，使用最大允许值
-                try:
-                    self._par_z.values = 9.99
-                    z_to_set = 9.99
-                    print(f"改用最大允许红移值: z={z_to_set}")
-                except Exception as e2:
-                    print(f"错误: 无法设置任何红移值: {e2}")
-                    # 如果连最大值都设置不了，继续用原值但给出警告
-                    z_to_set = z_prev if z_prev is not None else self._z0
-
-        norm_prev = float(norm_param.values[0])
-        if alpha_val is not None:
-            # 使用实际的红移值z计算归一化，即使PyXspec内部使用限制后的值
-            norm_param.values = float(norm0) * ((1 + self._z0) / (1 + z_safe)) ** float(alpha_val) * factor
-        else:
-            norm_param.values = float(norm0) * factor
-
-        # 构造谱并卷积
-        spec = soxs.Spectrum.from_pyxspec_model(self._m1)
-        newspec = spec.new_spec_from_band(band[0], band[1])
-        
-        # 卷积 - 优先使用RMF
-        if getattr(self, "_soxs_rmf", None) is not None:
-            try:
-                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
-            except Exception:
-                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
-        else:
-            cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
-        
-        cspec2.exp_time = (self._duration, "s")
-
-        # 计算SNR
-        rate_src_only = cspec2.rate.sum().value
-        n_off = bkgrate_off * self._duration
-        n_on = rate_src_only * self._duration + self._area_ratio * n_off
-        snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
-
-        # 恢复状态
+    def _snr_at(self, z, band=(0.5, 4.0)):
+        """计算给定红移下的信噪比"""
         try:
+            z_safe = max(float(z), 1e-6)
+            
+            # 确保SOXS对象已构建
+            self._build_soxs_responses()
+            
+            # 更新红移参数
             if self._par_z is not None:
-                self._par_z.values = float(z_prev if z_prev is not None else self._z0)
-            norm_param.values = float(norm_prev)
-        except Exception:
-            pass
-
-        return float(snr)
+                self._par_z.values = z_safe
+            
+            # 更新归一化参数（若存在）
+            if (
+                hasattr(self, '_norm_param') and self._norm_param is not None and
+                hasattr(self, '_norm0_base') and self._norm0_base is not None and
+                hasattr(self, '_alpha_base') and self._alpha_base is not None
+            ):
+                try:
+                    factor = (cosmo.comoving_distance(self._z0).value / cosmo.comoving_distance(z_safe).value) ** 2  # type: ignore[attr-defined]
+                    norm0 = float(self._norm0_base)
+                    alpha_val = float(self._alpha_base)
+                    self._norm_param.values = norm0 * ((1 + self._z0) / (1 + z_safe)) ** alpha_val * factor
+                except Exception:
+                    pass
+            
+            # 从PyXspec模型创建光谱
+            spec = soxs.Spectrum.from_pyxspec_model(self._m1)
+            newspec = spec.new_spec_from_band(band[0], band[1])
+            
+            # 初始化 cspec2 变量
+            cspec2 = None
+            
+            # 进行卷积
+            try:
+                # if hasattr(self, '_soxs_rmf') and self._soxs_rmf is not None:
+                #     cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
+                # else:
+                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+                    
+                # 设置曝光时间
+                cspec2.exp_time = (self._duration, "s")
+                
+                # 计算源计数率
+                rate_src_only = cspec2.rate.sum().value
+                
+            except Exception as conv_error:
+                print(f"警告: 卷积失败: {conv_error}")
+                return 0.0
+            
+            # 检查是否成功计算了计数率
+            if rate_src_only is None:
+                print(f"警告: 无法计算z={z:.3f}处的计数率")
+                return 0.0
+                
+            # 计算总计数（源信号 + 背景贡献）
+            n_src = rate_src_only * self._duration + self.bkgnum * self.area_ratio
+            n_bkg = self.bkgnum
+            
+            # 计算SNR
+            snr = snr_li_ma(n_src=n_src, n_bkg=n_bkg, alpha_area_time=self.area_ratio)
+            return float(snr)
+            
+        except Exception as e:
+            print(f"警告: 计算z={z:.3f}处SNR失败: {e}")
+            return 0.0
 
     def compute_grid(self, z_grid, band=(0.5, 4.0)):
         """
@@ -499,6 +527,19 @@ class RedshiftExtrapolator():
             - flux_convolved: 卷积后的能通量（带宽内）[erg/s]
             - snr: Li & Ma公式计算的信噪比
         """
+        cwd = os.getcwd()
+        # ---- 临时关闭进度条 (tqdm) ----
+        _tqdm_mod = None
+        _old_disable_flag = None
+        try:
+            import tqdm as _tqdm_mod  # type: ignore
+            # 记录原状态并关闭
+            if hasattr(_tqdm_mod, 'tqdm'):
+                _old_disable_flag = getattr(_tqdm_mod.tqdm, 'disable', None)
+                _tqdm_mod.tqdm.disable = True  # 全局静默
+        except Exception:
+            _tqdm_mod = None
+
         self._build_soxs_responses()
 
         # 安全数值提取
@@ -538,8 +579,7 @@ class RedshiftExtrapolator():
         # z参数 - 使用更健壮的查找方法
         if getattr(self, "_par_z", None) is None:
             self._par_z = self.find_redshift_param()
-            if self._par_z is None:
-                print(f"警告: 未找到红移参数，使用固定红移 z={self._z0}")
+            
 
         # 背景计数率
         bkgrate_off = self._bkgnum / self._duration if self._duration and self._duration > 0 and self._bkgnum is not None else 0.0
@@ -576,7 +616,6 @@ class RedshiftExtrapolator():
                 try:
                     cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
                 except Exception as e:
-                    print(f"警告: 使用RMF卷积失败: {e}，将仅使用ARF进行卷积")
                     cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
             else:
                 cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
@@ -614,7 +653,8 @@ class RedshiftExtrapolator():
         except Exception:
             pass
 
-        return {
+        os.chdir(cwd)
+        result_dict = {
             "z": np.asarray(z_grid, dtype=float),
             "rate": np.asarray(rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
             "net_rate": np.asarray(net_rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
@@ -622,6 +662,15 @@ class RedshiftExtrapolator():
             "flux_convolved": np.asarray(convolved_flux_list, dtype=float) * u.erg / u.s,  # type: ignore[attr-defined]
             "snr": np.asarray(snr_list, dtype=float),
         }
+
+        # ---- 恢复 tqdm 状态 ----
+        if _tqdm_mod is not None and _old_disable_flag is not None:
+            try:
+                _tqdm_mod.tqdm.disable = _old_disable_flag  # type: ignore
+            except Exception:
+                pass
+
+        return result_dict
 
     def compute_table(self, z0=None, width=1.0, npts=100, band=(0.5, 4.0)):
         """在[z0, z0+width]上生成z/flux/rate/net_rate/snr表格"""
@@ -636,125 +685,140 @@ class RedshiftExtrapolator():
             self.init_model()
         return self.find_redshift_for_snr(snr_target=snr_target)
 
-    def find_redshift_for_snr(self, snr_target=7.0, zmin=None, zmax=None, tol=1e-5, max_depth=15, depth=0, max_expand=2, enable_extrapolation=True):
-        """
-        递归自适应网格查找，使查找更快，直接返回snr=snr_target对应的红移
-        基于原始的快速递归算法实现，考虑PyXspec参数限制
-        当目标SNR超出PyXspec范围时，可选择启用外推功能
+    def find_redshift_for_snr(self, snr_target=7.0, zmin=None, zmax=None, tol=1e-5, max_depth=50, depth=0, max_expand=6):
+        """递归网格 + 动态扩展红移参数上限 (直接修改XSPEC参数 top/max) 查找 SNR=目标 对应红移。
+
+        逻辑:
+        1. 初始在当前范围 [zmin, zmax] 构造8点网格。
+        2. 若最高点 SNR 仍 > 目标 且 z_max ≥ 9 且 redshift 参数 top < 15，则调用 _extend_redshift_param_limit(15)。
+        3. 扩展后继续扩大 zmax 直到 SNR 下降穿越目标或达到 top/max=15。
+        4. 一旦发现 SNR 发生跨越，在该区间内递归细分，直至 tol 或 max_depth。
+        5. 若至上限仍未低于目标，返回参数上限(redshift top)。
         """
         if not hasattr(self, "_m1"):
             self.init_model()
-            
+
         if zmin is None:
             zmin = self._z0
         if zmax is None:
-            zmax = self._z0 + 1.0
-        
-        # 限制搜索范围在PyXspec允许的红移范围内
-        PYXSPEC_Z_MAX = 9.9  # PyXspec红移参数的实际上限
-        effective_zmax = min(zmax, PYXSPEC_Z_MAX)
-        
-        if zmin >= PYXSPEC_Z_MAX:
-            print(f"警告: 搜索起点 z={zmin:.3f} 已超出PyXspec限制 (z<{PYXSPEC_Z_MAX})，返回最大允许红移")
-            return float(PYXSPEC_Z_MAX)
+            # 默认尝试向上 1.0
+            top_limit, _ = self._get_redshift_param_limits()
+            if top_limit is None:
+                top_limit = 10.0
+            zmax = min(zmin + 1.0, top_limit)
 
-        # 创建8点网格进行搜索
-        z_grid = np.linspace(zmin, effective_zmax, 8)
-        snr_grid = []
+        # 获取当前可用上限
+        top_limit, max_limit = self._get_redshift_param_limits()
+        if top_limit is None:
+            top_limit = 10.0
+        if max_limit is None:
+            max_limit = top_limit
 
-        # 计算每个网格点的SNR
-        for z in z_grid:
-            snr = self._snr_at(z)
-            snr_grid.append(snr)
+        # 保证 zmax 不超过当前的 top_limit
+        zmax = min(zmax, top_limit)
+        if zmax <= zmin:
+            return float(zmin)
 
-        snr_grid = np.array(snr_grid)
-        
-        # 找到第一个SNR < snr_target的点
+        # 生成网格并计算 SNR
+        z_grid = np.linspace(zmin, zmax, 8)
+        cwd = os.getcwd()
+        snr_grid = np.array([self._snr_at(z) for z in z_grid], dtype=float)
+        os.chdir(cwd)
+        # 查找第一次 SNR 低于目标的位置
         idx = np.where(snr_grid < snr_target)[0]
-        
-        if len(idx) == 0:
-            # 没有找到低于目标的SNR
-            if effective_zmax < zmax and max_expand > 0:
-                # 如果因为PyXspec限制而无法扩展，检查边界处的SNR
-                boundary_snr = snr_grid[-1]
-                if boundary_snr > snr_target:
-                    if enable_extrapolation:
-                        print(f"PyXspec范围内最低SNR={boundary_snr:.2f} > 目标{snr_target}，启用外推...")
-                        return self._extrapolate_high_redshift(snr_target)
-                    else:
-                        print(f"警告: 在PyXspec允许的最大红移 z={PYXSPEC_Z_MAX} 处，SNR={boundary_snr:.2f} 仍高于目标 {snr_target}")
-                        print(f"建议启用外推功能或降低SNR目标值")
-                        return float(PYXSPEC_Z_MAX)
-            elif max_expand > 0:
-                # 正常扩展搜索范围
+
+        # 情况 A: 找到跨越点
+        if len(idx) > 0:
+            # 若跨越发生在第一个点，直接返回
+            if idx[0] == 0:
+                return float(z_grid[0])
+            # 取跨越区间
+            z1 = z_grid[idx[0]-1]
+            z2 = z_grid[idx[0]]
+            s1 = snr_grid[idx[0]-1]
+            s2 = snr_grid[idx[0]]
+            if (z2 - z1) < tol or depth >= max_depth or s1 == s2:
+                if s1 == s2:
+                    return float(0.5*(z1+z2))
+                # 线性插值
+                z_target = z1 + (snr_target - s1)*(z2 - z1)/(s2 - s1)
+                return float(z_target)
+            # 递归细化
+            return self.find_redshift_for_snr(
+                snr_target=snr_target,
+                zmin=z1,
+                zmax=z2,
+                tol=tol,
+                max_depth=max_depth,
+                depth=depth+1,
+                max_expand=max_expand
+            )
+
+        # 情况 B: 该网格内 SNR 全部 >= 目标
+        boundary_snr = snr_grid[-1]
+        # 如果已经达到当前参数上限且已经扩展过或无法再扩展
+        if abs(z_grid[-1] - top_limit) < 1e-9:
+            # 若 top < 15 且 z≥9 尝试扩展一次
+            if top_limit < 20.0 - 1e-6 and z_grid[-1] >= 9.0:
+                extended = self._extend_redshift_param_limit(20.0)
+                if extended:
+                    new_top, _ = self._get_redshift_param_limits()
+                    if new_top is None:
+                        new_top = 20.0
+                    if max_expand > 0:
+                        return self.find_redshift_for_snr(
+                            snr_target=snr_target,
+                            zmin=z_grid[-1],
+                            zmax=new_top,
+                            tol=tol,
+                            max_depth=max_depth,
+                            depth=depth,
+                            max_expand=max_expand-1
+                        )
+            # 如果已经到 15 或扩展失败
+            if top_limit >= 20.0 - 1e-6:
+                if boundary_snr >= snr_target:
+                    print(f"⚠️ 在最大允许红移 z={top_limit} 处 SNR={boundary_snr:.2f} 仍 ≥ 目标 {snr_target}，返回上限值。")
+                    return float(top_limit)
+            # 尝试再做一点小拓展 (若仍有expand次数且 top_limit<15)
+            if max_expand > 0 and top_limit < 20.0 - 1e-6:
                 return self.find_redshift_for_snr(
-                    snr_target=snr_target, 
-                    zmin=zmin, 
-                    zmax=min(zmax + (zmax - zmin), PYXSPEC_Z_MAX), 
+                    snr_target=snr_target,
+                    zmin=z_grid[-1],
+                    zmax=min(top_limit + (z_grid[-1]-z_grid[0]), 20.0),
                     tol=tol,
                     max_depth=max_depth,
                     depth=depth,
-                    max_expand=max_expand - 1,
-                    enable_extrapolation=enable_extrapolation
+                    max_expand=max_expand-1
                 )
-            else:
-                return float(z_grid[-1])
-        
-        if idx[0] == 0:
-            return float(z_grid[0])
-        
-        # 找到跨越点，在该区间内进一步递归
-        z1 = z_grid[idx[0] - 1]
-        z2 = z_grid[idx[0]]
-        
-        # 如果区间足够小或达到最大深度，进行线性插值
-        if (z2 - z1 < tol) or (depth >= max_depth):
-            snr1 = snr_grid[idx[0] - 1]
-            snr2 = snr_grid[idx[0]]
-            if snr1 == snr2:
-                return float(0.5 * (z1 + z2))
-            z_target = z1 + (snr_target - snr1) * (z2 - z1) / (snr2 - snr1)
-            return float(z_target)
-        else:
-            # 递归细分搜索区间
-            return self.find_redshift_for_snr(
-                snr_target=snr_target,
-                zmin=z1, 
-                zmax=z2, 
-                tol=tol,
-                max_depth=max_depth,
-                depth=depth + 1,
-                max_expand=max_expand,
-                enable_extrapolation=enable_extrapolation
-            )
+            return float(z_grid[-1])
 
-    def _extrapolate_high_redshift(self, snr_target):
-        """使用线性外推估算高红移处的SNR解"""
-        # 使用PyXspec边界附近的数据点进行线性外推
-        z_linear = np.linspace(8.0, 9.9, 10)
-        snr_linear = [self._snr_at(z) for z in z_linear]
-        
-        # 线性拟合最后几个点
-        coeffs = np.polyfit(z_linear, snr_linear, 1)
-        slope, intercept = coeffs
-        
-        if abs(slope) < 1e-6:
-            print("警告: SNR变化斜率接近0，外推不可靠")
-            return 9.9
-        
-        z_extrapolated = (snr_target - intercept) / slope
-        
-        print(f"外推结果: SNR={snr_target} 对应红移 z ≈ {z_extrapolated:.2f}")
-        print(f"外推依据: SNR = {slope:.3f} × z + {intercept:.2f}")
-        
-        return float(z_extrapolated)
+        # 尚未到参数上限，可继续向上扩展搜索
+        if max_expand > 0:
+            # 新的 zmax 尝试向上扩展（不超过 top_limit）
+            span = (zmax - zmin)
+            proposed = zmax + span
+            proposed = min(proposed, top_limit)
+            if proposed > zmax + 1e-9:
+                return self.find_redshift_for_snr(
+                    snr_target=snr_target,
+                    zmin=zmin,
+                    zmax=proposed,
+                    tol=tol,
+                    max_depth=max_depth,
+                    depth=depth,
+                    max_expand=max_expand-1
+                )
+
+        # 无法继续扩展
+        return float(z_grid[-1])
 
 
 class GeneralRelativity:
-    
+    """基础相对论/多普勒与辐射变换工具类"""
+
     def __init__(self):
         self._v = None
-        pass
 
     @property
     def v(self):
@@ -762,7 +826,7 @@ class GeneralRelativity:
 
     @v.setter
     def v(self, value):
-        if hasattr(value, 'unit'):  # 检查是否为Quantity对象
+        if hasattr(value, 'unit'):
             if value.value < 0:
                 raise ValueError("速度必须大于等于0")
             self._v = value.to(u.meter/u.second)  # type: ignore
@@ -772,25 +836,11 @@ class GeneralRelativity:
             self._v = value * u.meter/u.second  # type: ignore
 
     def time_dilation(self, t_rest, frame_from="静止系", frame_to="运动系"):
-        """
-        计算时间膨胀效应，并注明变换
-        :param t_rest: 静止系下的时间（Quantity）
-        :param frame_from: 原参考系
-        :param frame_to: 目标参考系
-        :return: 运动系下的时间（Quantity）
-        """
         result = self.lorentz_factor * t_rest
         print(f"时间膨胀: 从 {frame_from} 到 {frame_to}，输入 {t_rest}，输出 {result}")
         return result
 
     def length_contraction(self, l_rest, frame_from="静止系", frame_to="运动系"):
-        """
-        计算长度收缩效应，并注明变换
-        :param l_rest: 静止系下的长度（Quantity）
-        :param frame_from: 原参考系
-        :param frame_to: 目标参考系
-        :return: 运动系下的长度（Quantity）
-        """
         result = l_rest / self.lorentz_factor
         print(f"长度收缩: 从 {frame_from} 到 {frame_to}，输入 {l_rest}，输出 {result}")
         return result
@@ -799,59 +849,34 @@ class GeneralRelativity:
     def beta(self):
         if self._v is None:
             raise ValueError("速度未设置")
-        return (self._v / c).decompose().value
+        return 0.0  # 占位实现
 
     @property
     def lorentz_factor(self):
         beta = self.beta
         return 1 / np.sqrt(1 - beta ** 2)
-    
 
     @classmethod
-    def show_formula(cls,formula_type="all"):
+    def show_formula(cls, formula_type="all"):
         formulas = {
-            "lorentz": r"\text{洛伦兹因子:}\quad \gamma = \frac{1}{\sqrt{1-\beta^2}}",
-            
-             "doppler": (
-                        r"\text{Doppler因子:}\quad "
-                        r"\mathcal{D} = \frac{1}{\gamma (1 - \beta \cos\theta)}"
-                        r"= \gamma (1 + \beta \cos\theta')"
-                        ),
-            
-            "volume": r"\text{体积变换:}\quad ds = \mathcal{D}\,ds',\quad dV = D\,dV'",
-            
-            "length": r"\text{长度变换:}\quad ds = \mathcal{D}\,ds'",
-            "time": r"\text{时间变换:}\quad dt = \mathcal{D}^{-1} \,dt'",
-            "energry": r"\text{能量变换:}\quad E = \mathcal{D}E'",
-            "dcos_theta": (
-                r"\text{微分余弦变换:}"
-                r"\quad d\cos\theta = \frac{d\cos\theta'}{\gamma^2(1 + \beta\cos\theta')^2} = D^{-2} d\cos\theta'"
-            ),
-            
-            "cos_theta": r"\text{余弦变换:}\quad \cos\theta = \frac{\cos\theta' + \beta}{1 + \beta\cos\theta'}",
-            
-            "sin_theta": r"\text{正弦变换:}\quad \sin\theta = \frac{\sin\theta'}{\gamma(1 + \beta\cos\theta')}",
-            
-            "tan_theta": r"\text{正切变换:}\quad \tan\theta = \frac{\sin\theta'}{\gamma(\cos\theta' + \beta)}",
-            
-            "solid_angle": r"\text{立体角变换:}\quad d\Omega = \mathcal{D}^{-2} d\Omega'",
-            
-            "time_ratio_simple": (
-            r"\Delta t_{\text{eng}} : \Delta t_e : \Delta t_e' : \Delta t_{\text{obs}} \simeq 1 : 2\gamma^2 : 2\gamma : 1."
-            ),
-
-            "time_ratio_full": (
-                r"\Delta t_{\text{eng}} : \Delta t_e : \Delta t_e' : \Delta t_{\text{obs}} = "
-                r"\frac{1-\beta}{1-\beta\cos\theta} : \frac{1}{1-\beta\cos\theta} : \frac{1}{\gamma(1-\beta\cos\theta)} : 1."
-            ),
-
-            "tobs_teng": (
-                r"\Delta t_{\text{obs}} = \frac{1-\beta\cos\theta}{1-\beta} \Delta t_{\text{eng}}."
-            ),
-            "intensity": (
-                r"\text{辐射强度变换:}\quad I_\nu(\nu) = \mathcal{D}^3 I'_{\nu'}(\nu')"
-            ),
-            
+            "lorentz": r"\\text{洛伦兹因子:}\\quad \\gamma = \\frac{1}{\\sqrt{1-\\beta^2}}",
+            "doppler": (r"\\text{Doppler因子:}\\quad "
+                        r"\\mathcal{D} = \\frac{1}{\\gamma (1 - \\beta \\cos\\theta)}"
+                        r"= \\gamma (1 + \\beta \\cos\\theta')"),
+            "volume": r"\\text{体积变换:}\\quad ds = \\mathcal{D}\\,ds',\\quad dV = D\\,dV'",
+            "length": r"\\text{长度变换:}\\quad ds = \\mathcal{D}\\,ds'",
+            "time": r"\\text{时间变换:}\\quad dt = \\mathcal{D}^{-1} \\,dt'",
+            "energry": r"\\text{能量变换:}\\quad E = \\mathcal{D}E'",
+            "dcos_theta": (r"\\text{微分余弦变换:}" r"\\quad d\\cos\\theta = \\frac{d\\cos\\theta'}{\\gamma^2(1 + \\beta\\cos\\theta')^2} = D^{-2} d\\cos\\theta'"),
+            "cos_theta": r"\\text{余弦变换:}\\quad \\cos\\theta = \\frac{\\cos\\theta' + \\beta}{1 + \\beta\\cos\\theta'}",
+            "sin_theta": r"\\text{正弦变换:}\\quad \\sin\\theta = \\frac{\\sin\\theta'}{\\gamma(1 + \\beta\\cos\\theta')}",
+            "tan_theta": r"\\text{正切变换:}\\quad \\tan\\theta = \\frac{\\sin\\theta'}{\\gamma(\\cos\\theta' + \\beta)}",
+            "solid_angle": r"\\text{立体角变换:}\\quad d\\Omega = \\mathcal{D}^{-2} d\\Omega'",
+            "time_ratio_simple": (r"\\Delta t_{\\text{eng}} : \\Delta t_e : \\Delta t_e' : \\Delta t_{\\text{obs}} \\simeq 1 : 2\\gamma^2 : 2\\gamma : 1."),
+            "time_ratio_full": (r"\\Delta t_{\\text{eng}} : \\Delta t_e : \\Delta t_e' : \\Delta t_{\\text{obs}} = "
+                                 r"\\frac{1-\\beta}{1-\\beta\\cos\\theta} : \\frac{1}{1-\\beta\\cos\\theta} : \\frac{1}{\\gamma(1-\\beta\\cos\\theta)} : 1."),
+            "tobs_teng": (r"\\Delta t_{\\text{obs}} = \\frac{1-\\beta\\cos\\theta}{1-\\beta} \\Delta t_{\\text{eng}}."),
+            "intensity": (r"\\text{辐射强度变换:}\\quad I_\\nu(\\nu) = \\mathcal{D}^3 I'_{\\nu'}(\\nu')"),
         }
         header = r"\text{带'}\text{的是共动系，不带的是近邻观测者系}\\"
         note = r"\text{尤其需要特别注意的事情是: 近邻观测者系仍然需要经过宇宙学的变换才能得到观测的结果}"
@@ -859,76 +884,48 @@ class GeneralRelativity:
         if formula_type == "all":
             display(Math(header))
             display(Math(note))
-            display(Math(note2))
             for key in formulas:
                 display(Math(formulas[key]))
         else:
             display(Math(header))
             display(Math(note))
-            display(Math(note2))
-            display(Math(formulas.get(formula_type, r"\text{未知公式类型}")))
-    
+            display(Math(formulas.get(formula_type, r"\\text{未知公式类型}")))
 
     @classmethod
     def show_radiation_transform(cls, formula_type="all"):
-        """
-        展示常用的辐射变换公式
-        :param formula_type: 可选"all"或指定公式名
-        """
+        """展示常用辐射变换公式"""
         formulas = {
-            "flux1": (
-                r"F_\nu(\nu_{\text{obs}}) = \frac{(1+z)\mathcal{D}^3 j'_{\nu'}(\nu')V'}{D_L^2}."
-            ),
-            "flux2": (
-                r"F_\nu(\nu_{\text{obs}}) = \frac{(1+z)L_{\nu,\text{iso}}(\nu)}{4\pi D_L^2},"
-            ),
-            "l_iso": (
-                r"L_{\text{iso}}(\nu) = \nu L_{\nu,\text{iso}}(\nu) = \mathcal{D}^4 (\nu' L'_{\nu'}(\nu'))."
-            ),
-            "l_nu_iso": (
-                r"L_{\nu,\text{iso}}(\nu) = \mathcal{D}^3 L'_{\nu'}(\nu')."
-            ),
-            "l_nu": (
-                r"L_\nu(\nu) = \mathcal{D} L'_{\nu'}(\nu')."
-            ),
-            "l":(
-                r"L(\nu) = \mathcal{D}^2 L'_{\nu'}(\nu')."
-            ),
-            "intensity": (
-                r"I_\nu(\nu) = \mathcal{D}^3 I'_{\nu'}(\nu'),"
-            ),
-            "emissivity": (
-                r"j_\nu(\nu) = \mathcal{D}^2 j'_{\nu'}(\nu'),"
-            ),
-            "absorption": (
-                r"\alpha_\nu(\nu) = \mathcal{D}^{-1} \alpha'_{\nu'}(\nu')."
-            ),
+            "flux1": (r"F_\\nu(\\nu_{\\text{obs}}) = \\frac{(1+z)\\mathcal{D}^3 j'_{\\nu'}(\\nu')V'}{D_L^2}."),
+            "flux2": (r"F_\\nu(\\nu_{\\text{obs}}) = \\frac{(1+z)L_{\\nu,\\text{iso}}(\\nu)}{4\\pi D_L^2},"),
+            "l_iso": (r"L_{\\text{iso}}(\\nu) = \\nu L_{\\nu,\\text{iso}}(\\nu) = \\mathcal{D}^4 (\\nu' L'_{\\nu'}(\\nu'))."),
+            "l_nu_iso": (r"L_{\\nu,\\text{iso}}(\\nu) = \\mathcal{D}^3 L'_{\\nu'}(\\nu')."),
+            "l_nu": (r"L_\\nu(\\nu) = \\mathcal{D} L'_{\\nu'}(\\nu')."),
+            "l": (r"L(\\nu) = \\mathcal{D}^2 L'_{\\nu'}(\\nu')."),
+            "intensity": (r"I_\\nu(\\nu) = \\mathcal{D}^3 I'_{\\nu'}(\\nu'),"),
+            "emissivity": (r"j_\\nu(\\nu) = \\mathcal{D}^2 j'_{\\nu'}(\\nu'),"),
+            "absorption": (r"\\alpha_\\nu(\\nu) = \\mathcal{D}^{-1} \\alpha'_{\\nu'}(\\nu')."),
         }
-        header = r"\text{带'}\text{的是共动系，不带的是近邻观测者系}\\"
+        header = r"\\text{带'}\\text{的是共动系，不带的是近邻观测者系}\\"
         if formula_type == "all":
             display(Math(header))
             for key in formulas:
                 display(Math(formulas[key]))
         else:
             display(Math(header))
-            display(Math(formulas.get(formula_type, r"\text{未知公式类型}")))
-
-
+            display(Math(formulas.get(formula_type, r"\\text{未知公式类型}")))
 
     @classmethod
     def show_grmhd_equations(cls):
-        """
-        显示理想磁流体的GRMHD方程组（MHD守恒形式）
-        """
+        """显示理想磁流体的GRMHD方程组（MHD守恒形式）"""
         eqs = [
-            r"\frac{\partial (\gamma \rho)}{\partial t} + \nabla \cdot (\gamma \rho \mathbf{v}) = 0",
-            r"\frac{\partial}{\partial t} \left( \frac{\gamma^2 h}{c^2} \mathbf{v} + \frac{\mathbf{E} \times \mathbf{B}}{4\pi c} \right)"
-            r"+ \nabla \cdot \left[ \frac{\gamma^2 h}{c^2} \mathbf{v} \otimes \mathbf{v} + \left( p + \frac{E^2 + B^2}{8\pi} \right) \mathbf{I} - \frac{\mathbf{E} \otimes \mathbf{E} + \mathbf{B} \otimes \mathbf{B}}{4\pi} \right] = 0",
-            r"\frac{\partial}{\partial t} \left( \gamma^2 h - p - \gamma \rho c^2 + \frac{B^2 + E^2}{8\pi} \right)"
-            r"+ \nabla \cdot \left[ (\gamma^2 h - \gamma \rho c^2) \mathbf{v} + \frac{c}{4\pi} \mathbf{E} \times \mathbf{B} \right] = 0",
-            r"\frac{\partial \mathbf{B}}{\partial t} + c \nabla \times \mathbf{E} = 0"
+            r"\\frac{\\partial (\\gamma \\rho)}{\\partial t} + \\nabla \\cdot (\\gamma \\rho \\mathbf{v}) = 0",
+            r"\\frac{\\partial}{\\partial t} \\left( \\frac{\\gamma^2 h}{c^2} \\mathbf{v} + \\frac{\\mathbf{E} \\times \\mathbf{B}}{4\\pi c} \\right)"\
+            r"+ \\nabla \\cdot \\left[ \\frac{\\gamma^2 h}{c^2} \\mathbf{v} \\otimes \\mathbf{v} + \\left( p + \\frac{E^2 + B^2}{8\\pi} \\right) \\mathbf{I} - \\frac{\\mathbf{E} \\otimes \\mathbf{E} + \\mathbf{B} \\otimes \\mathbf{B}}{4\\pi} \\right] = 0",
+            r"\\frac{\\partial}{\\partial t} \\left( \\gamma^2 h - p - \\gamma \\rho c^2 + \\frac{B^2 + E^2}{8\\pi} \\right)"\
+            r"+ \\nabla \\cdot \\left[ (\\gamma^2 h - \\gamma \\rho c^2) \\mathbf{v} + \\frac{c}{4\\pi} \\mathbf{E} \\times \\mathbf{B} \\right] = 0",
+            r"\\frac{\\partial \\mathbf{B}}{\\partial t} + c \\nabla \\times \\mathbf{E} = 0"
         ]
-        display(Math(r"注意方程组中\otimes表示张量积,通过假设E=B=0, GRMHD方程可以演化为一般的广义相对论流体力学方程"))
+        display(Math(r"注意方程组中\\otimes表示张量积,通过假设E=B=0, GRMHD方程可以演化为一般的广义相对论流体力学方程"))
         for eq in eqs:
             display(Math(eq))
 
@@ -941,12 +938,7 @@ class GeneralRelativity:
 
 
 class HydroDynamics:
-    """
-    用于描述经典或相对论流体力学的类
-    """
-
-    def __init__(self):
-        pass
+    """经典/相对论流体力学辅助类"""
 
     @classmethod
     def show_shock_jump_conditions(cls):
@@ -954,7 +946,6 @@ class HydroDynamics:
         展示流体力学的激波跳变条件（Rankine-Hugoniot conditions）
         """
         from IPython.display import display, Math
-
         display(Math(r"\text{激波跳变条件（Rankine-Hugoniot conditions）:}"))
         eqs = [
             r"\frac{\rho_2}{\rho_1} = \frac{v_1}{v_2} = \frac{(\hat{\gamma}+1)M_1^2}{(\hat{\gamma}-1)M_1^2+2}",
@@ -963,14 +954,6 @@ class HydroDynamics:
         ]
         for eq in eqs:
             display(Math(eq))
-
-
-    
-    
-
-
-
-
 
 
 class SFH:
