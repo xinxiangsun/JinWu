@@ -49,6 +49,6 @@ Icon?
 *.egg-info/
 build/
 dist/
-
-
-src/autohea/core/__pycache__/
+*/*.egg-info/
+*/__pycache__
+*/*/__pycache__/
