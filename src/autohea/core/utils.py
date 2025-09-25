@@ -1,14 +1,18 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-25 18:30:48
+LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
 from autohea.core.heasoft import HeasoftEnvManager as hem
 import xspec
-import soxs
-from soxs import ConvolvedSpectrum
+try :
+    import soxs
+    from soxs import ConvolvedSpectrum
+except:
+    pass
+
 from pathlib import Path
 import matplotlib.pyplot as plt
 from autohea.core.file import ArfReader, RmfReader, RspReader
