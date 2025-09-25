@@ -1,7 +1,0 @@
-numpy
-astropy
-astro-gdt
-astro-gdt-fermi
-astro-elisa
-emcee
-scipy

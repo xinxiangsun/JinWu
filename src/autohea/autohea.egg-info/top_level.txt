@@ -1,5 +1,0 @@
-core
-missions
-response
-spectrum
-timing
