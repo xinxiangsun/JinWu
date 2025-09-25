@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-17 19:10:32
+LastEditTime: 2025-09-18 19:03:44
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -57,7 +57,7 @@ def snr_li_ma(n_src, n_bkg, alpha_area_time):
     n_src (int): 源区域的计数
     n_bkg (int): 背景区域的计数
     alpha_area_time (float): 	•	\alpha：背景区域与源区域之间的归一化因子，反映暴露时间或面积比：
-\alpha_area_time = \frac{t_{\text{on}} A_{\text{on}}}{t_{\text{off}} A_{\text{off}}}
+    \alpha_area_time = \frac{t_{\text{on}} A_{\text{on}}}{t_{\text{off}} A_{\text{off}}}
 
     Returns:
     float: The calculated SNR.

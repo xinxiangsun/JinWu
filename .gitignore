@@ -51,3 +51,4 @@ build/
 dist/
 
 
+src/autohea/core/__pycache__/
