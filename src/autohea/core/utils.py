@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-24 20:11:04
+LastEditTime: 2025-09-25 17:22:19
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -194,6 +194,7 @@ class RedshiftExtrapolator():
                 xspec.Xset.xsect = 'vern'
                 xspec.Xset.cosmo = '67.66 0 0.6888463055445441'
                 self._m1 = xspec.Model(self._model)
+                
             else:
                 raise RuntimeError("HEASoft 环境未初始化")
         else:
@@ -352,7 +353,6 @@ class RedshiftExtrapolator():
 
     def init_model(self):
         """初始化模型"""
-        xspec.Xset.cosmo = ''
         self._set_model()
         self._set_par()
         # 可选择性验证
@@ -471,6 +471,8 @@ class RedshiftExtrapolator():
                 except Exception:
                     pass
             
+
+
             # 从PyXspec模型创建光谱
             spec = soxs.Spectrum.from_pyxspec_model(self._m1)
             newspec = spec.new_spec_from_band(band[0], band[1])
