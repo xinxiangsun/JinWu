@@ -14,20 +14,12 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
-<<<<<<< HEAD
-=======
     "scipy",
->>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
     "astropy",
     "astro-gdt",
     "astro-gdt-fermi",
     "astro-elisa",
-<<<<<<< HEAD
-    "emcee",
-    "scipy"
-=======
     "emcee"
->>>>>>> 3a5dab31b2d0a69623d0f1c4fa85cbf24986acbd
 ]
 
 
