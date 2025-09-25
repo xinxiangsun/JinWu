@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-25 17:22:19
+LastEditTime: 2025-09-25 18:30:48
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
@@ -87,12 +87,17 @@ class RedshiftExtrapolator():
         self._rmfpath = Path(rmfpath).expanduser().resolve() if rmfpath is not None else None
         # self._bkgpath = Path(bkgpath).expanduser().resolve() if bkgpath is not None else None
         
+        # 为 XSPEC fakeit 保存文件路径字符串
+        self._arf_file = str(self._arfpath)
+        self._rmf_file = str(self._rmfpath) if self._rmfpath is not None else None
+        
         # 验证ARF文件存在
         if not self._arfpath.exists():
             raise FileNotFoundError(f"ARF文件不存在: {self._arfpath}")
         if self._rmfpath is not None and not self._rmfpath.exists():
             print(f"警告: RMF文件不存在: {self._rmfpath}")
             self._rmfpath = None
+            self._rmf_file = None
 
 
     @property
@@ -473,29 +478,62 @@ class RedshiftExtrapolator():
             
 
 
-            # 从PyXspec模型创建光谱
-            spec = soxs.Spectrum.from_pyxspec_model(self._m1)
-            newspec = spec.new_spec_from_band(band[0], band[1])
-            
-            # 初始化 cspec2 变量
-            cspec2 = None
-            
-            # 进行卷积
+            # 使用 XSPEC fakeit 方法计算计数率（新方法）
             try:
-                # if hasattr(self, '_soxs_rmf') and self._soxs_rmf is not None:
-                #     cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
-                # else:
-                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+                import xspec as xs
+                from xspec import FakeitSettings, AllData
+                
+                # 确保响应文件路径可用
+                if not hasattr(self, '_rmf_file') or self._rmf_file is None:
+                    # 如果没有直接的文件路径，使用 SOXS 备用方法
+                    raise Exception("缺少RMF响应文件路径")
+                
+                # 创建 FakeitSettings - 只使用必需参数
+                fakeit_settings = FakeitSettings(
+                    response=self._rmf_file,
+                    arf=self._arf_file,
+                    exposure=str(self._duration)
+                )
+                
+                # 使用 fakeit 生成模拟谱
+                AllData.fakeit(1, fakeit_settings, noWrite=True)
+                
+                # 获取折叠后的谱（计数谱）
+                folded_counts = self._m1.folded(1)  # 获取第1组数据的折叠谱
+                
+                # 简单计算：假设所有能道都在感兴趣的能段内
+                # TODO: 可以进一步优化以精确选择能段对应的能道
+                rate_src_only = sum(folded_counts) / self._duration
+                
+                
                     
-                # 设置曝光时间
-                cspec2.exp_time = (self._duration, "s")
+            except Exception as fakeit_error:
+                # 如果 XSPEC fakeit 失败，回退到 SOXS 方法
+                print(f"警告: XSPEC fakeit 方法失败 ({fakeit_error})，回退到 SOXS")
                 
-                # 计算源计数率
-                rate_src_only = cspec2.rate.sum().value
+                # SOXS 备用方法
+                spec = soxs.Spectrum.from_pyxspec_model(self._m1)
+                newspec = spec.new_spec_from_band(band[0], band[1])
                 
-            except Exception as conv_error:
-                print(f"警告: 卷积失败: {conv_error}")
-                return 0.0
+                # 初始化 cspec2 变量
+                cspec2 = None
+                
+                # 进行卷积
+                try:
+                    # if hasattr(self, '_soxs_rmf') and self._soxs_rmf is not None:
+                    #     cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
+                    # else:
+                    cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
+                        
+                    # 设置曝光时间
+                    cspec2.exp_time = (self._duration, "s")
+                    
+                    # 计算源计数率
+                    rate_src_only = cspec2.rate.sum().value
+                    
+                except Exception as conv_error:
+                    print(f"警告: 卷积失败: {conv_error}")
+                    return 0.0
             
             # 检查是否成功计算了计数率
             if rate_src_only is None:
