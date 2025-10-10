@@ -1,7 +1,7 @@
 '''
 Date: 2025-02-25 15:02:36
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-09-18 19:04:21
+LastEditTime: 2025-10-10 11:56:05
 FilePath: /research/autohea/src/autohea/__init__.py
 '''
 """
