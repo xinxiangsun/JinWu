@@ -1,23 +1,43 @@
-'''
-Date: 2025-02-25 15:02:36
-LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-10-10 11:56:05
-FilePath: /research/autohea/src/autohea/__init__.py
-'''
 """
-AutoHEA: A Python package for automatic high-energy astrophysics analysis.
+AutoHEA
+=======
+
+A Python package for automatic high-energy astrophysics analysis.
+
+Top-level package re-exports commonly used subpackages for convenience:
+- core: OGIP FITS IO, unified readers, and utilities
+- lightcurve: SNR evaluation and trigger decision helpers
+- background: Priors/posteriors for background modeling
+- spectrum, missions, response, timing, data: domain subpackages
 """
 
-__version__ = "0.0.2"
+from __future__ import annotations
+
+from importlib.metadata import PackageNotFoundError, version
+
+# Package metadata
+try:
+	__version__ = version("autohea")
+except PackageNotFoundError:  # pragma: no cover - editable installs or source tree
+	__version__ = "0.0.3"
+
 __author__ = "Xinxiang Sun"
 __email__ = "sunxinxiang24@mails.ucas.ac.cn"
 __description__ = "AutoHEA: A Python package for automatic high-energy astrophysics analysis."
 
-# 明确导入子模块
+# Re-export subpackages for ergonomic imports
 from . import core
+from . import lightcurve
+from . import background
 from . import spectrum
 from . import missions
 from . import response
 from . import timing
-# 定义公开接口
-__all__ = ['core', 'spectrum', 'missions', 'response', 'timing']
+from . import data
+
+__all__ = [
+	# Subpackages
+	'core', 'lightcurve', 'background', 'spectrum', 'missions', 'response', 'timing', 'data',
+	# Package meta
+	'__version__',
+]

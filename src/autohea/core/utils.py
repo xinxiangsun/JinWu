@@ -1,18 +1,13 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-10-10 11:56:03
+LastEditTime: 2025-10-16 23:04:18
 LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
 from autohea.core.heasoft import HeasoftEnvManager as hem
 import xspec
-try :
-    import soxs
-    from soxs import ConvolvedSpectrum
-except:
-    pass
 
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -22,6 +17,8 @@ from astropy import constants as const
 from IPython.display import display, Math, Latex
 from astropy.cosmology import Planck18 as cosmo
 from functools import lru_cache
+import xspec as xs
+from xspec import FakeitSettings, AllData
 import os
 
 
@@ -77,7 +74,7 @@ def snr_li_ma(n_src, n_bkg, alpha_area_time):
 
 class RedshiftExtrapolator():
     
-    def __init__(self, z0, bkgnum, duration, model, par, arfpath: Path | str, rmfpath: Path | str | None = None, area_ratio: float = 1/12):
+    def __init__(self, z0, bkgnum, duration, model, par, arfpath: Path | str, rmfpath: Path | str, bkgpath: Path | str , area_ratio: float = 1/12):
         '''红移外推器 - 基于原有代码保守重构'''
         # 基本参数
         self._z0 = float(z0)
@@ -88,6 +85,7 @@ class RedshiftExtrapolator():
         self._area_ratio = float(area_ratio)
         
         # 文件路径
+        self._bkgpath = Path(bkgpath).expanduser().resolve()
         self._arfpath = Path(arfpath).expanduser().resolve()
         self._rmfpath = Path(rmfpath).expanduser().resolve() if rmfpath is not None else None
         # self._bkgpath = Path(bkgpath).expanduser().resolve() if bkgpath is not None else None
@@ -95,7 +93,7 @@ class RedshiftExtrapolator():
         # 为 XSPEC fakeit 保存文件路径字符串
         self._arf_file = str(self._arfpath)
         self._rmf_file = str(self._rmfpath) if self._rmfpath is not None else None
-        
+        self._bkg_file = str(self._bkgpath) 
         # 验证ARF文件存在
         if not self._arfpath.exists():
             raise FileNotFoundError(f"ARF文件不存在: {self._arfpath}")
@@ -203,6 +201,8 @@ class RedshiftExtrapolator():
                 xspec.Xset.abund = 'wilm'
                 xspec.Xset.xsect = 'vern'
                 xspec.Xset.cosmo = '67.66 0 0.6888463055445441'
+                xspec.Xset.allowPrompting = False
+
                 self._m1 = xspec.Model(self._model)
                 
             else:
@@ -430,22 +430,22 @@ class RedshiftExtrapolator():
             print(f"⚠️ 扩展红移参数上限失败: {e}")
             return False
 
-    def _build_soxs_responses(self):
-        """构建并缓存soxs的ARF/RMF对象"""
-        if not hasattr(self, "_soxs_arf") or self._soxs_arf is None:
-            os.chdir(str(self._arfpath.parent))
-            self._soxs_arf = soxs.AuxiliaryResponseFile(str(self._arfpath))
+    # def _build_soxs_responses(self):
+    #     """构建并缓存soxs的ARF/RMF对象"""
+    #     if not hasattr(self, "_soxs_arf") or self._soxs_arf is None:
+    #         os.chdir(str(self._arfpath.parent))
+    #         self._soxs_arf = soxs.AuxiliaryResponseFile(str(self._arfpath))
         
-        if self._rmfpath is not None and (not hasattr(self, "_soxs_rmf") or self._soxs_rmf is None):
-            try:
-                self._soxs_rmf = soxs.RedistributionMatrixFile(str(self._rmfpath))
-                print(f"成功加载RMF文件: {self._rmfpath}")
-            except Exception as e:
-                print(f"警告: 加载RMF文件失败: {e}")
-                self._soxs_rmf = None
-        else:
-            # 如果没有RMF文件路径，设置为None
-            self._soxs_rmf = None
+    #     if self._rmfpath is not None and (not hasattr(self, "_soxs_rmf") or self._soxs_rmf is None):
+    #         try:
+    #             self._soxs_rmf = soxs.RedistributionMatrixFile(str(self._rmfpath))
+    #             print(f"成功加载RMF文件: {self._rmfpath}")
+    #         except Exception as e:
+    #             print(f"警告: 加载RMF文件失败: {e}")
+    #             self._soxs_rmf = None
+    #     else:
+    #         # 如果没有RMF文件路径，设置为None
+    #         self._soxs_rmf = None
 
     def _current_alpha_index(self):
         """获取当前谱指数"""
@@ -461,7 +461,7 @@ class RedshiftExtrapolator():
             z_safe = max(float(z), 1e-6)
             
             # 确保SOXS对象已构建
-            self._build_soxs_responses()
+            # self._build_soxs_responses()
             
             # 更新红移参数
             if self._par_z is not None:
@@ -483,68 +483,47 @@ class RedshiftExtrapolator():
             
 
 
-            # 使用 XSPEC fakeit 方法计算计数率（新方法）
+            # 使用 XSPEC fakeit 方法计算计数率（与 compute_grid 对齐）
             try:
-                import xspec as xs
-                from xspec import FakeitSettings, AllData
-                
                 # 确保响应文件路径可用
                 if not hasattr(self, '_rmf_file') or self._rmf_file is None:
-                    # 如果没有直接的文件路径，使用 SOXS 备用方法
                     raise Exception("缺少RMF响应文件路径")
-                
+
                 # 创建 FakeitSettings - 只使用必需参数
                 fakeit_settings = FakeitSettings(
                     response=self._rmf_file,
                     arf=self._arf_file,
-                    exposure=str(self._duration)
+                    exposure=str(self._duration),
+                    backExposure=str(self._duration),
+                    background=self._bkg_file
                 )
-                
+
                 # 使用 fakeit 生成模拟谱
+                AllData.clear()
                 AllData.fakeit(1, fakeit_settings, noWrite=True)
+
+                # 选择能段
+                emin, emax = float(band[0]), float(band[1])
+                AllData.notice("all")
+                AllData.ignore(f"**-{emin} {emax}-**")
+                AllData.ignore("bad")
+
+                # 通过 folded 总计数得到带内模型计数率（cts/s）
+                spec = AllData(1)
                 
-                # 获取折叠后的谱（计数谱）
-                folded_counts = self._m1.folded(1)  # 获取第1组数据的折叠谱
-                
-                # 简单计算：假设所有能道都在感兴趣的能段内
-                # TODO: 可以进一步优化以精确选择能段对应的能道
-                rate_src_only = sum(folded_counts) / self._duration
-                
-                
-                    
+                rate_src_only = spec.rate[3]
+
             except Exception as fakeit_error:
-                # 如果 XSPEC fakeit 失败，回退到 SOXS 方法
-                print(f"警告: XSPEC fakeit 方法失败 ({fakeit_error})，回退到 SOXS")
-                
-                # SOXS 备用方法
-                spec = soxs.Spectrum.from_pyxspec_model(self._m1)
-                newspec = spec.new_spec_from_band(band[0], band[1])
-                
-                # 初始化 cspec2 变量
-                cspec2 = None
-                
-                # 进行卷积
-                try:
-                    # if hasattr(self, '_soxs_rmf') and self._soxs_rmf is not None:
-                    #     cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
-                    # else:
-                    cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
-                        
-                    # 设置曝光时间
-                    cspec2.exp_time = (self._duration, "s")
-                    
-                    # 计算源计数率
-                    rate_src_only = cspec2.rate.sum().value
-                    
-                except Exception as conv_error:
-                    print(f"警告: 卷积失败: {conv_error}")
-                    return 0.0
+                # XSPEC fakeit 出错
+                print(f"警告: XSPEC fakeit 方法失败 ({fakeit_error})")
+                return 0.0
             
             # 检查是否成功计算了计数率
             if rate_src_only is None:
                 print(f"警告: 无法计算z={z:.3f}处的计数率")
                 return 0.0
-                
+            
+            duration_factor = (1+self._z0)/(1+z_safe)
             # 计算总计数（源信号 + 背景贡献）
             n_src = rate_src_only * self._duration + self.bkgnum * self.area_ratio
             n_bkg = self.bkgnum
@@ -556,6 +535,22 @@ class RedshiftExtrapolator():
         except Exception as e:
             print(f"警告: 计算z={z:.3f}处SNR失败: {e}")
             return 0.0
+
+
+    @staticmethod
+    def _snr_li_ma_counts(n_on, n_off, alpha):
+        """向量化的 Li & Ma SNR（基于总 on/off 计数）。"""
+        n_on = np.asarray(n_on, dtype=float)
+        n_off = np.asarray(n_off, dtype=float)
+        alpha = float(alpha)
+        n_on = np.clip(n_on, 0, None)
+        n_off = np.clip(n_off, 0, None)
+        denom = n_on + n_off + 1e-12
+        term1 = n_on * np.log(((1 + alpha) / alpha) * (n_on / denom + 1e-16))
+        term2 = n_off * np.log((1 + alpha) * (n_off / denom + 1e-16))
+        snr2 = 2.0 * (term1 + term2)
+        snr2 = np.where(np.isfinite(snr2) & (snr2 > 0), snr2, 0.0)
+        return np.sqrt(snr2)
 
     def compute_grid(self, z_grid, band=(0.5, 4.0)):
         """
@@ -574,150 +569,158 @@ class RedshiftExtrapolator():
             - flux_convolved: 卷积后的能通量（带宽内）[erg/s]
             - snr: Li & Ma公式计算的信噪比
         """
-        cwd = os.getcwd()
-        # ---- 临时关闭进度条 (tqdm) ----
-        _tqdm_mod = None
-        _old_disable_flag = None
+        # 在本函数运行期间静默 XSPEC 输出
+        _old_chatter = xs.Xset.chatter
+        _old_log_chatter = getattr(xs.Xset, "logChatter", _old_chatter)
         try:
-            import tqdm as _tqdm_mod  # type: ignore
-            # 记录原状态并关闭
-            if hasattr(_tqdm_mod, 'tqdm'):
-                _old_disable_flag = getattr(_tqdm_mod.tqdm, 'disable', None)
-                _tqdm_mod.tqdm.disable = True  # 全局静默
-        except Exception:
-            _tqdm_mod = None
-
-        self._build_soxs_responses()
-
-        # 安全数值提取
-        def _as_scalar(x):
+            xs.Xset.chatter = 0
             try:
-                if hasattr(x, "value"):
-                    return float(x.value)
-                if isinstance(x, (tuple, list)):
-                    if len(x) == 0:
-                        return float("nan")
-                    x0 = x[0]
-                    if hasattr(x0, "value"):
-                        return float(x0.value)
-                    return float(x0)
-                return float(x)
+                xs.Xset.logChatter = 0
             except Exception:
-                return float("nan")
+                pass
 
-        # 取参：最后一项的norm和可能的谱指数alpha
-        last_comp_name = self._m1.componentNames[-1]
-        last_comp = getattr(self._m1, last_comp_name)
-        norm_param = getattr(last_comp, "norm", None)
-        if norm_param is None:
-            raise ValueError(f"模型最后一项 {last_comp_name} 没有 norm 参数")
+            cwd = os.getcwd()
+            # ---- 临时关闭进度条 (tqdm) ----
+            _tqdm_mod = None
+            _old_disable_flag = None
+            try:
+                import tqdm as _tqdm_mod  # type: ignore
+                if hasattr(_tqdm_mod, 'tqdm'):
+                    _old_disable_flag = getattr(_tqdm_mod.tqdm, 'disable', None)
+                    _tqdm_mod.tqdm.disable = True  # 全局静默
+            except Exception:
+                _tqdm_mod = None
 
-        # 使用缓存的基线归一化与谱指数
-        if hasattr(self, "_norm0_base") and (self._norm0_base is not None):
-            norm0 = float(self._norm0_base)
-        else:
-            norm0 = norm_param.values[0] if hasattr(norm_param, "values") else float(norm_param)
-        
-        if hasattr(self, "_alpha_base") and (self._alpha_base is not None):
-            alpha_val = float(self._alpha_base)
-        else:
-            alpha_val = self._current_alpha_index()
+            # self._build_soxs_responses()
 
-        # z参数 - 使用更健壮的查找方法
-        if getattr(self, "_par_z", None) is None:
-            self._par_z = self.find_redshift_param()
+            # 安全数值提取
+            def _as_scalar(x):
+                try:
+                    if hasattr(x, "value"):
+                        return float(x.value)
+                    if isinstance(x, (tuple, list)):
+                        if len(x) == 0:
+                            return float("nan")
+                        x0 = x[0]
+                        if hasattr(x0, "value"):
+                            return float(x0.value)
+                        return float(x0)
+                    return float(x)
+                except Exception:
+                    return float("nan")
+
+            # 取参：最后一项的norm和可能的谱指数alpha
+            last_comp_name = self._m1.componentNames[-1]
+            last_comp = getattr(self._m1, last_comp_name)
+            norm_param = getattr(last_comp, "norm", None)
+            if norm_param is None:
+                raise ValueError(f"模型最后一项 {last_comp_name} 没有 norm 参数")
+
+            if hasattr(self, "_norm0_base") and (self._norm0_base is not None):
+                norm0 = float(self._norm0_base)
+            else:
+                norm0 = norm_param.values[0] if hasattr(norm_param, "values") else float(norm_param)
             
+            if hasattr(self, "_alpha_base") and (self._alpha_base is not None):
+                alpha_val = float(self._alpha_base)
+            else:
+                alpha_val = self._current_alpha_index()
 
-        # 背景计数率
-        bkgrate_off = self._bkgnum / self._duration if self._duration and self._duration > 0 and self._bkgnum is not None else 0.0
+            if getattr(self, "_par_z", None) is None:
+                self._par_z = self.find_redshift_param()
+                
+            bkgrate_off = self._bkgnum / self._duration if self._duration and self._duration > 0 and self._bkgnum is not None else 0.0
 
-        dc0 = cosmo.comoving_distance(self._z0).value  # type: ignore[attr-defined]
-        dcz = cosmo.comoving_distance(z_grid).value  # type: ignore[attr-defined]
-        factor_grid = (dc0 / dcz) ** 2
+            dc0 = cosmo.comoving_distance(self._z0).value  # type: ignore[attr-defined]
+            dcz = cosmo.comoving_distance(z_grid).value  # type: ignore[attr-defined]
+            factor_grid = (dc0 / dcz) ** 2
 
-        rate_list = []
-        net_rate_list = []
-        flux_list = []
-        snr_list = []
-        convolved_flux_list = []
-        
-        for i, z in enumerate(z_grid):
-            # 调整z与归一化
+            rate_list = []
+            net_rate_list = []
+            flux_list = []
+            snr_list = []
+            convolved_flux_list = []
+            
+            for i, z in enumerate(z_grid):
+                try:
+                    if self._par_z is not None:
+                        self._par_z.values = float(z)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                
+                if alpha_val is not None:
+                    norm_param.values = float(norm0) * ((1 + self._z0) / (1 + z)) ** float(alpha_val) * factor_grid[i]
+                else:
+                    norm_param.values = float(norm0) * factor_grid[i]
+
+                if not hasattr(self, '_rmf_file') or self._rmf_file is None:
+                    raise Exception("缺少RMF响应文件路径")
+                
+                AllData.clear()
+                fakeit_settings = FakeitSettings(
+                    response=self._rmf_file,
+                    arf=self._arf_file,
+                    exposure=str(self._duration), 
+                    backExposure=str(self._duration),
+                    background=self._bkg_file
+                )
+                AllData.fakeit(1, fakeit_settings, noWrite=True)
+                spec = xspec.AllData(1)
+                emin, emax = float(band[0]), float(band[1])
+                AllData.notice("all")
+                AllData.ignore(f"**-{emin} {emax}-**")
+                AllData.ignore("bad")
+                folded_rate = spec.rate[3]
+                rate_src_only = folded_rate
+
+                rate_on_total = rate_src_only + bkgrate_off * self._area_ratio
+
+                n_off = bkgrate_off * (self._duration if self._duration else 0.0)
+                n_on = rate_src_only * self._duration + self._area_ratio * n_off
+                snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
+
+                xspec.AllModels.calcFlux(f"{emin} {emax}")
+                flux = spec.flux[0]
+
+                rate_list.append(float(rate_on_total))
+                net_rate_list.append(rate_src_only)
+                flux_list.append(_as_scalar(flux))
+                snr_list.append(float(snr))
+
             try:
                 if self._par_z is not None:
-                    self._par_z.values = float(z)  # type: ignore[attr-defined]
+                    self._par_z.values = float(self._z_base if hasattr(self, "_z_base") else self._z0)
             except Exception:
                 pass
-            
-            if alpha_val is not None:
-                norm_param.values = float(norm0) * ((1 + self._z0) / (1 + z)) ** float(alpha_val) * factor_grid[i]
-            else:
-                norm_param.values = float(norm0) * factor_grid[i]
-
-            # 构造谱并限定到能段
-            spec = soxs.Spectrum.from_pyxspec_model(self._m1)
-            newspec = spec.new_spec_from_band(band[0], band[1])
-
-            # 卷积响应
-            if getattr(self, "_soxs_rmf", None) is not None:
-                try:
-                    cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf, rmf=self._soxs_rmf)
-                except Exception as e:
-                    cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
-            else:
-                cspec2 = ConvolvedSpectrum.convolve(newspec, self._soxs_arf)
-            
-            cspec2.exp_time = (self._duration, "s")
-
-            # 源净计数率与on区域总计数率
-            rate_src_only = cspec2.rate.sum().value
-            rate_on_total = rate_src_only + bkgrate_off * self._area_ratio
-
-            # Li-Ma SNR
-            n_off = bkgrate_off * (self._duration if self._duration else 0.0)
-            n_on = rate_src_only * self._duration + self._area_ratio * n_off
-            snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
-
-            # 带宽内的净计数率和能通量
-            net_rate_raw, flux_after_arf_raw = cspec2.get_flux_in_band(band[0], band[1])
-            flux_without_arf_raw = newspec.get_flux_in_band(band[0], band[1])
-
-            rate_list.append(float(rate_on_total))
-            net_rate_list.append(_as_scalar(net_rate_raw))
-            flux_list.append(_as_scalar(flux_without_arf_raw))
-            convolved_flux_list.append(_as_scalar(flux_after_arf_raw))
-            snr_list.append(float(snr))
-
-        # 恢复XSPEC模型到基线
-        try:
-            if self._par_z is not None:
-                self._par_z.values = float(self._z_base if hasattr(self, "_z_base") else self._z0)
-        except Exception:
-            pass
-        try:
-            if norm_param is not None:
-                norm_param.values = float(norm0)
-        except Exception:
-            pass
-
-        os.chdir(cwd)
-        result_dict = {
-            "z": np.asarray(z_grid, dtype=float),
-            "rate": np.asarray(rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
-            "net_rate": np.asarray(net_rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
-            "flux": np.asarray(flux_list, dtype=float) * u.erg / u.s / u.cm**2,  # type: ignore[attr-defined]
-            "flux_convolved": np.asarray(convolved_flux_list, dtype=float) * u.erg / u.s,  # type: ignore[attr-defined]
-            "snr": np.asarray(snr_list, dtype=float),
-        }
-
-        # ---- 恢复 tqdm 状态 ----
-        if _tqdm_mod is not None and _old_disable_flag is not None:
             try:
-                _tqdm_mod.tqdm.disable = _old_disable_flag  # type: ignore
+                if norm_param is not None:
+                    norm_param.values = float(norm0)
             except Exception:
                 pass
 
-        return result_dict
+            os.chdir(cwd)
+            result_dict = {
+                "z": np.asarray(z_grid, dtype=float),
+                "rate": np.asarray(rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
+                "net_rate": np.asarray(net_rate_list, dtype=float) * u.photon / u.s,  # type: ignore[attr-defined]
+                "flux": np.asarray(flux_list, dtype=float) * u.erg / u.s / u.cm**2,  # type: ignore[attr-defined]
+                "snr": np.asarray(snr_list, dtype=float),
+            }
+
+            if _tqdm_mod is not None and _old_disable_flag is not None:
+                try:
+                    _tqdm_mod.tqdm.disable = _old_disable_flag  # type: ignore
+                except Exception:
+                    pass
+
+            return result_dict
+        finally:
+            # 恢复 XSPEC 输出级别
+            try:
+                xs.Xset.chatter = _old_chatter
+                xs.Xset.logChatter = _old_log_chatter
+            except Exception:
+                pass
 
     def compute_table(self, z0=None, width=1.0, npts=100, band=(0.5, 4.0)):
         """在[z0, z0+width]上生成z/flux/rate/net_rate/snr表格"""
@@ -859,6 +862,7 @@ class RedshiftExtrapolator():
 
         # 无法继续扩展
         return float(z_grid[-1])
+
 
 
 class GeneralRelativity:
