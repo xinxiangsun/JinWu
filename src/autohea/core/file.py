@@ -1,32 +1,36 @@
 """
+通用 OGIP FITS 读取器（Numpy 优先的输出，含中文优先双语注释）
+
+本模块面向高能天体物理常见 FITS 产品（ARF 响应面积、RMF 响应矩阵、PHA 能谱、光变曲线、事件表），
+提供健壮、可复用的读取器，统一返回标准化的 numpy 数组与轻量级数据类，便于后续科学计算与可视化。
+
+设计目标
+--------
+- 自包含：仅依赖 astropy.io.fits 与 numpy；可与外部库（如 gdt）互操作，但不强依赖。
+- 贴合 OGIP：理解常见扩展/列名，并对缺失的可选字段做出合理处理。
+- Numpy 优先：输出以 ndarray 或小型数据类为主，便于向下游数值流程衔接。
+- 实用工具：支持能段/道（channel）筛选、RMF 稀疏到稠密重建等常用操作。
+
+约定
+----
+- 对 EP 数据，常用能段为 0.5–4.0 keV。ARF 常以 bin 81~780 定义该能段边界；
+    PHA/RMF 的道选择通常依据 EBOUNDS 的能段重叠与 1024 道的 51~399 范围。
+
+English summary
+---------------
 General-purpose OGIP FITS readers with numpy-first outputs.
-
-This module consolidates robust, reusable readers for common high-energy
-astrophysics FITS products (ARF, RMF, PHA spectrum, lightcurve, events),
-returning standardized numpy arrays and light dataclasses for downstream use.
-
-Design goals
-------------
-- Self-contained: only depends on astropy.io.fits and numpy; can interoperate
-  with external libs like gdt but not require them.
-- OGIP-friendly: understands common extensions/columns and gracefully handles
-  missing optional fields.
-- Numpy-first: outputs are plain ndarrays or small dataclasses with ndarrays.
-- Practical utilities: band/channel filtering, RMF sparse-to-dense rebuild.
-
-Conventions
------------
-- Energy band of interest is often 0.5–4.0 keV. ARF uses bins 81–780 to define
-  band edges; PHA/RMF channel selection typically uses EBOUNDS overlap and the
-  1024-channel range 51–399.
-
+This module consolidates robust, reusable readers for common HEP FITS products
+(ARF, RMF, PHA, lightcurve, events), returning standardized numpy arrays and
+lightweight dataclasses. Utilities include band/channel filtering and RMF
+sparse-to-dense rebuild. Conventions follow EP practice: ARF bins 81–780 map
+to ~0.5–4 keV; PHA/RMF channels often use EBOUNDS overlap and 51–399 range.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, cast, Union, Literal
+from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload
 
 import numpy as np
 from astropy.io import fits
@@ -41,8 +45,11 @@ __all__ = [
     "ArfReader", "RmfReader", "RspReader",
     # Utilities
     "band_from_arf_bins", "channel_mask_from_ebounds",
-    # Unified entry
-    "OgipUnifiedReader", "OgipAnyData", "OgipData", "guess_ogip_kind", "read_ogip",
+    # Kind inference and direct dataclass helpers
+    "OgipData", "guess_ogip_kind",
+    # Direct dataclass-returning helpers
+    # Direct dataclass-returning helpers
+    "read_ogip", "read_arf", "read_rmf", "read_pha", "read_lc", "read_evt",
 ]
 
 
@@ -50,6 +57,16 @@ __all__ = [
 
 @dataclass
 class EnergyBand:
+    """能段描述数据类（中文优先 / CN first）
+
+    字段
+    - emin/emax: 能段下/上边界（数值）
+    - emin_unit/emax_unit: 单位字符串，通常为 "keV"
+
+    English
+    - emin/emax: energy band lower/upper bounds (numeric)
+    - emin_unit/emax_unit: unit strings, typically "keV"
+    """
     emin: float
     emin_unit: str
     emax: float
@@ -57,11 +74,33 @@ class EnergyBand:
 
 @dataclass
 class ChannelBand:
+    """道（Channel）范围数据类
+
+    字段
+    - ch_lo/ch_hi: 起止道号（闭区间）
+
+    English
+    - ch_lo/ch_hi: inclusive channel range
+    """
     ch_lo: int
     ch_hi: int
 
 @dataclass
 class ArfData:
+    """ARF 响应面积数据
+
+    字段
+    - kind: 常量字面量 'arf'
+    - path: 文件路径
+    - energ_lo/energ_hi: 每个能 bin 的下/上边界（keV）
+    - specresp: 对应每个能 bin 的有效面积（cm^2）
+    - header: 头关键字字典
+
+    English
+    - OGIP ARF: energy bin edges (ENERG_LO/HI) and effective area (SPECRESP).
+    """
+    kind: Literal['arf']
+    path: Path
     energ_lo: np.ndarray  # shape (N,)
     energ_hi: np.ndarray  # shape (N,)
     specresp: np.ndarray  # shape (N,), cm^2
@@ -69,6 +108,21 @@ class ArfData:
 
 @dataclass
 class RmfData:
+    """RMF 响应矩阵数据（支持稀疏字段与 EBOUNDS）
+
+    字段
+    - energ_lo/energ_hi: 入射能 bin 边界
+    - n_grp/f_chan/n_chan: OGIP 稀疏分组定义（可选）
+    - matrix: 若为稀疏存储则为逐行对象数组；若已重建则为 2D 稠密矩阵
+    - channel/e_min/e_max: EBOUNDS（道到能的映射）
+    - header: 头关键字字典
+
+    English
+    - Supports OGIP sparse representation and EBOUNDS mapping.
+    - Use rebuild_dense() to obtain (N_E, N_C) dense redistribution matrix.
+    """
+    kind: Literal['rmf']
+    path: Path
     energ_lo: np.ndarray  # shape (N_E,)
     energ_hi: np.ndarray  # shape (N_E,)
     # OGIP sparse representation
@@ -83,12 +137,15 @@ class RmfData:
     header: Dict[str, Any]
 
     def rebuild_dense(self) -> np.ndarray:
-        """Rebuild a dense redistribution matrix of shape (N_E, N_C) if sparse columns present.
+        """从稀疏列重建稠密响应矩阵（形状为 (N_E, N_C)）
 
-        Returns
-        -------
-        np.ndarray
-            Dense matrix with probability per channel for each energy bin.
+        返回
+        - np.ndarray: 每个能 bin 对应各道的概率（稠密矩阵）
+
+        English
+        Rebuild a dense redistribution matrix of shape (N_E, N_C) if sparse
+        columns are present. Returns probability per channel for each energy
+        bin.
         """
         if self.channel is None or self.e_min is None or self.e_max is None:
             # No EBOUNDS; best effort: try to stack MATRIX if already dense-like
@@ -136,6 +193,21 @@ class RmfData:
 
 @dataclass
 class PhaData:
+    """PHA 光子谱数据
+
+    字段
+    - channels: 道号
+    - counts: 计数（COUNTS）
+    - stat_err: 统计误差（可选）
+    - exposure/backscal/areascal/quality/grouping: 常见 OGIP 字段（可选）
+    - ebounds: 若存在 EBOUNDS，则为 (CHANNEL, E_MIN, E_MAX)
+    - header: 头关键字字典
+
+    English
+    - OGIP PHA SPECTRUM with optional EBOUNDS and quality/grouping vectors.
+    """
+    kind: Literal['pha']
+    path: Path
     channels: np.ndarray  # shape (N,)
     counts: np.ndarray    # shape (N,)
     stat_err: Optional[np.ndarray]
@@ -149,6 +221,22 @@ class PhaData:
 
 @dataclass
 class LightcurveData:
+    """光变曲线数据
+
+    字段
+    - time: 时间轴（bin 左缘或中心）
+    - value: RATE 或 COUNTS
+    - error: 不确定度（可选）
+    - dt: 典型时间分辨率（若可推断）
+    - exposure: 曝光时间（头关键字推断，可选）
+    - is_rate: 是否为速率（True 为 RATE，False 为 COUNTS）
+    - header: 头关键字字典
+
+    English
+    - Light curve table with TIME and RATE/COUNTS.
+    """
+    kind: Literal['lc']
+    path: Path
     time: np.ndarray   # bin left edges or centers
     value: np.ndarray  # RATE or COUNTS
     error: Optional[np.ndarray]
@@ -159,6 +247,19 @@ class LightcurveData:
 
 @dataclass
 class EventData:
+    """事件列表数据
+
+    字段
+    - time: 事件到达时间
+    - pi/channel: 事件能道（可选）
+    - gti_start/gti_stop: GTI（可选）
+    - header: 头关键字字典
+
+    English
+    - Event list with optional PI/CHANNEL and GTI.
+    """
+    kind: Literal['evt']
+    path: Path
     time: np.ndarray   # events times (s)
     pi: Optional[np.ndarray]       # PI or CHANNEL if present
     channel: Optional[np.ndarray]
@@ -167,14 +268,8 @@ class EventData:
     header: Dict[str, Any]
 
 
-# Unified data union and wrapper
+# Unified data union
 OgipData = Union[ArfData, RmfData, PhaData, LightcurveData, EventData]
-
-@dataclass
-class OgipAnyData:
-    kind: Literal['arf', 'rmf', 'pha', 'lc', 'evt']
-    data: OgipData
-    path: Path
 
 
 # ---------- Utilities ----------
@@ -207,13 +302,30 @@ def channel_mask_from_ebounds(
 # ---------- Readers ----------
 
 class OgipArfReader:
+    """ARF 读取器
+
+    用法：reader = OgipArfReader(path); data = reader.read()
+
+    English
+    Reader for OGIP ARF files.
+    """
     def __init__(self, path: str | Path):
+        """参数
+        - path: ARF 文件路径
+
+        English
+        - path: path to ARF file
+        """
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[ArfData] = None
 
     def read(self) -> ArfData:
+        """读取 ARF 并返回 `ArfData`。
+
+        English: Read ARF and return `ArfData`.
+        """
         with fits.open(self.path) as h:
             hd = cast(Any, h["SPECRESP"])  # BinTableHDU
             d = hd.data
@@ -221,18 +333,33 @@ class OgipArfReader:
             energ_hi = np.asarray(d["ENERG_HI"], float)
             specresp = np.asarray(d["SPECRESP"], float)
             header = dict(cast(Any, hd.header))
-        self._data = ArfData(energ_lo, energ_hi, specresp, header)
+        self._data = ArfData(kind='arf', path=self.path, energ_lo=energ_lo, energ_hi=energ_hi, specresp=specresp, header=header)
         return self._data
 
 
 class OgipRmfReader:
+    """RMF 读取器
+
+    English
+    Reader for OGIP RMF (or RSP) files with MATRIX and optional EBOUNDS.
+    """
     def __init__(self, path: str | Path):
+        """参数
+        - path: RMF/RSP 文件路径
+
+        English
+        - path: path to RMF/RSP file
+        """
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[RmfData] = None
 
     def read(self) -> RmfData:
+        """读取 RMF 并返回 `RmfData`。
+
+        English: Read RMF and return `RmfData`.
+        """
         with fits.open(self.path) as h:
             hm = cast(Any, h["MATRIX"])  # BinTableHDU
             dm = hm.data
@@ -253,6 +380,8 @@ class OgipRmfReader:
                 e_max = np.asarray(de["E_MAX"], float)
 
         self._data = RmfData(
+            kind='rmf',
+            path=self.path,
             energ_lo=energ_lo,
             energ_hi=energ_hi,
             n_grp=(np.asarray(n_grp) if n_grp is not None else None),
@@ -268,13 +397,28 @@ class OgipRmfReader:
 
 
 class OgipPhaReader:
+    """PHA 光子谱读取器
+
+    English
+    Reader for OGIP PHA SPECTRUM with optional EBOUNDS.
+    """
     def __init__(self, path: str | Path):
+        """参数
+        - path: PHA 文件路径
+
+        English
+        - path: path to PHA file
+        """
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[PhaData] = None
 
     def read(self) -> PhaData:
+        """读取 PHA 并返回 `PhaData`。
+
+        English: Read PHA and return `PhaData`.
+        """
         with fits.open(self.path) as h:
             hs = cast(Any, h["SPECTRUM"])  # BinTableHDU
             ds = hs.data
@@ -296,7 +440,7 @@ class OgipPhaReader:
                     np.asarray(de["E_MAX"], float),
                 )
             header = dict(header_map)
-        self._data = PhaData(channels, counts, stat_err, exposure, backscal, areascal, quality, grouping, ebounds, header)
+        self._data = PhaData(kind='pha', path=self.path, channels=channels, counts=counts, stat_err=stat_err, exposure=exposure, backscal=backscal, areascal=areascal, quality=quality, grouping=grouping, ebounds=ebounds, header=header)
         return self._data
 
     def select_by_band(
@@ -304,8 +448,16 @@ class OgipPhaReader:
         band: EnergyBand,
         rmf_chan_band: Optional[ChannelBand] = ChannelBand(51, 399),
     ) -> Tuple[np.ndarray, np.ndarray]:
-        """Return (channels, counts) filtered by energy band via EBOUNDS. If no EBOUNDS,
-        fall back to channel range (e.g., 51–399)."""
+        """依据能段筛选并返回 (channels, counts)
+
+        行为
+        - 若存在 EBOUNDS：使用 EBOUNDS 与给定能段重叠进行筛选；
+        - 若不存在：退回到道范围（默认 51–399）。
+
+        English
+        Return (channels, counts) filtered by energy band via EBOUNDS; if
+        EBOUNDS is missing, fall back to a channel range (e.g., 51–399).
+        """
         if self._data is None:
             _ = self.read()
         d = self._data
@@ -327,13 +479,28 @@ class OgipPhaReader:
 
 
 class OgipLightcurveReader:
+    """光变曲线读取器
+
+    English
+    Reader for OGIP-like light curve tables containing TIME and RATE/COUNTS.
+    """
     def __init__(self, path: str | Path):
+        """参数
+        - path: 光变曲线 FITS 文件路径
+
+        English
+        - path: path to light curve FITS file
+        """
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[LightcurveData] = None
 
     def read(self) -> LightcurveData:
+        """读取光变曲线并返回 `LightcurveData`。
+
+        English: Read light curve and return `LightcurveData`.
+        """
         with fits.open(self.path) as h:
             # Try common names: 'RATE' ext, or first table with TIME
             hdu = None
@@ -366,18 +533,33 @@ class OgipLightcurveReader:
             dt = float(np.median(np.diff(time))) if time.size >= 2 else None
             exposure_val = header.get("EXPOSURE", header.get("EXPTIME", np.nan))
             exposure = float(exposure_val) if np.isfinite(exposure_val) else None
-        self._data = LightcurveData(time=time, value=val, error=err, dt=dt, exposure=exposure, is_rate=is_rate, header=header)
+        self._data = LightcurveData(kind='lc', path=self.path, time=time, value=val, error=err, dt=dt, exposure=exposure, is_rate=is_rate, header=header)
         return self._data
 
 
 class OgipEventReader:
+    """事件表读取器
+
+    English
+    Reader for OGIP-like event lists (EVENTS) with optional GTI.
+    """
     def __init__(self, path: str | Path):
+        """参数
+        - path: 事件表 FITS 文件路径
+
+        English
+        - path: path to event FITS file
+        """
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[EventData] = None
 
     def read(self) -> EventData:
+        """读取事件表并返回 `EventData`。
+
+        English: Read EVENTS table and return `EventData`.
+        """
         with fits.open(self.path) as h:
             # EVENTS
             # Find first binary table HDU with TIME column
@@ -405,7 +587,7 @@ class OgipEventReader:
                 gti_start = np.asarray(hg["START"], float)
                 gti_stop = np.asarray(hg["STOP"], float)
 
-        self._data = EventData(time=time, pi=pi, channel=channel, gti_start=gti_start, gti_stop=gti_stop, header=header)
+        self._data = EventData(kind='evt', path=self.path, time=time, pi=pi, channel=channel, gti_start=gti_start, gti_stop=gti_stop, header=header)
         return self._data
 
 
@@ -431,9 +613,19 @@ class LightcurveReader(OgipLightcurveReader):
     pass
 
 
-# ---------- Unified reader ----------
+# ---------- Kind inference ----------
 
 def guess_ogip_kind(path: str | Path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt']:
+    """推断给定 FITS 文件的 OGIP 类型
+
+    规则
+    - 先基于文件名后缀（.arf/.rmf/.rsp/.pha/.pi）快速判断；
+    - 再基于扩展名（SPECRESP/MATRIX/SPECTRUM/EVENTS 等）与列名（TIME/RATE/COUNTS）判定；
+    - 在 LC/EVT 模糊时，若存在 RATE/COUNTS 列则判为 LC，否则 EVT。
+
+    English
+    Guess the OGIP kind of a FITS file using filename hints and HDU contents.
+    """
     p = Path(path)
     name = p.name.lower()
     # quick filename-based hints
@@ -453,14 +645,21 @@ def guess_ogip_kind(path: str | Path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt
             return 'rmf'
         if 'SPECTRUM' in extnames:
             return 'pha'
-        if 'EVENTS' in extnames or any(('TIME' in getattr(getattr(x, 'data', None), 'columns', ()).names) for x in h if getattr(x, 'data', None) is not None):
+        # Look for any table that has TIME column (events or lc)
+        has_time = False
+        for x in h:
+            d = getattr(x, 'data', None)
+            cols = getattr(d, 'columns', None)
+            names = getattr(cols, 'names', ()) if cols is not None else ()
+            if 'TIME' in names:
+                has_time = True
+                break
+        if 'EVENTS' in extnames or has_time:
             # Ambiguity between LC and EVT: try RATE/COUNTS columns
             for x in h:
                 d = getattr(x, 'data', None)
                 cols = getattr(d, 'columns', None)
-                if cols is None:
-                    continue
-                names = getattr(cols, 'names', ())
+                names = getattr(cols, 'names', ()) if cols is not None else ()
                 if 'RATE' in names or 'COUNTS' in names:
                     return 'lc'
             return 'evt'
@@ -468,49 +667,77 @@ def guess_ogip_kind(path: str | Path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt
     return 'pha'
 
 
-class OgipUnifiedReader:
-    def __init__(self, path: str | Path):
-        self.path = Path(path)
-        if not self.path.exists():
-            raise FileNotFoundError(str(self.path))
-        self.kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None
-        self._data: Optional[OgipAnyData] = None
+# ---------- Direct dataclass-returning helpers ----------
 
-    def read(self, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipAnyData:
-        k = kind or guess_ogip_kind(self.path)
-        self.kind = k
-        if k == 'arf':
-            data = OgipArfReader(self.path).read()
-        elif k == 'rmf':
-            data = OgipRmfReader(self.path).read()
-        elif k == 'pha':
-            data = OgipPhaReader(self.path).read()
-        elif k == 'lc':
-            data = OgipLightcurveReader(self.path).read()
-        elif k == 'evt':
-            data = OgipEventReader(self.path).read()
-        else:
-            raise ValueError(f"Unknown OGIP kind: {k}")
-        self._data = OgipAnyData(kind=k, data=data, path=self.path)
-        return self._data
+@overload
+def read_ogip(path: str | Path, kind: Literal['arf']) -> ArfData: ...
 
+@overload
+def read_ogip(path: str | Path, kind: Literal['rmf']) -> RmfData: ...
 
-def read_ogip(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipAnyData:
-    """One-shot unified reader.
+@overload
+def read_ogip(path: str | Path, kind: Literal['pha']) -> PhaData: ...
 
-    Parameters
-    ----------
-    path : str | Path
-        FITS path. Kind will be inferred if not provided.
-    kind : Literal['arf','rmf','pha','lc','evt'] | None
-        Optional explicit kind.
+@overload
+def read_ogip(path: str | Path, kind: Literal['lc']) -> LightcurveData: ...
 
-    Returns
-    -------
-    OgipAnyData
-        Wrapper with kind and data.
+@overload
+def read_ogip(path: str | Path, kind: Literal['evt']) -> EventData: ...
+
+@overload
+def read_ogip(path: str | Path, kind: None = ...) -> OgipData: ...
+
+def read_ogip(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipData:
+    """统一入口：直接返回具体数据类（Chinese first）
+
+    行为
+    - 若提供 kind，则按 kind 调用相应读取器；
+    - 若未提供，则通过 `guess_ogip_kind` 自动推断。
+
+    返回
+    - 对应的具体数据类：`ArfData`/`RmfData`/`PhaData`/`LightcurveData`/`EventData`
+
+    English
+    Unified reader that returns the concrete dataclass directly. When `kind`
+    is None, the function attempts to infer it using `guess_ogip_kind`.
     """
-    return OgipUnifiedReader(path).read(kind)
+    k = kind or guess_ogip_kind(path)
+    if k == 'arf':
+        return OgipArfReader(path).read()
+    if k == 'rmf':
+        return OgipRmfReader(path).read()
+    if k == 'pha':
+        return OgipPhaReader(path).read()
+    if k == 'lc':
+        return OgipLightcurveReader(path).read()
+    if k == 'evt':
+        return OgipEventReader(path).read()
+    raise ValueError(f"Unknown OGIP kind: {k}")
+
+
+def read_arf(path: str | Path) -> ArfData:
+    """简便函数：读取 ARF 并返回 `ArfData`（English: convenience ARF reader）。"""
+    return OgipArfReader(path).read()
+
+
+def read_rmf(path: str | Path) -> RmfData:
+    """简便函数：读取 RMF 并返回 `RmfData`（English: convenience RMF reader）。"""
+    return OgipRmfReader(path).read()
+
+
+def read_pha(path: str | Path) -> PhaData:
+    """简便函数：读取 PHA 并返回 `PhaData`（English: convenience PHA reader）。"""
+    return OgipPhaReader(path).read()
+
+
+def read_lc(path: str | Path) -> LightcurveData:
+    """简便函数：读取光变曲线并返回 `LightcurveData`（English: convenience LC reader）。"""
+    return OgipLightcurveReader(path).read()
+
+
+def read_evt(path: str | Path) -> EventData:
+    """简便函数：读取事件表并返回 `EventData`（English: convenience EVT reader）。"""
+    return OgipEventReader(path).read()
 
 
 

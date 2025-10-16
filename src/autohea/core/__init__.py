@@ -1,9 +1,3 @@
-'''
-Date: 2025-10-10 11:53:55
-LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-10-17 00:23:51
-FilePath: /research/autohea/src/autohea/core/__init__.py
-'''
 """
 autohea.core
 ============
@@ -11,15 +5,16 @@ autohea.core
 Core utilities for OGIP FITS IO and helpers.
 
 This package layer exposes:
-- Submodules such as `file`, `heasoft`, `rsp`, `arf`, `rmf`, `plot`, `time`.
-- A unified, numpy-first OGIP readers API from `core.file` for ARF/RMF/PHA/LC/EVT.
+- Submodules such as `file`, `heasoft`, `plot`, `time`.
+- Numpy-first OGIP readers in `core.file` for ARF/RMF/PHA/LC/EVT, returning
+  concrete dataclasses with `kind` and `path` fields.
 
-Users typically import directly from here for convenience:
-	from autohea.core import read_ogip, OgipUnifiedReader
-	from autohea.core import OgipPhaReader, band_from_arf_bins, ChannelBand
+Typical usage
+-------------
+	from autohea.core import read_ogip, guess_ogip_kind
+	from autohea.core import read_arf, read_pha, OgipPhaReader
+	from autohea.core import band_from_arf_bins, ChannelBand
 """
- 
-
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
@@ -41,8 +36,8 @@ from .file import (
 	ArfReader, RmfReader, RspReader, LightcurveReader,
 	# Utilities
 	band_from_arf_bins, channel_mask_from_ebounds,
-	# Unified entry
-	OgipUnifiedReader, OgipAnyData, OgipData, guess_ogip_kind, read_ogip,
+	# Unified helpers (direct dataclass returning)
+	OgipData, guess_ogip_kind, read_ogip, read_arf, read_rmf, read_pha, read_lc, read_evt,
 )
 
 # Package version
@@ -62,8 +57,8 @@ __all__ = [
 	'ArfReader', 'RmfReader', 'RspReader', 'LightcurveReader',
 	# Utilities
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
-	# Unified entry
-	'OgipUnifiedReader', 'OgipAnyData', 'OgipData', 'guess_ogip_kind', 'read_ogip',
+	# Unified helpers
+	'OgipData', 'guess_ogip_kind', 'read_ogip', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
 	# Package meta
 	'__version__',
 ]
