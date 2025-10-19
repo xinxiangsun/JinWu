@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-10-16 23:04:18
+LastEditTime: 2025-10-19 20:37:25
 LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
@@ -244,7 +244,7 @@ class RedshiftExtrapolator():
             # 检查是否是红移分量（通常以z开头或包含redshift参数）
             if comp.lower().startswith('z') or hasattr(comp_obj, 'Redshift'):
                 redshift_components.append(comp)
-                if self._par_z is None:  # 使用第一个找到的红移参数
+                if self._par_z is  None:  # 使用第一个找到的红移参数
                     try:
                         self._par_z = getattr(comp_obj, 'Redshift')
                         self._z_base = float(self._par_z.values[0])

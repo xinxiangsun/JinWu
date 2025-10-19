@@ -7,7 +7,7 @@ name = "autohea"
 version = "0.0.3"
 description = "An automatically tools for high energy astrophysics"
 readme = "README.md"
-license = { text = "GPL-3.0" }
+license = { text = "GPL-3.0-or-later" }
 authors = [
     { name = "Xinxiang Sun", email = "sunxx@nao.cas.cn" }
 ]
@@ -17,6 +17,13 @@ dependencies = [
     "scipy",
     "astropy",
     "emcee"
+]
+
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
 ]
 
 
