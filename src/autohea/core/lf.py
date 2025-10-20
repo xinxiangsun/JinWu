@@ -199,7 +199,7 @@ class HighZDetectabilityEstimator:
 		"""
 		对给定 z_grid 计算每个 z 的 SNR 中位数（以及分散度），并给出 z_max 估计。
 		- with_spread=True 时，额外返回 16/84 分位数用于误差带。
-		- z_max 通过线性插值近似阈值交叉点；若全程 >= 阈值，则返回最大 z；若全程 < 阈值，返回 None。
+		- z_max 通过线性插值近似阈值交叉点；若全程 >= 阈值，则返回最大 z; 若全程 < 阈值，返回 None。
 		"""
 		z_arr = np.asarray(list(z_grid), dtype=float)
 		snr_med = np.zeros_like(z_arr)
