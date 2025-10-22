@@ -212,9 +212,9 @@ def build_fake_from_npz(
 	端到端：从 NPZ 计数光变 → flux →（可选时间伸缩）→ 目标配置下的假光变。
 
 	- cfg_ref: 用于把原始 LC 的 rate↔flux（得到 K_ref）
-	- cfg_tgt: 用于把 flux→rate'（得到 K_tgt）；若 None，则使用 cfg_ref
+	- cfg_tgt: 用于把 flux→rate'(得到 K_tgt）；若 None，则使用 cfg_ref
 	- z0,z,T0: 若提供，则按 S_t=(1+z)/(1+z0) 拉伸时间轴；否则不改变时间。
-	- background_rate: 常数背景率（cts/s）；若 output_total_rate=False，则输出净源率
+	- background_rate: 常数背景率(cts/s);  若 output_total_rate=False，则输出净源率
 	- 返回：`LCSimResult(time, counts, dt, rate, error, meta)`
 	"""
 	# 1) 读入 NPZ 计数光变 | Read counts LC
