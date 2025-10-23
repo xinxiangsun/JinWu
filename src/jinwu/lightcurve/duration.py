@@ -33,7 +33,7 @@ import numpy as np
 from astropy.stats import bayesian_blocks
 
 # Background models
-from autohea.background.backprior import (
+from jinwu.background.backprior import (
 	BackgroundPrior as _BackgroundPrior,
 	BackgroundCountsPosterior as _BackgroundCountsPosterior,
 )

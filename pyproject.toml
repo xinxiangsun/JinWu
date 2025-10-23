@@ -3,9 +3,9 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "autohea"
+name = "jinwu"
 version = "0.0.3"
-description = "An automatically tools for high energy astrophysics"
+description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
 authors = [
@@ -18,15 +18,20 @@ dependencies = [
     "astropy",
     "emcee"
 ]
+keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
+homepage = "https://github.com/Charon0922/jinwu"
+repository = "https://github.com/Charon0922/jinwu"
+documentation = "https://github.com/Charon0922/jinwu/blob/master/README.md"
 
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Development Status :: 3 - Alpha"
 ]
-
-
 
 [tool.setuptools.packages.find]
 where = ["src"]

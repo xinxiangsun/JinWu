@@ -24,7 +24,7 @@ import json
 
 import numpy as np
 
-from autohea.spectrum.specfake import XspecKFactory
+from jinwu.spectrum.specfake import XspecKFactory
 
 # 统一的数值类型别名（兼容 numpy 数值类型）
 # Unified numeric alias (compatible with numpy numeric scalars)

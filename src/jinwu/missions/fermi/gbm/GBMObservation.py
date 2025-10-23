@@ -12,7 +12,7 @@ from gdt.missions.fermi.gbm.detectors import GbmDetectors
 from gdt.missions.fermi.gbm.poshist import GbmPosHist
 from pathlib import Path
 import os
-from autohea.response.gbm import contgbmrsp
+from jinwu.response.gbm import contgbmrsp
 from gdt.core.data_primitives import Gti
 from glob import glob
 import shutil
@@ -24,7 +24,7 @@ from gdt.missions.fermi.gbm.localization import GbmHealPix
 import numpy as np
 from gdt.missions.fermi.plot import FermiEarthPlot
 from gdt.missions.fermi.gbm.saa import GbmSaa
-from autohea.core.time import fermi_met_to_utc, fermi_utc_to_met
+from jinwu.core.time import fermi_met_to_utc, fermi_utc_to_met
 
 
 class GBMObservation:

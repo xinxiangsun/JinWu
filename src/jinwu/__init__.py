@@ -1,8 +1,8 @@
 """
-AutoHEA
+JinWu
 =======
 
-A Python package for automatic high-energy astrophysics analysis.
+Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling
 
 Top-level package re-exports commonly used subpackages for convenience:
 - core: OGIP FITS IO, unified readers, and utilities
@@ -11,19 +11,19 @@ Top-level package re-exports commonly used subpackages for convenience:
 - spectrum, missions, response, timing, data: domain subpackages
 """
 
-from __future__ import annotations
+from __future__ import annotations 
 
 from importlib.metadata import PackageNotFoundError, version
 
 # Package metadata
 try:
-	__version__ = version("autohea")
+	__version__ = version("jinwu")
 except PackageNotFoundError:  # pragma: no cover - editable installs or source tree
 	__version__ = "0.0.3"
 
 __author__ = "Xinxiang Sun"
 __email__ = "sunxinxiang24@mails.ucas.ac.cn"
-__description__ = "AutoHEA: A Python package for automatic high-energy astrophysics analysis."
+__description__ = "JinWu: Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling"
 
 # Re-export subpackages for ergonomic imports
 from . import core

@@ -21,8 +21,8 @@ from typing import Callable, Dict, Optional, Tuple, Sequence
 
 import numpy as np
 
-from autohea.lightcurve.lcfake import XspecConfig, build_fake_from_npz
-from autohea.lightcurve.trigger import TriggerDecider, BackgroundSimple
+from jinwu.lightcurve.lcfake import XspecConfig, build_fake_from_npz
+from jinwu.lightcurve.trigger import TriggerDecider, BackgroundSimple
 
 
 ConfigBuilder = Callable[[float], XspecConfig]

@@ -28,7 +28,7 @@ from typing import Optional, Tuple, Literal
 
 import numpy as np
 
-from autohea.lightcurve.duration import li_ma_snr
+from jinwu.lightcurve.duration import li_ma_snr
 
 
 @dataclass

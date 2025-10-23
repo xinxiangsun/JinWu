@@ -6,12 +6,12 @@ LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/autohea/src/autohea/core/utils.py
 '''
 import numpy as np
-from autohea.core.heasoft import HeasoftEnvManager as hem
+from jinwu.core.heasoft import HeasoftEnvManager as hem
 import xspec
 
 from pathlib import Path
 import matplotlib.pyplot as plt
-from autohea.core.file import ArfReader, RmfReader, RspReader
+from jinwu.core.file import ArfReader, RmfReader, RspReader
 from astropy import units as u
 from astropy import constants as const
 from IPython.display import display, Math, Latex
