@@ -19,9 +19,9 @@ dependencies = [
     "emcee"
 ]
 keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
-homepage = "https://github.com/Charon0922/jinwu"
-repository = "https://github.com/Charon0922/jinwu"
-documentation = "https://github.com/Charon0922/jinwu/blob/master/README.md"
+homepage = "https://github.com/xinxiangsun/JinWu"
+repository = "https://github.com/xinxiangsun/JinWu"
+documentation = "https://github.com/xinxiangsun/JinWu/blob/master/README.md"
 
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
