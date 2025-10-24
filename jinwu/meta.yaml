@@ -1,0 +1,44 @@
+{% set name = "jinwu" %}
+{% set version = "0.0.3" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
+  sha256: 0b2885dfd44fbaaa3ff5ba42fd3991e5e5e8d1f6927c4592e248f6bdf34534e9
+
+build:
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
+  number: 0
+
+requirements:
+  host:
+    - python >=3.11
+    - setuptools >=64
+    - pip
+  run:
+    - python >=3.11
+    - numpy
+    - scipy
+    - astropy
+    - emcee
+
+test:
+  imports:
+    - jinwu
+  commands:
+    - pip check
+  requires:
+    - pip
+
+about:
+  summary: Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis.
+  license: GPL-3.0-only
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - xinxiangsun

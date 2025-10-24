@@ -55,15 +55,9 @@ dist/
 
 __pycache__/
 */__pycache__/
-*/autohea.egg-info/
+*/jinwu.egg-info/
 */*/__pycache__/
-src/autohea/__pycache__/__init__.cpython-312.pyc
-src/autohea/core/__pycache__/__init__.cpython-312.pyc
-src/autohea/core/__pycache__/heasoft.cpython-312.pyc
-src/autohea/core/__pycache__/utils.cpython-312.pyc
-src/autohea/__pycache__/__init__.cpython-312.pyc
-src/autohea/core/__pycache__/__init__.cpython-312.pyc
-src/autohea/core/__pycache__/heasoft.cpython-312.pyc
-src/autohea/core/__pycache__/utils.cpython-312.pyc
-src/autohea/core/__pycache__/utils.cpython-312.pyc
-src/autohea/core/__pycache__/__init__.cpython-312.pyc
+*/dist/
+./dist/
+*/*.pyc
+*/recipe/

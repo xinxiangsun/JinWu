@@ -1,9 +1,9 @@
-'''
+"""
 Date: 2025-03-17 13:40:01
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
 LastEditTime: 2025-10-10 11:56:01
 FilePath: /research/autohea/src/autohea/core/heasoft.py
-'''
+"""
 import os
 import sys
 import subprocess

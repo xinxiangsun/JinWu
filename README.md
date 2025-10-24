@@ -1,5 +1,12 @@
-# JinWu：Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling
+# 安装方式 / Installation
 
+### 通过 PyPI 安装
+
+```bash
+pip install jinwu
+```
+
+# JinWu：Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling
 
 ## 项目简介 / Project Introduction
 
@@ -10,6 +17,43 @@
 JinWu, the Golden Crow, is a legendary solar bird in ancient Chinese mythology, symbolizing light, energy, and hope. According to legend, JinWu is a three-legged bird dwelling in Fusang, driving the sun across the sky and bringing vitality to all things. Naming this project "JinWu" reflects our dedication to joint inference and physical modeling of high-energy transients (such as gamma-ray bursts and supernovae), aiming to explore the brightest and most energetic phenomena in the universe.
 
 This project provides a unified, flexible, and extensible toolkit for researchers and enthusiasts in high-energy astrophysics, supporting various physical models, data fitting, and inference methods, and fostering scientific communication and innovation.
+
+### 源码安装
+
+```bash
+git clone https://github.com/Charon0922/jinwu.git
+cd jinwu
+pip install .
+```
+
+### 必要依赖 / Required Dependencies
+
+本包依赖以下 Python 库，请确保已安装：
+
+- numpy
+- scipy
+- astropy
+- emcee/pymc
+- astro-gdt
+
+### Fermi GBM Response Generator
+
+
+> git clone [https://github.com/xinxiangsun/responsum.git](https://github.com/xinxiangsun/responsum.git)
+
+> pip install ./responsum
+
+> git clone [https://github.com/xinxiangsun/gbmgeometry.git](https://github.com/xinxiangsun/gbmgeometry.git)
+
+> pip install ./gbmgeometry
+>
+> git clone [https://github.com/xinxiangsun/gbm_drm_gen.git](https://github.com/xinxiangsun/gbm_drm_gen.git)
+
+> pip install ./gbm_drm_gen
+
+> git clone https://github.com/xinxiangsun/hea.git
+
+> pip install ./hea
 
 ## License / 许可证
 
