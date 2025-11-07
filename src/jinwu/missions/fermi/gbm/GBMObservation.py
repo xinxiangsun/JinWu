@@ -1,8 +1,8 @@
 '''
 Date: 2025-04-23 11:11:08
-LastEditors: Xinxiang Sun sunxinxiang24@mails.ucas.ac.cn
-LastEditTime: 2025-05-02 14:36:52
-FilePath: /research/autohea/src/autohea/missions/fermi/gbm/GBMObservation.py
+LastEditors: Xinxiang Sun sunxx@nao.cas.cn
+LastEditTime: 2025-11-07 12:41:26
+FilePath: /research/jinwu/src/jinwu/missions/fermi/gbm/GBMObservation.py
 '''
 from gdt.missions.fermi.time import Time
 from astropy.coordinates import SkyCoord
@@ -24,7 +24,6 @@ from gdt.missions.fermi.gbm.localization import GbmHealPix
 import numpy as np
 from gdt.missions.fermi.plot import FermiEarthPlot
 from gdt.missions.fermi.gbm.saa import GbmSaa
-from jinwu.core.time import fermi_met_to_utc, fermi_utc_to_met
 
 
 class GBMObservation:

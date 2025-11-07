@@ -1,7 +1,7 @@
 '''
 Date: 2025-05-30 17:43:59
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
-LastEditTime: 2025-10-28 16:49:29
+LastEditTime: 2025-11-07 14:35:02
 LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/jinwu/src/jinwu/core/utils.py
 '''
@@ -20,6 +20,9 @@ from functools import lru_cache
 import xspec as xs
 from xspec import FakeitSettings, AllData
 import os
+import gzip
+import shutil
+from typing import Union
 
 
 def generate_download_url(isot_time):
@@ -70,6 +73,80 @@ def snr_li_ma(n_src, n_bkg, alpha_area_time):
     part2 = n_bkg*np.log((1+alpha_area_time)*n_bkg/(n_bkg+n_src))
     snr = np.sqrt(2 * (part1 + part2))
     return snr
+
+
+
+
+
+
+def extract_all_gz_recursive(root_path: Union[str, os.PathLike, Path], 
+                             remove_gz: bool = True,
+                             verbose: bool = True) -> int:
+    """
+    递归解压文件夹下所有 .gz 文件。
+    
+    参数：
+    - root_path: 根目录路径（支持 str、pathlib.Path、os.PathLike）
+    - remove_gz: 解压后是否删除原 .gz 文件（默认 True）
+    - verbose: 是否打印解压日志（默认 True）
+    
+    返回：
+    - 解压的文件数量
+    
+    示例：
+    >>> extract_all_gz_recursive('/path/to/data')
+    >>> extract_all_gz_recursive(Path.home() / 'data')
+    >>> extract_all_gz_recursive('C:/data', remove_gz=False)
+    """
+    
+    # 统一转换为 pathlib.Path 对象
+    root = Path(root_path)
+    
+    if not root.exists():
+        raise FileNotFoundError(f"路径不存在: {root}")
+    
+    if not root.is_dir():
+        raise NotADirectoryError(f"不是目录: {root}")
+    
+    count = 0
+    
+    # 递归查找所有 .gz 文件
+    for gz_file in root.rglob('*.gz'):
+        try:
+            # 生成输出文件路径（移除 .gz 后缀）
+            output_file = gz_file.with_suffix('')
+            
+            if verbose:
+                print(f"解压: {gz_file} -> {output_file}")
+            
+            # 解压
+            with gzip.open(gz_file, 'rb') as f_in:
+                with open(output_file, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            
+            # 删除原 .gz 文件
+            if remove_gz:
+                gz_file.unlink()
+                if verbose:
+                    print(f"  已删除: {gz_file}")
+            
+            count += 1
+            
+        except Exception as e:
+            print(f"❌ 错误处理 {gz_file}: {e}")
+            continue
+    
+    if verbose:
+        print(f"\n✅ 总共解压 {count} 个文件")
+    
+    return count
+
+
+# 便捷别名
+def gunzip(root_path, remove_gz=True, verbose=True):
+    """gunzip 的别名，用法相同"""
+    return extract_all_gz_recursive(root_path, remove_gz, verbose)
+
 
 
 class RedshiftExtrapolator():
