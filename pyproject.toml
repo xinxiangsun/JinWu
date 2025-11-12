@@ -44,7 +44,6 @@ where = ["src"]
 
 # Git-based versioning via setuptools_scm
 [tool.setuptools_scm]
-# When building from a Git checkout, version is derived from tags.
-# If no Git metadata is present (e.g., sdist unpacked), fall back to the last written version file.
+local_scheme = "no-local-version"
 write_to = "src/jinwu/_version.py"
 fallback_version = "0.0.0"
