@@ -19,7 +19,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
 	__version__ = version("jinwu")
 except PackageNotFoundError:  # pragma: no cover - editable installs or source tree
-	__version__ = "0.0.3"
+	__version__ = "0.0.4"
 
 __author__ = "Xinxiang Sun"
 __email__ = "sunxx@nao.cas.cn"

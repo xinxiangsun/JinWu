@@ -1,17 +1,21 @@
 """
-Time conversion utilities for astronomy missions.
+天文任务时间转换工具（兼容 astropy.time）。
 
 This module provides astropy.time-compatible MET (Mission Elapsed Time) formats
-for various missions including Fermi, HXMT, GECAM, EP, LEIA, and Swift.
+for multiple missions, and utilities for safe, precise UTC/MET conversions.
 
-Usage:
+支持/Supported missions (time formats):
+- Fermi, HXMT, GECAM, EP, LEIA, Swift, GRID
+- MAXI, LIGO (GPS), Suzaku, XMM-Newton (Newton), XRISM
+
+用法/Usage:
     from jinwu.core.time import Time
     
-    # Convert MET to UTC ISO string
+    # MET → UTC
     t = Time(746496123.0, format='fermi_met')
     print(t.isot)  # '2024-08-15T05:22:03.000'
     
-    # Convert UTC ISO to MET
+    # UTC → MET
     t = Time('2024-08-15T05:22:03', scale='utc')
     met = t.to_value('fermi_met')
     print(met)  # 746496123.0
@@ -36,16 +40,22 @@ from swiftbat.clockinfo import utcf
 
 
 __all__ = [
-    'Time', 'TimeFermi', 'TimeEP', 'TimeLEIA', 'TimeGECAM', 'TimeHXMT', 'TimeSwift', 'TimeGrid',
+    # Core Time entry point
+    'Time',
+    # Mission time formats
+    'TimeFermi', 'TimeEP', 'TimeLEIA', 'TimeGECAM', 'TimeHXMT', 'TimeSwift',
+    'TimeGrid', 'TimeMAXI', 'TimeLIGO', 'TimeSuzaku', 'TimeNewton', 'TimeXRISM',
+    # Swift helpers
+    'swift_leapseconds_utc', 'swift_leapseconds_met', 'swift_utcf_at_utc',
+    # Interval utilities
     'check_time_overlap', 'get_overlap_duration', 'plot_time_intervals', 'compare_time_intervals',
     'extract_time_interval'
 ]
 
 # Swift MET reference epoch (UTC scale)
 SWIFT_EPOCH_UTC = Time('2001-01-01T00:00:00.000', format='isot', scale='utc')
-SWIFT_EPOCH_LEAP = (
-    (SWIFT_EPOCH_UTC.tai.jd - SWIFT_EPOCH_UTC.utc.jd) * erfa.DAYSEC  # type: ignore[attr-defined]
-)
+# TAI-UTC at Swift epoch via ERFA.dat for consistency across libraries
+SWIFT_EPOCH_LEAP = np.float64(erfa.dat(2001, 1, 1, 0.0))
 
 
 def _to_float_array(value):
@@ -83,17 +93,69 @@ def _utcf_correction(met_seconds):
     return corrections.reshape(met_array.shape)
 
 
-def _apply_utcf(met_seconds):
-    """Apply UTCF correction to raw Swift MET seconds."""
+def _apply_utcf(met_seconds, _in_leap_recurse: bool = False):
+    """Apply UTCF correction to raw Swift MET seconds.
+
+    We ensure the leap increment is applied during the leap second itself by
+    detecting the UTCF step: if utcf(met) ≈ utcf(met-1)−1, then this MET
+    instant corresponds to the leap second. In that case, map via the previous
+    second and add 1: utc(met) = utc(met−1) + 1.
+    """
     met_array = _to_float_array(met_seconds)
-    corrections = _utcf_correction(met_array)
-    base_seconds = met_array + corrections
-    leap_adjust = _leap_seconds_from_elapsed(base_seconds)
-    return base_seconds + leap_adjust
+    if getattr(met_array, 'ndim', 0) == 0:
+        m = float(met_array)
+        if not np.isfinite(m):
+            return m
+        # Detect UTCF step at this MET (leap bin)
+        try:
+            c_now = float(_utcf_correction(m))
+            c_prev = float(_utcf_correction(m - 1.0))
+        except Exception:
+            c_now = float(_utcf_correction(m))
+            c_prev = c_now
+        if (c_prev - c_now) > 0.5 and not _in_leap_recurse:
+            u_prev = _apply_utcf(m - 1.0, _in_leap_recurse=True)
+            return float(u_prev) + 1.0
+        # Standard fixed-point iteration
+        utsecs = m + c_now
+        u = utsecs
+        for _ in range(4):
+            leaps = float(_leap_seconds_from_utc_elapsed(u))
+            u_next = utsecs + leaps
+            if abs(u_next - u) < 5e-10:
+                u = u_next
+                break
+            u = u_next
+        return u
+
+    # Vector case: handle possible leap bins elementwise
+    flat = np.atleast_1d(met_array).ravel().astype(np.float64)
+    out = np.empty_like(flat)
+    for i, m in enumerate(flat):
+        if not np.isfinite(m):
+            out[i] = np.nan
+            continue
+        c_now = float(_utcf_correction(m))
+        c_prev = float(_utcf_correction(m - 1.0))
+        if (c_prev - c_now) > 0.5:
+            u_prev = _apply_utcf(m - 1.0, _in_leap_recurse=True)
+            out[i] = float(u_prev) + 1.0
+            continue
+        utsecs = m + c_now
+        u = utsecs
+        for _ in range(4):
+            leaps = float(_leap_seconds_from_utc_elapsed(u))
+            u_next = utsecs + leaps
+            if abs(u_next - u) < 5e-10:
+                u = u_next
+                break
+            u = u_next
+        out[i] = u
+    return out.reshape(met_array.shape)
 
 
 def _leap_seconds_from_elapsed(elapsed_seconds):
-    """Compute leap seconds accrued since the Swift epoch."""
+    """Compute leap seconds accrued since the Swift epoch (DEPRECATED path)."""
     sec_array = _to_float_array(elapsed_seconds)
     scalar_input = getattr(sec_array, 'ndim', 0) == 0
     flat = np.atleast_1d(sec_array).astype(np.float64, copy=False).ravel()
@@ -112,32 +174,158 @@ def _leap_seconds_from_elapsed(elapsed_seconds):
     return leaps.reshape(sec_array.shape)
 
 
-def _invert_utcf(corrected_seconds):
-    """Invert UTCF correction using a fixed-point iteration."""
+def _leap_seconds_from_utc_elapsed(utc_elapsed_seconds):
+    """Compute leap seconds since epoch using the UTC instant, applying the
+    leap increment at the start of the leap second (23:59:60) rather than at
+    00:00:00 of the next day.
+
+    Rationale
+    ---------
+    Swift UTCF steps by −1 at the leap second itself. To keep MET increments
+    at 1 s across both 23:59:59→23:59:60 and 23:59:60→00:00:00, we also apply
+    the +1 leap increment during the leap second. ERFA.dat increases TAI−UTC
+    at 00:00:00, so we detect leap days and add an extra +1 when UTC is within
+    the leap second of that day.
+
+    Parameters
+    ----------
+    utc_elapsed_seconds : float or array
+        Seconds since SWIFT_EPOCH_UTC in UTC scale.
+
+    Returns
+    -------
+    float or ndarray
+        Leap seconds increment since epoch, in seconds.
+    """
+    sec_array = _to_float_array(utc_elapsed_seconds)
+    scalar_input = getattr(sec_array, 'ndim', 0) == 0
+    flat = np.atleast_1d(sec_array).astype(np.float64, copy=False).ravel()
+    out = np.full_like(flat, np.nan, dtype=np.float64)
+    mask = np.isfinite(flat)
+    if np.any(mask):
+        times = SWIFT_EPOCH_UTC + TimeDelta(flat[mask], format='sec')
+        utc = times.utc
+        # Calendar components and fractional day (arrays)
+        iy, im, id, fd = erfa.jd2cal(utc.jd1, utc.jd2)
+        y_arr = np.atleast_1d(iy).astype(int)
+        m_arr = np.atleast_1d(im).astype(int)
+        d_arr = np.atleast_1d(id).astype(int)
+        fd_arr = np.atleast_1d(fd).astype(float)
+        n = y_arr.size
+        # Base (ERFA) TAI-UTC at the given instant
+        tai_utc_now = erfa.dat(y_arr, m_arr, d_arr, fd_arr)
+        # Determine if this calendar day ends with a leap second by comparing
+        # TAI-UTC at day start vs next day start.
+        from datetime import date, timedelta
+        tai_utc_day0 = np.empty(n, dtype=np.float64)
+        tai_utc_next0 = np.empty(n, dtype=np.float64)
+        for i in range(n):
+            y = int(y_arr[i]); m = int(m_arr[i]); d = int(d_arr[i])
+            tai_utc_day0[i] = erfa.dat(y, m, d, 0.0)
+            nd = date(y, m, d) + timedelta(days=1)
+            tai_utc_next0[i] = erfa.dat(nd.year, nd.month, nd.day, 0.0)
+        is_leap_day = (tai_utc_next0 - tai_utc_day0) > 0.5
+        # Detect if the instant lies within the leap second using the ISO label
+        # (e.g., '...23:59:60'). This avoids fragile fd thresholding.
+        isot = np.atleast_1d(utc.isot)
+        in_leap_second = np.array([(':60' in s) for s in isot], dtype=bool)
+        # Combine and compute shifted leap seconds since Swift epoch
+        add_one = is_leap_day & in_leap_second
+        leaps_abs_shifted = tai_utc_now + add_one.astype(np.float64)
+        out[mask] = leaps_abs_shifted - SWIFT_EPOCH_LEAP
+    if scalar_input:
+        return float(out[0])
+    return out.reshape(sec_array.shape)
+
+
+def _invert_utcf(corrected_seconds, _in_leap_recurse: bool = False):
+    """Invert UTCF + leap-seconds correction using fixed-point iteration.
+
+    Forward (precise UTC anchoring): corrected = met + utcf(met) + leaps(UTC)
+    因此反向应当解出 met：met = corrected - leaps(UTC) - utcf(met)。
+    仅在 utcf 上迭代：m_{n+1} = corrected - leaps(UTC) - utcf(m_n)。
+    """
     corrected_array = _to_float_array(corrected_seconds)
     if getattr(corrected_array, 'ndim', 0) == 0:
         if not np.isfinite(corrected_array):
             return float(corrected_array)
-        guess = float(corrected_array)
+        # If this UTC instant is within a leap second, map by reference to the
+        # previous second to avoid utcf/leaps cancellation: met(u) = met(u-1)+1
+        if not _in_leap_recurse:
+            utc = SWIFT_EPOCH_UTC + TimeDelta(float(corrected_array), format='sec')
+            if ':60' in utc.utc.isot:
+                prev = _invert_utcf(float(corrected_array) - 1.0, _in_leap_recurse=True)
+                return float(prev) + 1.0
+        # Fixed leap seconds from the precise UTC instant
+        leaps = float(_leap_seconds_from_utc_elapsed(float(corrected_array)))
+        guess = float(corrected_array) - leaps
         for _ in range(8):
             correction = float(_utcf_correction(guess))
-            base = guess + correction
-            leaps = float(_leap_seconds_from_elapsed(base))
-            guess = float(corrected_array) - correction + leaps
+            next_val = float(corrected_array) - leaps - correction
+            if abs(next_val - guess) < 5e-10:
+                guess = next_val
+                break
+            guess = next_val
         return guess
 
+    # Vector case
     guess = corrected_array.copy()
     finite_mask = np.isfinite(guess)
     if np.any(finite_mask):
-        guess_finite = guess[finite_mask]
-        target_finite = corrected_array[finite_mask]
-        for _ in range(8):
-            corrections = _utcf_correction(guess_finite)
-            base = guess_finite + corrections
-            leaps = _leap_seconds_from_elapsed(base)
-            guess_finite = target_finite - corrections + leaps
-        guess[finite_mask] = guess_finite
+        target = corrected_array[finite_mask]
+        # Handle leap-second samples by recursion element-wise
+        utc = SWIFT_EPOCH_UTC + TimeDelta(target, format='sec')
+        isot = np.atleast_1d(utc.utc.isot)
+        in_leap = np.array([(':60' in s) for s in isot], dtype=bool)
+        # Non-leap-second entries: iterate normally
+        if np.any(~in_leap):
+            tgt_nl = target[~in_leap]
+            leaps_nl = _leap_seconds_from_utc_elapsed(tgt_nl)
+            guess_nl = tgt_nl - leaps_nl
+            for _ in range(8):
+                corr = _utcf_correction(guess_nl)
+                next_val = tgt_nl - leaps_nl - corr
+                if np.allclose(next_val, guess_nl, rtol=0, atol=5e-10):
+                    guess_nl = next_val
+                    break
+                guess_nl = next_val
+            guess[finite_mask][~in_leap] = guess_nl
+        # Leap-second entries: use prev-second + 1 rule
+        if np.any(in_leap) and not _in_leap_recurse:
+            prev = target[in_leap] - 1.0
+            prev_met = _invert_utcf(prev, _in_leap_recurse=True)
+            guess[finite_mask][in_leap] = _to_float_array(prev_met) + 1.0
     return guess
+
+
+# ----------------------------------------------------------------------------
+# Public helpers for precise queries
+# ----------------------------------------------------------------------------
+
+def swift_leapseconds_utc(utc_times: Time):
+    """Return leap seconds since Swift epoch for given UTC Time(s)."""
+    utc = utc_times.utc
+    elapsed = (utc - SWIFT_EPOCH_UTC).to_value('s')
+    return _leap_seconds_from_utc_elapsed(elapsed)
+
+
+def swift_utcf_at_utc(utc_times: Time):
+    """Return UTCF correction (seconds) at the given UTC time(s)."""
+    utc = utc_times.utc
+    corrected_seconds = (utc - SWIFT_EPOCH_UTC).to_value('s')
+    met = _invert_utcf(corrected_seconds)
+    return _utcf_correction(met)
+
+
+def swift_leapseconds_met(met_seconds):
+    """Return leap seconds since Swift epoch for given Swift MET value(s).
+
+    Implementation: MET → UTC elapsed seconds via _apply_utcf (which applies
+    the leap increment during the leap second), then query shifted leaps.
+    """
+    met_arr = _to_float_array(met_seconds)
+    utc_elapsed = _apply_utcf(met_arr)
+    return _leap_seconds_from_utc_elapsed(utc_elapsed)
 
 
 
@@ -270,10 +458,11 @@ class TimeSwift(TimeFromEpoch):
 
     value = property(to_value)
 
-class TimeGrid(TimeUnix):
+class TimeGrid(TimeFromEpoch):
     """
+    GRID 任务时间：自 1970-01-01 00:00:00 UTC（Unix 纪元）起的秒数。
+
     GRID MET: seconds since 1970-01-01 00:00:00 UTC (Unix time)
-    
     Reference: GRID mission documentation
     """
     name = 'grid'
@@ -282,7 +471,127 @@ class TimeGrid(TimeUnix):
     epoch_val2 = None
     epoch_scale = 'utc'
     epoch_format = 'iso'
+
+
+class TimeMAXI(TimeFromEpoch):
+    """
+    MAXI 任务 MET：自 2000-01-01 00:00:00 TT 起的秒数（包含闰秒影响）。
+
+    Represents the number of seconds elapsed since Jan 1, 2000, 00:00:00 TT
+    (leap seconds included).
+    """
+    name = 'maxi'
+    """(str): Name of the mission"""
+
+    unit = 1.0 / erfa.DAYSEC
+    """(float): unit in days"""
+
+    epoch_val = '2000-01-01 00:01:04.184'
+    """(str): The epoch in Terrestrial Time"""
+
+    epoch_val2 = None
+
+    epoch_scale = 'tt'
+    """(str): The scale of :attr:`epoch_val`"""
+
+    epoch_format = 'iso'
+    """(str): Format of :attr:`epoch_val`"""
+
+
+class TimeLIGO(TimeFromEpoch):
+    """
+    LIGO/GPS 时间：自 1980-01-06 00:00:00 UTC 起的秒数（包含闰秒影响）。
+    例如，630720013.0 对应 2000-01-01 00:00:00。
+
+    GPS time: seconds from 1980-01-06 00:00:00 UTC. For example, 630720013.0 is
+    midnight on January 1, 2000.
+
+    Notes
+    -----
+    This implementation is strictly a representation of the number of seconds
+    (including leap seconds) since midnight UTC on 1980-01-06. GPS can also be
+    considered as a time scale which is ahead of TAI by a fixed offset
+    (to within about 100 nanoseconds).
+
+    For details, see https://www.usno.navy.mil/USNO/time/gps/usno-gps-time-transfer
+    """
+
+    name = "ligo"
+    unit = 1.0 / erfa.DAYSEC  # in days (1 day == 86400 seconds)
+    epoch_val = "1980-01-06 00:00:19"
+    # above epoch is the same as Time('1980-01-06 00:00:00', scale='utc').tai
+    epoch_val2 = None
+    epoch_scale = "tai"
+    epoch_format = "iso"
+
+
+class TimeSuzaku(TimeFromEpoch):
+    """
+    Suzaku 任务 MET：自 2000-01-01 00:00:00 UTC/2000-01-01 00:01:04.184 TT 起的秒数（包含闰秒影响）。
+
+    Represents the number of seconds elapsed since Jan 1, 2000, 00:00:00 UTC /2000-01-01 00:01:04.184 TT
     
+    """
+    name = 'suzaku'
+    """(str): Name of the mission"""
+
+    unit = 1.0 / erfa.DAYSEC
+    """(float): unit in days"""
+
+    epoch_val = '2000-01-01 00:01:04.184'
+    """(str): The epoch in Terrestrial Time"""
+
+    epoch_val2 = None
+
+    epoch_scale = 'tt'
+    """(str): The scale of :attr:`epoch_val`"""
+
+    epoch_format = 'iso'
+    """(str): Format of :attr:`epoch_val`"""
+
+
+
+class TimeNewton(TimeFromEpoch):
+    """
+    XMM-Newton 任务 MET: 自 1998-01-01 00:00:00 TT 起的秒数（包含闰秒影响）。
+
+    Represents the number of seconds elapsed since Jan 1, 1998, 00:00:00 TT
+    (leap seconds included).
+    """
+    name = 'newton'
+    """(str): Name of the mission"""
+
+    unit = 1.0 / erfa.DAYSEC
+    """(float): unit in days"""
+
+    epoch_val = '1998-01-01 00:00:00'
+    """(str): The epoch in Terrestrial Time"""
+
+    epoch_val2 = None
+
+    epoch_scale = 'tt'
+    """(str): The scale of :attr:`epoch_val`"""
+
+    epoch_format = 'iso'
+    """(str): Format of :attr:`epoch_val`"""
+
+
+
+
+class TimeXRISM(TimeFromEpoch):
+    """
+    XRISM 任务 MET: 自 2019-01-01 00:00:00 UTC 起的秒数。
+
+    XRISM MET: seconds since 2019-01-01 00:00:00 UTC.
+    """
+    name = 'xrism'
+    unit = 1.0 / erfa.DAYSEC  # seconds to days
+    epoch_val = '2019-01-01 00:00:00'
+    epoch_val2 = None
+    epoch_scale = 'utc'
+    epoch_format = 'iso'
+
+
 # ============================================================================
 # 自定义格式通过 TimeFromEpoch 元类自动注册到 astropy.time.Time
 # 注：在 astropy 5.0+ 中，TimeFromEpoch 的子类在定义时自动注册
