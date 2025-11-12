@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu"
-version = "0.0.4"
+dynamic = ["version"]
 description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -19,7 +19,8 @@ dependencies = [
     "emcee",
     "sherpa",
     "bxa",
-    "pymc"
+    "pymc",
+    "swiftbat"
 ]
 keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
 
@@ -34,9 +35,16 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Charon0922/jinwu"
-Repository = "https://github.com/Charon0922/jinwu"
-Documentation = "https://github.com/Charon0922/jinwu/blob/master/README.md"
+Homepage = "https://github.com/xinxiangsun/jinwu"
+Repository = "https://github.com/xinxiangsun/jinwu"
+Documentation = "https://github.com/xinxiangsun/jinwu/blob/master/README.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Git-based versioning via setuptools_scm
+[tool.setuptools_scm]
+# When building from a Git checkout, version is derived from tags.
+# If no Git metadata is present (e.g., sdist unpacked), fall back to the last written version file.
+write_to = "src/jinwu/_version.py"
+fallback_version = "0.0.0"
