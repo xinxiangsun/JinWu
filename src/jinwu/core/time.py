@@ -22,21 +22,124 @@ Usage:
 """
 
 from astropy.time import Time, TimeDelta
-from astropy.time.formats import TimeFromEpoch, TimeUnix
+from astropy.time.formats import TimeFromEpoch, TimeUnix, TimeNumeric
+from astropy.time.core import ScaleValueError
 import erfa
 import numpy as np
 from astropy.io import fits
-from typing import Tuple, List, Dict, Optional, Union
+from typing import Tuple, List, Dict, Optional, Union, cast
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.dates import DateFormatter
 import astropy.units as u
+from swiftbat.clockinfo import utcf
+
 
 __all__ = [
     'Time', 'TimeFermi', 'TimeEP', 'TimeLEIA', 'TimeGECAM', 'TimeHXMT', 'TimeSwift', 'TimeGrid',
     'check_time_overlap', 'get_overlap_duration', 'plot_time_intervals', 'compare_time_intervals',
     'extract_time_interval'
 ]
+
+# Swift MET reference epoch (UTC scale)
+SWIFT_EPOCH_UTC = Time('2001-01-01T00:00:00.000', format='isot', scale='utc')
+SWIFT_EPOCH_LEAP = (
+    (SWIFT_EPOCH_UTC.tai.jd - SWIFT_EPOCH_UTC.utc.jd) * erfa.DAYSEC  # type: ignore[attr-defined]
+)
+
+
+def _to_float_array(value):
+    """Convert input to a float64 numpy array, preserving scalar shape."""
+    if np.ma.isMaskedArray(value):
+        return np.array(np.ma.filled(value, np.nan), dtype=np.float64)
+    return np.asarray(value, dtype=np.float64)
+
+
+def _combine_swift_met_components(val1, val2):
+    """Combine two-part Swift MET inputs into a single float array."""
+    primary = _to_float_array(val1)
+    if val2 is None:
+        return primary
+    secondary = _to_float_array(val2)
+    return primary + secondary
+
+
+def _utcf_correction(met_seconds):
+    """Evaluate the UTCF correction for Swift MET values."""
+    met_array = _to_float_array(met_seconds)
+    scalar_input = getattr(met_array, 'ndim', 0) == 0
+    flat = np.atleast_1d(met_array).astype(np.float64, copy=False).ravel()
+    corrections = np.empty_like(flat, dtype=np.float64)
+    for idx, value in enumerate(flat):
+        if np.isfinite(value):
+            correction = utcf(float(value), printCaveats=False)
+            if isinstance(correction, tuple):
+                correction = correction[0]
+            corrections[idx] = float(cast(float, correction))
+        else:
+            corrections[idx] = np.nan
+    if scalar_input:
+        return float(corrections[0])
+    return corrections.reshape(met_array.shape)
+
+
+def _apply_utcf(met_seconds):
+    """Apply UTCF correction to raw Swift MET seconds."""
+    met_array = _to_float_array(met_seconds)
+    corrections = _utcf_correction(met_array)
+    base_seconds = met_array + corrections
+    leap_adjust = _leap_seconds_from_elapsed(base_seconds)
+    return base_seconds + leap_adjust
+
+
+def _leap_seconds_from_elapsed(elapsed_seconds):
+    """Compute leap seconds accrued since the Swift epoch."""
+    sec_array = _to_float_array(elapsed_seconds)
+    scalar_input = getattr(sec_array, 'ndim', 0) == 0
+    flat = np.atleast_1d(sec_array).astype(np.float64, copy=False).ravel()
+    leaps = np.full_like(flat, np.nan, dtype=np.float64)
+    mask = np.isfinite(flat)
+    if np.any(mask):
+        times = SWIFT_EPOCH_UTC + TimeDelta(flat[mask], format='sec')
+        tai = times.tai
+        utc = times.utc
+        tai_jd = tai.jd1 + tai.jd2  # type: ignore[attr-defined]
+        utc_jd = utc.jd1 + utc.jd2  # type: ignore[attr-defined]
+        diffs = (tai_jd - utc_jd) * erfa.DAYSEC
+        leaps[mask] = diffs - SWIFT_EPOCH_LEAP
+    if scalar_input:
+        return float(leaps[0])
+    return leaps.reshape(sec_array.shape)
+
+
+def _invert_utcf(corrected_seconds):
+    """Invert UTCF correction using a fixed-point iteration."""
+    corrected_array = _to_float_array(corrected_seconds)
+    if getattr(corrected_array, 'ndim', 0) == 0:
+        if not np.isfinite(corrected_array):
+            return float(corrected_array)
+        guess = float(corrected_array)
+        for _ in range(8):
+            correction = float(_utcf_correction(guess))
+            base = guess + correction
+            leaps = float(_leap_seconds_from_elapsed(base))
+            guess = float(corrected_array) - correction + leaps
+        return guess
+
+    guess = corrected_array.copy()
+    finite_mask = np.isfinite(guess)
+    if np.any(finite_mask):
+        guess_finite = guess[finite_mask]
+        target_finite = corrected_array[finite_mask]
+        for _ in range(8):
+            corrections = _utcf_correction(guess_finite)
+            base = guess_finite + corrections
+            leaps = _leap_seconds_from_elapsed(base)
+            guess_finite = target_finite - corrections + leaps
+        guess[finite_mask] = guess_finite
+    return guess
+
+
 
 # ============================================================================
 # 自定义 MET 格式类（兼容 astropy.time）
@@ -64,10 +167,10 @@ class TimeEP(TimeFromEpoch):
     """
     name = 'ep'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
-    epoch_val = '2020-01-01 00:00:00'
+    epoch_val = '2020-01-01T00:00:00'
     epoch_val2 = None
     epoch_scale = 'utc'
-    epoch_format = 'iso'
+    epoch_format = 'isot'
 
 
 class TimeLEIA(TimeFromEpoch):
@@ -114,23 +217,58 @@ class TimeHXMT(TimeFromEpoch):
     epoch_scale = 'tt'
     epoch_format = 'iso'
 
-
+#
 class TimeSwift(TimeFromEpoch):
-    """
-    Swift SCLK: seconds since 2001-01-01 00:00:00 TT
-    
-    Note: Swift uses TT (Terrestrial Time) scale, NOT UTC directly.
-    Swift UTC conversion requires time-dependent UTCF (UTC correlation factors) 
-    table from CALDB to convert SCLK to UTC, accounting for clock drifts.
-    
-    Reference: https://heasarc.gsfc.nasa.gov/docs/swift/
-    """
+    """Swift Mission Elapsed Time (MET) format with UTCF correction."""
+
     name = 'swift'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
     epoch_val = '2001-01-01 00:00:00'
     epoch_val2 = None
-    epoch_scale = 'tt'
+    epoch_scale = 'utc'
     epoch_format = 'iso'
+
+    def set_jds(self, val1, val2):
+        """Populate jd1/jd2 from raw Swift MET by applying UTCF."""
+        sw_met = _combine_swift_met_components(val1, val2)
+        corrected_seconds = _apply_utcf(sw_met)
+        utc_times = SWIFT_EPOCH_UTC + TimeDelta(corrected_seconds, format='sec')
+
+        if self.scale == 'utc':
+            self.jd1 = utc_times.jd1
+            self.jd2 = utc_times.jd2
+            return
+
+        try:
+            target_times = getattr(utc_times, self.scale)
+        except Exception as err:
+            raise ScaleValueError(
+                f"Cannot convert Swift MET epoch from 'utc' to scale '{self.scale}'"
+            ) from err
+
+        self.jd1 = target_times._time.jd1
+        self.jd2 = target_times._time.jd2
+
+    def to_value(self, parent=None, out_subfmt=None):
+        """Convert internal JD representation back to Swift MET."""
+        if parent is None:
+            raise ValueError('Swift MET conversion requires parent Time object')
+
+        utc_parent = parent.utc
+        corrected_seconds = (utc_parent - SWIFT_EPOCH_UTC).to_value(u.s)
+        raw_met = _invert_utcf(corrected_seconds)
+
+        raw_met_array = _to_float_array(raw_met)
+        zeros = np.zeros_like(raw_met_array, dtype=np.float64)
+        return TimeNumeric.to_value(
+            self,
+            jd1=raw_met_array,
+            jd2=zeros,
+            parent=parent,
+            out_subfmt=out_subfmt,
+        )
+
+    value = property(to_value)
 
 class TimeGrid(TimeUnix):
     """
@@ -760,7 +898,7 @@ def plot_time_intervals(
         start = interval['start']
         end = interval['end']
         
-        # 类型检查
+        # 类型检查（绘图前确保是 Time 对象）
         if not isinstance(start, Time) or not isinstance(end, Time):
             raise TypeError(f"时间段 '{interval['name']}' 的 start/end 必须是 Time 对象")
         

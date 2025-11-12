@@ -22,7 +22,7 @@ except PackageNotFoundError:  # pragma: no cover - editable installs or source t
 	__version__ = "0.0.3"
 
 __author__ = "Xinxiang Sun"
-__email__ = "sunxinxiang24@mails.ucas.ac.cn"
+__email__ = "sunxx@nao.cas.cn"
 __description__ = "JinWu: Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling"
 
 # Re-export subpackages for ergonomic imports
@@ -34,10 +34,11 @@ from . import missions
 from . import response
 from . import timing
 from . import data
-
+from .core.time import Time
 __all__ = [
 	# Subpackages
 	'core', 'lightcurve', 'background', 'spectrum', 'missions', 'response', 'timing', 'data',
+	'Time',
 	# Package meta
 	'__version__',
 ]

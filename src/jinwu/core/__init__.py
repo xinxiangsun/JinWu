@@ -40,6 +40,7 @@ from .file import (
 	OgipData, guess_ogip_kind, read_ogip, read_arf, read_rmf, read_pha, read_lc, read_evt,
 )
 
+
 # Package version
 try:
 	__version__ = version("autohea")
