@@ -28,16 +28,22 @@ to ~0.5–4 keV; PHA/RMF channels often use EBOUNDS overlap and 51–399 range.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload
 
 import numpy as np
 from astropy.io import fits
+from .ogip import (
+    OgipFitsBase, OgipTimeSeriesBase, OgipSpectrumBase, OgipResponseBase,
+    ValidationReport, ValidationMessage,
+)
 
 __all__ = [
     # Data containers
     "EnergyBand", "ChannelBand",
+    "RegionArea", "RegionAreaSet",
+    "HduHeader", "FitsHeaderDump", "OgipMeta", "OgipFitsBase", "OgipTimeSeriesBase", "OgipSpectrumBase", "OgipResponseBase",
     "ArfData", "RmfData", "PhaData", "LightcurveData", "EventData",
     # Readers
     "OgipArfReader", "OgipRmfReader", "OgipPhaReader", "OgipLightcurveReader", "OgipEventReader",
@@ -48,14 +54,13 @@ __all__ = [
     # Kind inference and direct dataclass helpers
     "OgipData", "guess_ogip_kind",
     # Direct dataclass-returning helpers
-    # Direct dataclass-returning helpers
-    "read_ogip", "read_arf", "read_rmf", "read_pha", "read_lc", "read_evt",
+    "read_fits", "read_arf", "read_rmf", "read_pha", "read_lc", "read_evt",
 ]
 
 
 # ---------- Data containers ----------
 
-@dataclass
+@dataclass(slots=True)
 class EnergyBand:
     """能段描述数据类（中文优先 / CN first）
 
@@ -72,7 +77,7 @@ class EnergyBand:
     emax: float
     emax_unit: str
 
-@dataclass
+@dataclass(slots=True)
 class ChannelBand:
     """道（Channel）范围数据类
 
@@ -85,8 +90,108 @@ class ChannelBand:
     ch_lo: int
     ch_hi: int
 
-@dataclass
-class ArfData:
+
+@dataclass(slots=True)
+class RegionArea:
+    """单个区域面积信息。
+
+    role:
+        - 'src': 源区(source)
+        - 'bkg': 背景区（background）
+        - 'unk': 尚未能可靠判断角色（unknown）
+    """
+    role: Literal['src', 'bkg', 'unk']
+    shape: Optional[str]
+    area: Optional[float]
+    component: Optional[int]
+
+
+@dataclass(slots=True)
+class RegionAreaSet:
+    """区域聚合：按 src/bkg/unk 分类存放 RegionArea 列表。
+
+    当前 LightcurveData 仍返回扁平列表；后续需要聚合时可用本类包装。
+    """
+    src: list[RegionArea] = field(default_factory=list)
+    bkg: list[RegionArea] = field(default_factory=list)
+    unk: list[RegionArea] = field(default_factory=list)
+
+    @property
+    def src_area(self) -> Optional[float]:
+        vals = [d.area for d in self.src if d.area is not None]
+        return float(sum(vals)) if vals else None
+
+    @property
+    def bkg_area(self) -> Optional[float]:
+        vals = [d.area for d in self.bkg if d.area is not None]
+        return float(sum(vals)) if vals else None
+
+    @classmethod
+    def from_regions(cls, regions: list[RegionArea] | None) -> RegionAreaSet:
+        inst = cls()
+        if not regions:
+            return inst
+        for r in regions:
+            if r.role == 'src':
+                inst.src.append(r)
+            elif r.role == 'bkg':
+                inst.bkg.append(r)
+            else:
+                inst.unk.append(r)
+        return inst
+
+
+@dataclass(slots=True)
+class HduHeader:
+    """单个扩展（HDU）头信息
+
+    字段
+    - name: 扩展名（EXTNAME）
+    - ver: 扩展版本（EXTVER）
+    - header: 该扩展所有关键字的字典
+
+    English
+    - name: EXTNAME
+    - ver: EXTVER
+    - header: full header key-value map for this HDU
+    """
+    name: str
+    ver: Optional[int]
+    header: Dict[str, Any]
+
+
+@dataclass(slots=True)
+class FitsHeaderDump:
+    """整文件级别的头部集合（包含主HDU与全部扩展的关键字）"""
+    primary: Dict[str, Any]
+    extensions: list[HduHeader]
+
+
+@dataclass(slots=True)
+class OgipMeta:
+    """常见 OGIP 元数据（便于快速访问望远镜/仪器/探测器与时间系统）
+
+    - telescop/instrume/detnam: 望远镜/仪器/探测器名
+    - timesys/timeunit: 时间系统/单位
+    - mjdref: 参考 MJD（优先合并 MJDREFI+MJDREFF）
+    - tstart/tstop: 数据时间范围（若存在）
+    - object/obs_id: 目标名/观测号（若存在）
+    """
+    telescop: Optional[str]
+    instrume: Optional[str]
+    detnam: Optional[str]
+    timesys: Optional[str]
+    timeunit: Optional[str]
+    mjdref: Optional[float]
+    tstart: Optional[float]
+    tstop: Optional[float]
+    object: Optional[str]
+    obs_id: Optional[str]
+    # 新增：时间相关元数据
+    binsize: Optional[float]
+    timezero: Optional[float]
+@dataclass(slots=True)
+class ArfData(OgipResponseBase):
     """ARF 响应面积数据
 
     字段
@@ -100,14 +205,22 @@ class ArfData:
     - OGIP ARF: energy bin edges (ENERG_LO/HI) and effective area (SPECRESP).
     """
     kind: Literal['arf']
-    path: Path
     energ_lo: np.ndarray  # shape (N,)
     energ_hi: np.ndarray  # shape (N,)
     specresp: np.ndarray  # shape (N,), cm^2
-    header: Dict[str, Any]
+    columns: Tuple[str, ...] = ()
 
-@dataclass
-class RmfData:
+    def validate(self) -> ValidationReport:  # type: ignore[override]
+        rpt = super().validate()
+        colset = {c.upper() for c in self.columns}
+        for c in ["ENERG_LO", "ENERG_HI", "SPECRESP"]:
+            if c not in colset:
+                rpt.add('ERROR', 'MISSING_COLUMN', f"ARF missing column {c}")
+        rpt.ok = len(rpt.errors()) == 0
+        return rpt
+
+@dataclass(slots=True)
+class RmfData(OgipResponseBase):
     """RMF 响应矩阵数据（支持稀疏字段与 EBOUNDS）
 
     字段
@@ -122,7 +235,6 @@ class RmfData:
     - Use rebuild_dense() to obtain (N_E, N_C) dense redistribution matrix.
     """
     kind: Literal['rmf']
-    path: Path
     energ_lo: np.ndarray  # shape (N_E,)
     energ_hi: np.ndarray  # shape (N_E,)
     # OGIP sparse representation
@@ -134,7 +246,7 @@ class RmfData:
     channel: Optional[np.ndarray]  # shape (N_C,) CHANNEL indices
     e_min: Optional[np.ndarray]    # shape (N_C,)
     e_max: Optional[np.ndarray]    # shape (N_C,)
-    header: Dict[str, Any]
+    columns: Tuple[str, ...] = ()
 
     def rebuild_dense(self) -> np.ndarray:
         """从稀疏列重建稠密响应矩阵（形状为 (N_E, N_C)）
@@ -191,8 +303,27 @@ class RmfData:
             return self.matrix
         raise ValueError("RMF does not contain recognizable sparse columns and MATRIX is not dense")
 
-@dataclass
-class PhaData:
+    def validate(self) -> ValidationReport:  # type: ignore[override]
+        rpt = super().validate()
+        colset = {c.upper() for c in self.columns}
+        for c in ["ENERG_LO", "ENERG_HI", "MATRIX"]:
+            if c not in colset:
+                rpt.add('ERROR', 'MISSING_COLUMN', f"RMF missing column {c}")
+        # If EBOUNDS present, ensure CHANNEL/E_MIN/E_MAX columns are recorded
+        if self.channel is not None:
+            for c in ["CHANNEL", "E_MIN", "E_MAX"]:
+                if c not in colset:
+                    rpt.add('WARN', 'MISSING_COLUMN', f"EBOUNDS expected column {c}")
+        rpt.ok = len(rpt.errors()) == 0
+        return rpt
+
+    @property
+    def dense_matrix(self) -> np.ndarray:
+        """Convenience: 返回重建的稠密矩阵 (缓存可后续扩展)"""
+        return self.rebuild_dense()
+
+@dataclass(slots=True)
+class PhaData(OgipSpectrumBase):
     """PHA 光子谱数据
 
     字段
@@ -207,7 +338,6 @@ class PhaData:
     - OGIP PHA SPECTRUM with optional EBOUNDS and quality/grouping vectors.
     """
     kind: Literal['pha']
-    path: Path
     channels: np.ndarray  # shape (N,)
     counts: np.ndarray    # shape (N,)
     stat_err: Optional[np.ndarray]
@@ -217,10 +347,25 @@ class PhaData:
     quality: Optional[np.ndarray]
     grouping: Optional[np.ndarray]
     ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]  # (CHANNEL, E_MIN, E_MAX)
-    header: Dict[str, Any]
+    columns: Tuple[str, ...] = ()
 
-@dataclass
-class LightcurveData:
+    def validate(self) -> ValidationReport:  # type: ignore[override]
+        rpt = super().validate()
+        colset = {c.upper() for c in self.columns}
+        for c in ["CHANNEL", "COUNTS"]:
+            if c not in colset:
+                rpt.add('ERROR', 'MISSING_COLUMN', f"PHA missing column {c}")
+        rpt.ok = len(rpt.errors()) == 0
+        return rpt
+
+    @property
+    def count_rate(self) -> Optional[np.ndarray]:
+        if self.exposure and self.exposure > 0:
+            return self.counts / self.exposure
+        return None
+
+@dataclass(slots=True)
+class LightcurveData(OgipTimeSeriesBase):
     """光变曲线数据
 
     字段
@@ -236,17 +381,44 @@ class LightcurveData:
     - Light curve table with TIME and RATE/COUNTS.
     """
     kind: Literal['lc']
-    path: Path
     time: np.ndarray   # bin left edges or centers
     value: np.ndarray  # RATE or COUNTS
     error: Optional[np.ndarray]
     dt: Optional[float]
     exposure: Optional[float]
     is_rate: bool
-    header: Dict[str, Any]
+    columns: Tuple[str, ...] = ()
 
-@dataclass
-class EventData:
+    def validate(self) -> ValidationReport:  # type: ignore[override]
+        rpt = super().validate()
+        colset = {c.upper() for c in self.columns}
+        if "TIME" not in colset:
+            rpt.add('ERROR', 'MISSING_COLUMN', "Lightcurve missing TIME column")
+        if not any(x in colset for x in ["RATE", "COUNTS"]):
+            rpt.add('ERROR', 'MISSING_COLUMN', "Lightcurve missing RATE/COUNTS column")
+        rpt.ok = len(rpt.errors()) == 0
+        return rpt
+
+    @property
+    def rate(self) -> Optional[np.ndarray]:
+        if self.is_rate:
+            return self.value
+        if (not self.is_rate) and self.dt and self.dt > 0:
+            return self.value / self.dt
+        return None
+
+    @property
+    def counts(self) -> Optional[np.ndarray]:
+        if not self.is_rate:
+            return self.value
+        if self.is_rate and self.dt and self.dt > 0:
+            return self.value * self.dt
+        return None
+    # 若可从区域扩展推断（如 WXT 的 REG00101），记录单个区域描述
+    region: Optional[RegionArea] = None
+
+@dataclass(slots=True)
+class EventData(OgipTimeSeriesBase):
     """事件列表数据
 
     字段
@@ -259,13 +431,32 @@ class EventData:
     - Event list with optional PI/CHANNEL and GTI.
     """
     kind: Literal['evt']
-    path: Path
     time: np.ndarray   # events times (s)
     pi: Optional[np.ndarray]       # PI or CHANNEL if present
     channel: Optional[np.ndarray]
     gti_start: Optional[np.ndarray]
     gti_stop: Optional[np.ndarray]
-    header: Dict[str, Any]
+    columns: Tuple[str, ...] = ()
+
+    def validate(self) -> ValidationReport:  # type: ignore[override]
+        rpt = super().validate()
+        colset = {c.upper() for c in self.columns}
+        if "TIME" not in colset:
+            rpt.add('ERROR', 'MISSING_COLUMN', "EVENTS missing TIME column")
+        rpt.ok = len(rpt.errors()) == 0
+        return rpt
+
+    @property
+    def duration(self) -> Optional[float]:
+        if self.time.size:
+            return float(self.time.max() - self.time.min())
+        return None
+
+    @property
+    def gti_exposure(self) -> Optional[float]:
+        if self.gti_start is None or self.gti_stop is None:
+            return None
+        return float(np.sum(self.gti_stop - self.gti_start))
 
 
 # Unified data union
@@ -273,6 +464,122 @@ OgipData = Union[ArfData, RmfData, PhaData, LightcurveData, EventData]
 
 
 # ---------- Utilities ----------
+
+def _combine_mjdref(header: Dict[str, Any]) -> Optional[float]:
+    """优先合并 MJDREFI + MJDREFF，若无则尝试 MJDREF。"""
+    if header is None:
+        return None
+    if ("MJDREFI" in header) or ("MJDREFF" in header):
+        mjdi = float(header.get("MJDREFI", 0.0))
+        mjdf = float(header.get("MJDREFF", 0.0))
+        return mjdi + mjdf
+    if "MJDREF" in header:
+        try:
+            return float(header["MJDREF"])
+        except Exception:
+            return None
+    return None
+
+
+def _first_non_empty(keys: list[str], *headers: Dict[str, Any]) -> Optional[Any]:
+    """在多个 header 中按顺序寻找第一个存在且非空的键。"""
+    for key in keys:
+        for hdr in headers:
+            if hdr is None:
+                continue
+            if key in hdr and hdr[key] not in (None, "", " "):
+                return hdr[key]
+    return None
+
+
+def _collect_headers_dump(hdul: fits.HDUList) -> FitsHeaderDump:
+    hdr0 = cast(Any, getattr(hdul[0], 'header', {})) if len(hdul) > 0 else {}
+    primary = dict(hdr0) if hdr0 else {}
+    exts: list[HduHeader] = []
+    for i, hdu in enumerate(hdul[1:], start=1):
+        name = str(getattr(hdu, 'name', '') or '')
+        ver_val = cast(Any, hdu.header).get('EXTVER', None)
+        try:
+            ver = int(ver_val) if ver_val is not None else None
+        except Exception:
+            ver = None
+        exts.append(HduHeader(name=name, ver=ver, header=dict(cast(Any, hdu.header))))
+    return FitsHeaderDump(primary=primary, extensions=exts)
+
+
+def _build_meta(hdul: fits.HDUList, prefer_header: Optional[Dict[str, Any]]) -> OgipMeta:
+    """根据优先头与主头/其他扩展构建常用 OGIP 元数据。"""
+    dump = _collect_headers_dump(hdul)
+    primary = dump.primary
+    # 为了容错，也从其他扩展寻找关键字
+    other_ext_headers = [x.header for x in dump.extensions]
+    # telescope/instrument/detector
+    telescop = _first_non_empty(["TELESCOP"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    instrume = _first_non_empty(["INSTRUME"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    detnam = _first_non_empty(["DETNAM", "DETNAME"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    # time system
+    timesys = _first_non_empty(["TIMESYS"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    timeunit = _first_non_empty(["TIMEUNIT"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    # mjdref 可在任何层出现（优先 prefer_header -> primary -> others）
+    mjdref = None
+    for hdr in [prefer_header, primary] + other_ext_headers:
+        if hdr is None:
+            continue
+        mjdref = _combine_mjdref(hdr)
+        if mjdref is not None:
+            break
+    # time range
+    tstart = None
+    tstop = None
+    for hdr in [prefer_header, primary] + other_ext_headers:
+        if hdr is None:
+            continue
+        if (tstart is None) and ("TSTART" in hdr):
+            try:
+                tstart = float(hdr["TSTART"])  # type: ignore[arg-type]
+            except Exception:
+                pass
+        if (tstop is None) and ("TSTOP" in hdr):
+            try:
+                tstop = float(hdr["TSTOP"])  # type: ignore[arg-type]
+            except Exception:
+                pass
+        if (tstart is not None) and (tstop is not None):
+            break
+    # object & obs id
+    obj = _first_non_empty(["OBJECT"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    obs_id = _first_non_empty(["OBS_ID", "OBS_ID"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+
+    # binsize 优先尝试常见关键字：BIN_SIZE/BINSIZE/TIMEDEL/DELTAT/TBIN/TIMEBIN
+    binsize_val = _first_non_empty(
+        ["BIN_SIZE", "BINSIZE", "TIMEDEL", "DELTAT", "TBIN", "TIMEBIN"],
+        *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr)
+    )
+    try:
+        binsize = float(binsize_val) if binsize_val is not None else None
+    except Exception:
+        binsize = None
+
+    # timezero（时间零点偏移）
+    timezero_val = _first_non_empty(["TIMEZERO"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    try:
+        timezero = float(timezero_val) if timezero_val is not None else None
+    except Exception:
+        timezero = None
+    return OgipMeta(
+        telescop=str(telescop) if telescop is not None else None,
+        instrume=str(instrume) if instrume is not None else None,
+        detnam=str(detnam) if detnam is not None else None,
+        timesys=str(timesys) if timesys is not None else None,
+        timeunit=str(timeunit) if timeunit is not None else None,
+        mjdref=float(mjdref) if mjdref is not None else None,
+        tstart=float(tstart) if tstart is not None else None,
+        tstop=float(tstop) if tstop is not None else None,
+        object=str(obj) if obj is not None else None,
+        obs_id=str(obs_id) if obs_id is not None else None,
+        binsize=binsize,
+        timezero=timezero,
+    )
 
 def band_from_arf_bins(arf_path: str | Path, bin_lo: int = 81, bin_hi: int = 780) -> EnergyBand:
     with fits.open(arf_path) as h:
@@ -333,8 +640,21 @@ class OgipArfReader:
             energ_hi = np.asarray(d["ENERG_HI"], float)
             specresp = np.asarray(d["SPECRESP"], float)
             header = dict(cast(Any, hd.header))
-        self._data = ArfData(kind='arf', path=self.path, energ_lo=energ_lo, energ_hi=energ_hi, specresp=specresp, header=header)
+            headers_dump = _collect_headers_dump(h)
+            meta = _build_meta(h, header)
+        self._data = ArfData(
+            kind='arf', path=self.path,
+            energ_lo=energ_lo, energ_hi=energ_hi, specresp=specresp,
+            header=header, meta=meta, headers_dump=headers_dump,
+        )
         return self._data
+
+    def validate(self) -> ValidationReport:
+        """运行数据类自身的 validate() 并返回报告。"""
+        if self._data is None:
+            self.read()
+        assert self._data is not None
+        return self._data.validate()
 
 
 class OgipRmfReader:
@@ -366,6 +686,8 @@ class OgipRmfReader:
             energ_lo = np.asarray(dm["ENERG_LO"], float)
             energ_hi = np.asarray(dm["ENERG_HI"], float)
             header = dict(cast(Any, hm.header))
+            headers_dump = _collect_headers_dump(h)
+            meta = _build_meta(h, header)
 
             matrix = np.asarray(dm["MATRIX"], dtype=object)
             n_grp = dm["N_GRP"] if "N_GRP" in dm.columns.names else None
@@ -392,8 +714,16 @@ class OgipRmfReader:
             e_min=e_min,
             e_max=e_max,
             header=header,
+            meta=meta,
+            headers_dump=headers_dump,
         )
         return self._data
+
+    def validate(self) -> ValidationReport:
+        if self._data is None:
+            self.read()
+        assert self._data is not None
+        return self._data.validate()
 
 
 class OgipPhaReader:
@@ -440,8 +770,22 @@ class OgipPhaReader:
                     np.asarray(de["E_MAX"], float),
                 )
             header = dict(header_map)
-        self._data = PhaData(kind='pha', path=self.path, channels=channels, counts=counts, stat_err=stat_err, exposure=exposure, backscal=backscal, areascal=areascal, quality=quality, grouping=grouping, ebounds=ebounds, header=header)
+            headers_dump = _collect_headers_dump(h)
+            meta = _build_meta(h, header)
+        self._data = PhaData(
+            kind='pha', path=self.path,
+            channels=channels, counts=counts, stat_err=stat_err,
+            exposure=exposure, backscal=backscal, areascal=areascal,
+            quality=quality, grouping=grouping, ebounds=ebounds,
+            header=header, meta=meta, headers_dump=headers_dump,
+        )
         return self._data
+
+    def validate(self) -> ValidationReport:
+        if self._data is None:
+            self.read()
+        assert self._data is not None
+        return self._data.validate()
 
     def select_by_band(
         self,
@@ -529,12 +873,200 @@ class OgipLightcurveReader:
             else:
                 raise ValueError("Lightcurve HDU lacks RATE/COUNTS column")
             header = dict(cast(Any, hdu.header))
+            headers_dump = _collect_headers_dump(h)
+            meta = _build_meta(h, header)
             # Infer dt if possible
             dt = float(np.median(np.diff(time))) if time.size >= 2 else None
             exposure_val = header.get("EXPOSURE", header.get("EXPTIME", np.nan))
             exposure = float(exposure_val) if np.isfinite(exposure_val) else None
-        self._data = LightcurveData(kind='lc', path=self.path, time=time, value=val, error=err, dt=dt, exposure=exposure, is_rate=is_rate, header=header)
+            # WXT 专用：若存在 REG00101 扩展，解析区域面积信息
+            region = None
+            try:
+                if (meta.instrume or "").upper() == "WXT":
+                    region = _load_wxt_regions(h)
+            except Exception:
+                # 保守失败，不中断读取
+                region = None
+
+        self._data = LightcurveData(
+            kind='lc', path=self.path,
+            time=time, value=val, error=err, dt=dt, exposure=exposure,
+            is_rate=is_rate, header=header, meta=meta, headers_dump=headers_dump,
+            region=region,
+        )
         return self._data
+
+    def validate(self) -> ValidationReport:
+        if self._data is None:
+            self.read()
+        assert self._data is not None
+        return self._data.validate()
+
+
+def _load_wxt_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
+    """解析 WXT 光变曲线 REG00101 中的区域面积信息。
+
+    只返回单个 `RegionArea`（优先 src，其次 bkg，再次首个条目），
+    方便 lightcurve 直接记录代表性区域；若缺少 REGION 扩展则返回 None。
+    """
+    # 查找名为 REG00101 的扩展（大小写不敏感），若缺失则返回 None
+    reg_hdu = None
+    for ext in hdul:
+        name = (getattr(ext, 'name', '') or '').upper()
+        if name == 'REG00101':
+            reg_hdu = ext
+            break
+    if reg_hdu is None or getattr(reg_hdu, 'data', None) is None:
+        return None
+
+    reg_any = cast(Any, reg_hdu)
+    if getattr(reg_any, 'data', None) is None:
+        return None
+    data = reg_any.data
+    cols = getattr(data, 'columns', None)
+    colnames = [str(n).upper() for n in (cols.names if cols is not None else [])]
+    # 允许多行；遍历所有区域定义
+    def _get_col(name_variants: list[str]) -> Optional[str]:
+        for nn in name_variants:
+            if nn in colnames:
+                return nn
+        return None
+
+    # 可能存在字符串列 SHAPE
+    shape_col = _get_col(['SHAPE'])
+    component_col = _get_col(['COMPONENT'])
+    # 半径列的多种命名
+    r_col = _get_col(['R', 'RADIUS', 'R0'])
+    rin_col = _get_col(['R_IN', 'RIN', 'R1'])
+    rout_col = _get_col(['R_OUT', 'ROUT', 'R2'])
+
+    nrows = len(data)
+    rows_info: list[Dict[str, Any]] = []  # {'shape': str, 'area': float|None, 'component': int|None, 'role': str}
+
+    def _as_float(v: Any) -> Optional[float]:
+        try:
+            return float(v)
+        except Exception:
+            try:
+                # v may be a 1-element array
+                return float(v[0])
+            except Exception:
+                return None
+
+    for i in range(nrows):
+        # shape
+        shape_val = ''
+        if shape_col and shape_col in colnames:
+            try:
+                shape_val = str(data[shape_col][i]).upper().strip()
+            except Exception:
+                shape_val = ''
+        # component if any
+        comp_val = None
+        if component_col and component_col in colnames:
+            try:
+                comp_val = int(data[component_col][i])
+            except Exception:
+                tmp = _as_float(data[component_col][i])
+                if tmp is not None:
+                    try:
+                        comp_val = int(tmp)
+                    except Exception:
+                        comp_val = None
+                else:
+                    comp_val = None
+
+        area = None
+        # Circle
+        if (shape_val == 'CIRCLE') or (shape_col is None and r_col is not None and (rin_col is None or rout_col is None)):
+            rv = data[r_col][i] if r_col else None
+            r = _as_float(rv) if rv is not None else None
+            if r is not None and r > 0:
+                area = np.pi * (r ** 2)
+        # Annulus
+        elif shape_val == 'ANNULUS' or (rin_col is not None and rout_col is not None):
+            rin = _as_float(data[rin_col][i]) if rin_col else None
+            rout = _as_float(data[rout_col][i]) if rout_col else None
+            if rin is None and rout is None and r_col:
+                # ANNULUS 可能用 R 列存储 [R_in, R_out]
+                rv = data[r_col][i]
+                try:
+                    rin = float(rv[0])
+                    rout = float(rv[1])
+                except Exception:
+                    rin = None
+                    rout = None
+            if (rin is not None) and (rout is not None) and rout > rin:
+                area = np.pi * (rout ** 2 - rin ** 2)
+
+        rows_info.append({'shape': shape_val, 'area': area, 'component': comp_val, 'role': 'unknown'})
+
+    if not rows_info:
+        return None
+
+    annuli = [r for r in rows_info if r['shape'] == 'ANNULUS' and r['area']]
+    circles = [r for r in rows_info if r['shape'] == 'CIRCLE' and r['area']]
+
+    # 1) COMPONENT 指定了角色
+    if component_col and any(r['component'] is not None for r in rows_info):
+        for r in rows_info:
+            comp = r['component']
+            if comp == 1:
+                r['role'] = 'source'
+            elif comp is not None:
+                r['role'] = 'background'
+
+    # 2) 若没有 component 信息，使用几何启发：ANNULUS -> 背景，CIRCLE -> 源
+    if not component_col:
+        if annuli:
+            for r in annuli:
+                if r['role'] == 'unknown':
+                    r['role'] = 'background'
+            if circles:
+                for r in circles:
+                    if r['role'] == 'unknown':
+                        r['role'] = 'source'
+        elif len(circles) >= 1:
+            sorted_c = sorted(circles, key=lambda x: x['area'] or 0)
+            if sorted_c:
+                if sorted_c[0]['role'] == 'unknown':
+                    sorted_c[0]['role'] = 'source'
+                for r in sorted_c[1:]:
+                    if r['role'] == 'unknown':
+                        r['role'] = 'background'
+
+    # 3) 若仍未标记，但只有一个区域，则视作源区
+    if len(rows_info) == 1 and rows_info[0]['role'] == 'unknown':
+        rows_info[0]['role'] = 'source'
+
+    def _normalize_role(role: str) -> Literal['src', 'bkg', 'unk']:
+        if role == 'source':
+            return 'src'
+        if role == 'background':
+            return 'bkg'
+        return 'unk'
+
+    regions: list[RegionArea] = []
+    for r in rows_info:
+        regions.append(
+            RegionArea(
+                role=_normalize_role(cast(Any, r['role'])),
+                shape=r['shape'] or None,
+                area=r['area'],
+                component=r['component'],
+            )
+        )
+
+    if not regions:
+        return None
+
+    src_region = next((r for r in regions if r.role == 'src'), None)
+    if src_region is not None:
+        return src_region
+    bkg_region = next((r for r in regions if r.role == 'bkg'), None)
+    if bkg_region is not None:
+        return bkg_region
+    return regions[0]
 
 
 class OgipEventReader:
@@ -579,6 +1111,8 @@ class OgipEventReader:
             pi = np.asarray(de["PI"], int) if "PI" in de.columns.names else None
             channel = np.asarray(de["CHANNEL"], int) if "CHANNEL" in de.columns.names else None
             header = dict(cast(Any, hevt.header))
+            headers_dump = _collect_headers_dump(h)
+            meta = _build_meta(h, header)
 
             # GTI
             gti_start = gti_stop = None
@@ -587,8 +1121,19 @@ class OgipEventReader:
                 gti_start = np.asarray(hg["START"], float)
                 gti_stop = np.asarray(hg["STOP"], float)
 
-        self._data = EventData(kind='evt', path=self.path, time=time, pi=pi, channel=channel, gti_start=gti_start, gti_stop=gti_stop, header=header)
+        self._data = EventData(
+            kind='evt', path=self.path,
+            time=time, pi=pi, channel=channel,
+            gti_start=gti_start, gti_stop=gti_stop,
+            header=header, meta=meta, headers_dump=headers_dump,
+        )
         return self._data
+
+    def validate(self) -> ValidationReport:
+        if self._data is None:
+            self.read()
+        assert self._data is not None
+        return self._data.validate()
 
 
 # ---------- Backward-compat aliases ----------
@@ -670,25 +1215,25 @@ def guess_ogip_kind(path: str | Path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt
 # ---------- Direct dataclass-returning helpers ----------
 
 @overload
-def read_ogip(path: str | Path, kind: Literal['arf']) -> ArfData: ...
+def read_fits(path: str | Path, kind: Literal['arf']) -> ArfData: ...
 
 @overload
-def read_ogip(path: str | Path, kind: Literal['rmf']) -> RmfData: ...
+def read_fits(path: str | Path, kind: Literal['rmf']) -> RmfData: ...
 
 @overload
-def read_ogip(path: str | Path, kind: Literal['pha']) -> PhaData: ...
+def read_fits(path: str | Path, kind: Literal['pha']) -> PhaData: ...
 
 @overload
-def read_ogip(path: str | Path, kind: Literal['lc']) -> LightcurveData: ...
+def read_fits(path: str | Path, kind: Literal['lc']) -> LightcurveData: ...
 
 @overload
-def read_ogip(path: str | Path, kind: Literal['evt']) -> EventData: ...
+def read_fits(path: str | Path, kind: Literal['evt']) -> EventData: ...
 
 @overload
-def read_ogip(path: str | Path, kind: None = ...) -> OgipData: ...
+def read_fits(path: str | Path, kind: None = ...) -> OgipData: ...
 
-def read_ogip(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipData:
-    """统一入口：直接返回具体数据类（Chinese first）
+def read_fits(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipData:
+    """统一入口：直接返回具体 OGIP 数据类（Chinese first）
 
     行为
     - 若提供 kind，则按 kind 调用相应读取器；
@@ -698,7 +1243,7 @@ def read_ogip(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','e
     - 对应的具体数据类：`ArfData`/`RmfData`/`PhaData`/`LightcurveData`/`EventData`
 
     English
-    Unified reader that returns the concrete dataclass directly. When `kind`
+    Unified reader returning the concrete dataclass directly. When `kind`
     is None, the function attempts to infer it using `guess_ogip_kind`.
     """
     k = kind or guess_ogip_kind(path)

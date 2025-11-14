@@ -11,7 +11,7 @@ This package layer exposes:
 
 Typical usage
 -------------
-	from autohea.core import read_ogip, guess_ogip_kind
+	from autohea.core import read_fits, guess_ogip_kind
 	from autohea.core import read_arf, read_pha, OgipPhaReader
 	from autohea.core import band_from_arf_bins, ChannelBand
 """
@@ -37,7 +37,7 @@ from .file import (
 	# Utilities
 	band_from_arf_bins, channel_mask_from_ebounds,
 	# Unified helpers (direct dataclass returning)
-	OgipData, guess_ogip_kind, read_ogip, read_arf, read_rmf, read_pha, read_lc, read_evt,
+	OgipData, guess_ogip_kind, read_fits, read_arf, read_rmf, read_pha, read_lc, read_evt,
 )
 
 
@@ -59,7 +59,7 @@ __all__ = [
 	# Utilities
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
 	# Unified helpers
-	'OgipData', 'guess_ogip_kind', 'read_ogip', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
+	'OgipData', 'guess_ogip_kind', 'read_fits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
 	# Package meta
 	'__version__',
 ]

@@ -32,9 +32,9 @@ else:
     LightcurveData = Any  # type: ignore
 
 try:
-    from .file import read_ogip, guess_ogip_kind  # type: ignore
+    from .file import read_fits, guess_ogip_kind  # type: ignore
 except Exception:  # 允许在未安装上游模块时静态检查通过
-    def read_ogip(path: Union[str, Path], kind: Optional[str] = None) -> Any:  # type: ignore
+    def read_fits(path: Union[str, Path], kind: Optional[str] = None) -> Any:  # type: ignore
         return path
     def guess_ogip_kind(path: Union[str, Path]) -> str:  # type: ignore
         return "unknown"
@@ -91,7 +91,7 @@ def plot_spectrum(
         pha = src
     elif isinstance(src, (str, Path)):
         # 借助 file 模块读取
-        obj = read_ogip(src, kind="pha")  # type: ignore[arg-type]
+        obj = read_fits(src, kind="pha")  # type: ignore[arg-type]
         if hasattr(obj, "kind") and getattr(obj, "kind") == "pha":
             pha = obj  # type: ignore[assignment]
         else:
@@ -262,7 +262,7 @@ def plot_lightcurve(
     if isinstance(src, LightcurveData):
         lc = src
     elif isinstance(src, (str, Path)):
-        obj = read_ogip(src, kind="lc")  # type: ignore[arg-type]
+        obj = read_fits(src, kind="lc")  # type: ignore[arg-type]
         if hasattr(obj, "kind") and getattr(obj, "kind") == "lc":
             lc = obj  # type: ignore[assignment]
         else:
