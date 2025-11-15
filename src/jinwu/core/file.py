@@ -54,7 +54,7 @@ __all__ = [
     # Kind inference and direct dataclass helpers
     "OgipData", "guess_ogip_kind",
     # Direct dataclass-returning helpers
-    "read_fits", "read_arf", "read_rmf", "read_pha", "read_lc", "read_evt",
+    "readfits", "read_arf", "read_rmf", "read_pha", "read_lc", "read_evt",
 ]
 
 
@@ -1215,24 +1215,24 @@ def guess_ogip_kind(path: str | Path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt
 # ---------- Direct dataclass-returning helpers ----------
 
 @overload
-def read_fits(path: str | Path, kind: Literal['arf']) -> ArfData: ...
+def readfits(path: str | Path, kind: Literal['arf']) -> ArfData: ...
 
 @overload
-def read_fits(path: str | Path, kind: Literal['rmf']) -> RmfData: ...
+def readfits(path: str | Path, kind: Literal['rmf']) -> RmfData: ...
 
 @overload
-def read_fits(path: str | Path, kind: Literal['pha']) -> PhaData: ...
+def readfits(path: str | Path, kind: Literal['pha']) -> PhaData: ...
 
 @overload
-def read_fits(path: str | Path, kind: Literal['lc']) -> LightcurveData: ...
+def readfits(path: str | Path, kind: Literal['lc']) -> LightcurveData: ...
 
 @overload
-def read_fits(path: str | Path, kind: Literal['evt']) -> EventData: ...
+def readfits(path: str | Path, kind: Literal['evt']) -> EventData: ...
 
 @overload
-def read_fits(path: str | Path, kind: None = ...) -> OgipData: ...
+def readfits(path: str | Path, kind: None = ...) -> OgipData: ...
 
-def read_fits(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipData:
+def readfits(path: str | Path, kind: Optional[Literal['arf','rmf','pha','lc','evt']] = None) -> OgipData:
     """统一入口：直接返回具体 OGIP 数据类（Chinese first）
 
     行为

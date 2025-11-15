@@ -785,7 +785,7 @@ def extract_time_interval(
     Parameters
     ----------
     data_obj : EventData or PhaData
-        通过 read_fits 读取的数据对象（事件文件或谱文件）
+        通过 readfits 读取的数据对象（事件文件或谱文件）
     name : str
         仪器/观测名称（如 'Swift BAT', 'EP WXT'）
     time_format : str, optional
@@ -810,15 +810,15 @@ def extract_time_interval(
     Examples
     --------
     >>> from jinwu.core.time import extract_time_interval
-    >>> from jinwu.core.file import read_fits
+    >>> from jinwu.core.file import readfits
     >>> 
     >>> # 读取Swift BAT谱文件（PHA）
-    >>> bat_pha = read_fits('sw00123456000b_avg.pha')
+    >>> bat_pha = readfits('sw00123456000b_avg.pha')
     >>> interval = extract_time_interval(bat_pha, 'Swift BAT', time_format='swift', color='red')
     >>> print(f"Observation: {interval['start'].iso} - {interval['end'].iso}")
     >>> 
     >>> # 读取事件文件（EVT）并提取GTI
-    >>> bat_evt = read_fits('sw00123456000bevshpo_uf.evt')
+    >>> bat_evt = readfits('sw00123456000bevshpo_uf.evt')
     >>> gti_intervals = extract_time_interval(bat_evt, 'Swift BAT', time_format='swift', use_gti=True)
     >>> print(f"Found {len(gti_intervals)} GTI intervals")
     >>> 

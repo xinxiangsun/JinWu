@@ -59,11 +59,14 @@ from . import missions
 from . import response
 from . import timing
 from . import data
-from .core.time import Time
+from .core import netdata, readfits
 __all__ = [
 	# Subpackages
 	'core', 'lightcurve', 'background', 'spectrum', 'missions', 'response', 'timing', 'data',
-	'Time',
+	
+	# Core datasets & helpers from jinwu.core
+	'netdata', 'readfits',
+	
 	# Package meta
 	'__version__',
 ]

@@ -11,7 +11,7 @@ This package layer exposes:
 
 Typical usage
 -------------
-	from autohea.core import read_fits, guess_ogip_kind
+	from autohea.core import readfits, guess_ogip_kind
 	from autohea.core import read_arf, read_pha, OgipPhaReader
 	from autohea.core import band_from_arf_bins, ChannelBand
 """
@@ -24,7 +24,7 @@ from . import file as file
 from . import heasoft as heasoft
 from . import plot as plot
 from . import time as time
-
+from .datasets import *
 # Selected public API re-export from core.file
 from .file import (
 	# Data containers
@@ -37,21 +37,25 @@ from .file import (
 	# Utilities
 	band_from_arf_bins, channel_mask_from_ebounds,
 	# Unified helpers (direct dataclass returning)
-	OgipData, guess_ogip_kind, read_fits, read_arf, read_rmf, read_pha, read_lc, read_evt,
+	OgipData, guess_ogip_kind, readfits, read_arf, read_rmf, read_pha, read_lc, read_evt,
 )
+
+
 
 
 # Package version
 try:
 	__version__ = version("autohea")
 except PackageNotFoundError:  # pragma: no cover - during editable installs
-	__version__ = "0.0.3"
+	__version__ = "0.0.13"
 
 __all__ = [
 	# Submodules
 	'file', 'heasoft', 'plot', 'time',
 	# Data containers
 	'EnergyBand', 'ChannelBand', 'ArfData', 'RmfData', 'PhaData', 'LightcurveData', 'EventData',
+	# Dataset containers
+	'LightcurveDataset', 'SpectrumDataset', 'JointDataset',
 	# Readers
 	'OgipArfReader', 'OgipRmfReader', 'OgipPhaReader', 'OgipLightcurveReader', 'OgipEventReader',
 	# Aliases
@@ -59,7 +63,9 @@ __all__ = [
 	# Utilities
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
 	# Unified helpers
-	'OgipData', 'guess_ogip_kind', 'read_fits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
+	'OgipData', 'guess_ogip_kind', 'readfits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
+	# Dataset helper
+	'netdata',
 	# Package meta
 	'__version__',
 ]
