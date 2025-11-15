@@ -15,25 +15,26 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
+from pathlib import Path
+import tomllib
+
+
 # 版本获取顺序：
-# 1) 尝试使用由 setuptools_scm 生成的版本文件（build 时写入 src/jinwu/_version.py）
+# 1) setuptools_scm 写入的版本文件（build 时写入 src/jinwu/_version.py）
 # 2) 已安装分发的元数据（pip 安装后）
-# 3) 源码树回退：解析 pyproject.toml 中的 version（若使用 setuptools_scm，则一般只在未安装、未生成 _version.py 时触发）
+# 3) 源码树回退：解析 pyproject.toml
+
 
 def _read_version_from_pyproject() -> str:
 	"""在源码环境中解析 pyproject.toml 的 version 字段；失败时返回占位符。"""
-	try:
-		import pathlib, tomllib  # Python 3.11+ 标准库
-		# __file__ 位于 src/jinwu/__init__.py，向上三级到项目根目录
-		root = pathlib.Path(__file__).resolve().parents[2]
-		pyproject = root / 'pyproject.toml'
-		if not pyproject.exists():
-			return '0.0.0+unknown'
-		data = tomllib.loads(pyproject.read_text(encoding='utf-8'))
-		# 支持两种情况：静态 version 或使用 dynamic version
-		return data.get('project', {}).get('version', '0.0.0+unknown')
-	except Exception:
+	root = Path(__file__).resolve().parents[2]
+	project_file = root / 'pyproject.toml'
+	if not project_file.exists():
 		return '0.0.0+unknown'
+	with project_file.open('rb') as fh:
+		data = tomllib.load(fh)
+	return data.get('project', {}).get('version', '0.0.0+unknown')
+
 
 # 1) setuptools_scm 写入的版本文件（优先）
 try:
