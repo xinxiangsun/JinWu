@@ -22,7 +22,7 @@ from xspec import FakeitSettings, AllData
 import os
 import gzip
 import shutil
-from typing import Union
+from typing import Any, Union
 
 
 def generate_download_url(isot_time):
@@ -179,6 +179,11 @@ class RedshiftExtrapolator():
             self._rmfpath = None
             self._rmf_file = None
 
+        # 红移参数及其上限缓存（即便 XSPEC 暂未加载 redshift 参数也能记录目标上限）
+        self._par_z: Any | None = None
+        self._redshift_limit_cache: tuple[float, float] | None = None
+        self._redshift_limit_target: float = 20.0
+
 
     @property
     def srcnum(self):
@@ -328,6 +333,15 @@ class RedshiftExtrapolator():
                     except Exception:
                         pass
 
+        # 缓存当前XSPEC红移参数上限，后续即便参数暂不可用也能复用该信息
+        if getattr(self, '_par_z', None) is not None:
+            try:
+                vals = list(self._par_z.values)  # type: ignore[attr-defined]
+                if len(vals) >= 6:
+                    self._redshift_limit_cache = (float(vals[4]), float(vals[5]))
+            except Exception:
+                self._redshift_limit_cache = None
+
         # 如果有多个红移分量，链接它们（通常第二个链接到第一个）
         if len(redshift_components) > 1:
             try:
@@ -442,6 +456,17 @@ class RedshiftExtrapolator():
         """初始化模型"""
         self._set_model()
         self._set_par()
+        # 初始化后无论红移参数是否立即可用，都尝试把搜索上限推到目标值
+        try:
+            top_limit, _ = self._get_redshift_param_limits()
+            if top_limit is None or top_limit < self._redshift_limit_target - 1e-6:
+                print(
+                    f"ℹ️  当前红移上限 {top_limit if top_limit is not None else '未知'}"
+                    f"，尝试扩展至 {self._redshift_limit_target:.1f}"
+                )
+                self._extend_redshift_param_limit(self._redshift_limit_target)
+        except Exception as exc:
+            print(f"⚠️  初始化阶段扩展红移参数失败: {exc}")
         # 可选择性验证
         # self.validate_model_setup()
 
@@ -464,48 +489,94 @@ class RedshiftExtrapolator():
     # ---------------- Redshift parameter limit helpers -----------------
     def _get_redshift_param_limits(self):
         """返回(redshift_top, redshift_max)，若不存在返回(None, None)"""
-        if getattr(self, '_par_z', None) is None:
-            return (None, None)
+        par_z = getattr(self, "_par_z", None)
+        if par_z is None and hasattr(self, "_m1"):
+            try:
+                par_z = self.find_redshift_param()
+                self._par_z = par_z
+            except Exception:
+                par_z = None
+        if par_z is None:
+            if self._redshift_limit_cache is not None:
+                return self._redshift_limit_cache
+            # 没有XSPEC redshift参数，也没有缓存，回退到目标上限
+            fallback = (self._redshift_limit_target, self._redshift_limit_target)
+            self._redshift_limit_cache = fallback
+            return fallback
         try:
-            if getattr(self, '_par_z', None) is None:
-                return (None, None)
-            vals = list(self._par_z.values)  # type: ignore[attr-defined]
+            vals = list(par_z.values)  # type: ignore[attr-defined]
             if len(vals) >= 6:
-                return (float(vals[4]), float(vals[5]))
-        except Exception:
-            pass
+                limits = (float(vals[4]), float(vals[5]))
+                self._redshift_limit_cache = limits
+                return limits
+            else:
+                print(f"⚠️ 红移参数 values 长度不足 6: {len(vals)}")
+        except Exception as exc:
+            print(f"⚠️ 读取红移参数上限失败: {exc}")
+        if self._redshift_limit_cache is not None:
+            return self._redshift_limit_cache
         return (None, None)
 
-    def _extend_redshift_param_limit(self, new_limit: float = 20.0):
+    def _extend_redshift_param_limit(self, new_limit: float = 25.0):
         """当需要搜索更高红移时，动态提升XSPEC红移参数的 top/max 上限。
 
         参数:
             new_limit: 希望扩展到的上限 (同时作用于top与max)
         """
-        if getattr(self, '_par_z', None) is None:
-            return False
+        self._redshift_limit_target = max(float(new_limit), getattr(self, "_redshift_limit_target", float(new_limit)))
+        par_z = self._ensure_redshift_param_loaded()
+        if par_z is None:
+            # XSPEC redshift 参数尚不可用，记录目标上限，待后续加载后再应用
+            self._redshift_limit_cache = (self._redshift_limit_target, self._redshift_limit_target)
+            print(
+                f"🔧 记录红移上限目标 {self._redshift_limit_target:.1f}，"
+                "等待 XSPEC redshift 参数加载后再应用"
+            )
+            return True
         try:
-            if getattr(self, '_par_z', None) is None:
-                return False
-            vals = list(self._par_z.values)  # type: ignore[attr-defined]
-            # values = [val, delta, min, bottom, top, max]
+            vals = list(par_z.values)  # type: ignore[attr-defined]
             if len(vals) < 6:
+                print("⚠️ 红移参数 values 长度不足，无法直接扩展，已保留目标上限缓存")
+                self._redshift_limit_cache = (self._redshift_limit_target, self._redshift_limit_target)
                 return False
             cur_top, cur_max = float(vals[4]), float(vals[5])
-            if cur_top >= new_limit - 1e-6 and cur_max >= new_limit - 1e-6:
-                return False  # 已满足
-            # 扩展
-            vals[4] = max(new_limit, cur_top)
-            vals[5] = max(new_limit, cur_max)
-            # 确保当前值不超过新的top
+            if cur_top >= self._redshift_limit_target - 1e-6 and cur_max >= self._redshift_limit_target - 1e-6:
+                self._redshift_limit_cache = (cur_top, cur_max)
+                return False  # 已达到目标
+            vals[4] = max(self._redshift_limit_target, cur_top)
+            vals[5] = max(self._redshift_limit_target, cur_max)
             if vals[0] > vals[4]:
                 vals[0] = vals[4]
-            self._par_z.values = vals  # type: ignore[attr-defined]
+            par_z.values = vals  # type: ignore[attr-defined]
+            self._redshift_limit_cache = (vals[4], vals[5])
             print(f"🔧 已扩展红移参数上限: top={vals[4]}, max={vals[5]}")
             return True
         except Exception as e:
             print(f"⚠️ 扩展红移参数上限失败: {e}")
             return False
+
+    def _ensure_redshift_param_loaded(self):
+        """确保 self._par_z 可用，若未加载尝试在模型中查找一次。"""
+        par_z = getattr(self, "_par_z", None)
+        if par_z is None and hasattr(self, "_m1"):
+            try:
+                par_z = self.find_redshift_param()
+                self._par_z = par_z
+            except Exception:
+                par_z = None
+        if par_z is not None:
+            try:
+                vals = list(par_z.values)  # type: ignore[attr-defined]
+                if len(vals) >= 6:
+                    # 若 XSPEC 当前 top/max 仍低于目标值，再次执行扩展
+                    if (
+                        vals[4] < self._redshift_limit_target - 1e-6
+                        or vals[5] < self._redshift_limit_target - 1e-6
+                    ):
+                        self._extend_redshift_param_limit(self._redshift_limit_target)
+            except Exception:
+                pass
+        return par_z
 
     # def _build_soxs_responses(self):
     #     """构建并缓存soxs的ARF/RMF对象"""
@@ -586,7 +657,7 @@ class RedshiftExtrapolator():
                 AllData.ignore("bad")
 
                 # 通过 folded 总计数得到带内模型计数率（cts/s）
-                spec = AllData(1)
+                spec: Any = AllData(1)
                 
                 rate_src_only = spec.rate[3]
 
@@ -742,7 +813,7 @@ class RedshiftExtrapolator():
                     background=self._bkg_file
                 )
                 AllData.fakeit(1, fakeit_settings, noWrite=True)
-                spec = xspec.AllData(1)
+                spec: Any = xspec.AllData(1)
                 emin, emax = float(band[0]), float(band[1])
                 AllData.notice("all")
                 AllData.ignore(f"**-{emin} {emax}-**")
