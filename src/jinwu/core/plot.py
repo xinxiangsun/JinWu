@@ -15,7 +15,7 @@ jinwu.core.plot
 
 from __future__ import annotations
 
-from typing import Optional, Union, List, Tuple, TYPE_CHECKING, Any, Callable, cast
+from typing import Optional, Union, List, Tuple, Any, Callable, cast
 from pathlib import Path
 
 import numpy as np
@@ -24,12 +24,14 @@ from astropy.io import fits
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-# 与 file 模块的轻耦合：仅导入数据类与统一读取入口
-if TYPE_CHECKING:
+"""在运行期尝试导入实际数据类；若失败，则使用哑类以便 isinstance 不抛错。"""
+try:  # runtime import; avoids typing.Any isinstance crash
     from .file import PhaData, LightcurveData  # type: ignore
-else:
-    PhaData = Any  # type: ignore
-    LightcurveData = Any  # type: ignore
+except Exception:  # pragma: no cover
+    class _Dummy:  # minimal placeholder
+        pass
+    PhaData = _Dummy  # type: ignore
+    LightcurveData = _Dummy  # type: ignore
 
 try:
     from .file import readfits, guess_ogip_kind  # type: ignore
@@ -64,7 +66,7 @@ def _ensure_axes(ax: Optional[Axes], figsize=(7.5, 4.5)) -> Axes:
 # ----------------------------
 
 def plot_spectrum(
-    src: Union[PhaData, PathLike, fits.HDUList],
+    src: Union[Any, PathLike, fits.HDUList],
     *,
     ax: Optional[Axes] = None,
     ykind: str = "rate",  # "rate" 或 "counts"
@@ -83,12 +85,13 @@ def plot_spectrum(
     - out: 若提供路径，则保存图片（不做任何非绘图处理）。
     """
     # 将输入统一为 PhaData
-    pha: Optional[PhaData] = None
+    pha: Optional[Any] = None
     hdul: Optional[fits.HDUList] = None
     # (no file closing logic needed here; we only accept already opened dataclasses or HDUList/path)
 
-    if isinstance(src, PhaData):
-        pha = src
+    # Duck typing：优先按 kind == 'pha'
+    if (hasattr(src, 'kind') and getattr(src, 'kind') == 'pha'):
+        pha = src  # type: ignore[assignment]
     elif isinstance(src, (str, Path)):
         # 借助 file 模块读取
         obj = readfits(src, kind="pha")  # type: ignore[arg-type]
@@ -239,7 +242,7 @@ def plot_spectrum(
 # ----------------------------
 
 def plot_lightcurve(
-    src: Union[LightcurveData, PathLike, fits.HDUList],
+    src: Union[Any, PathLike, fits.HDUList],
     *,
     ax: Optional[Axes] = None,
     T0: Optional[float] = None,
@@ -256,11 +259,11 @@ def plot_lightcurve(
     - 若 value 维度为 (N,M)，则 M>1 视为多能段；multiband=True/"auto" 时按行分面绘制。
     - 仅负责绘图，时间过滤/能段合成等请在外部完成。
     """
-    lc: Optional[LightcurveData] = None
+    lc: Optional[Any] = None
     hdul: Optional[fits.HDUList] = None
 
-    if isinstance(src, LightcurveData):
-        lc = src
+    if (hasattr(src, 'kind') and getattr(src, 'kind') == 'lc'):
+        lc = src  # type: ignore[assignment]
     elif isinstance(src, (str, Path)):
         obj = readfits(src, kind="lc")  # type: ignore[arg-type]
         if hasattr(obj, "kind") and getattr(obj, "kind") == "lc":
@@ -272,12 +275,15 @@ def plot_lightcurve(
     else:
         raise TypeError("plot_lightcurve 需要 LightcurveData、路径或 HDUList 作为输入")
 
-    def _draw(ax_: Axes, t: np.ndarray, y: np.ndarray, yerr: Optional[np.ndarray], lab: Optional[str]):
+    def _draw(ax_: Axes, t: np.ndarray, y: np.ndarray, yerr: Optional[np.ndarray], lab: Optional[str], timezero: Optional[float]):
         if yerr is not None:
             ax_.errorbar(t, y, yerr=yerr, fmt="-", lw=1.0, color=color, label=lab)
         else:
             ax_.plot(t, y, "-", lw=1.0, color=color, label=lab)
-        ax_.set_xlabel("Time (s)")
+        if timezero is not None:
+            ax_.set_xlabel(f"Time (s)  TIMEZERO={timezero:.3f}s")
+        else:
+            ax_.set_xlabel("Time (s)")
         ax_.set_ylabel("Rate (counts s$^{-1}$)")
         if grid:
             ax_.grid(alpha=0.3, ls="--")
@@ -288,13 +294,22 @@ def plot_lightcurve(
         val = np.asarray(lc.value)
         err = None if lc.error is None else np.asarray(lc.error)
 
-        # 相对零点
-        if T0 is not None:
-            t = time - float(T0)
-        else:
-            # 若 header 中有 TRIGTIME 可用于对齐
-            trig = lc.header.get("TRIGTIME") if hasattr(lc, "header") else None
-            t = time - float(trig) if trig is not None else time
+        # 使用原始 TIME，不再减去 TRIGTIME/T0；仅在标签中标注 TIMEZERO
+        t = time
+        tz = None
+        # 优先 meta.timezero
+        if hasattr(lc, 'meta') and getattr(lc.meta, 'timezero', None) is not None:
+            try:
+                tz = float(lc.meta.timezero)  # type: ignore[arg-type]
+            except Exception:
+                tz = None
+        # 其次 header.TIMEZERO
+        if tz is None and hasattr(lc, 'header'):
+            hv = lc.header.get('TIMEZERO')
+            try:
+                tz = float(hv) if hv is not None else None
+            except Exception:
+                tz = None
 
         # 多能段还是单能段
         if val.ndim == 2 and val.shape[1] > 1 and (multiband is True or multiband == "auto"):
@@ -304,7 +319,7 @@ def plot_lightcurve(
                 axes = [axes]
             for i in range(nb):
                 yerr_i = err[:, i] if (err is not None and err.ndim == 2 and err.shape[1] == nb) else None
-                _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"))
+                _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz)
                 axes[i].legend(loc="upper right", fontsize=9)
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
@@ -316,7 +331,7 @@ def plot_lightcurve(
             ax = _ensure_axes(ax)
             y = val.reshape(-1)
             yerr = err.reshape(-1) if (err is not None and err.ndim > 1) else err
-            _draw(ax, t, y, yerr, label)
+            _draw(ax, t, y, yerr, label, tz)
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
                 title = base or "Lightcurve"
@@ -349,20 +364,22 @@ def plot_lightcurve(
             hdr_raw = getattr(hdul[0], "header")
             if hasattr(hdr_raw, "get"):
                 hdr0_dict = hdr_raw  # type: ignore
-        trig = hdr0_dict.get("TRIGTIME")
-        if T0 is not None:
-            t = time - float(T0)
-        elif trig is not None:
-            t = time - float(trig)
-        else:
-            t = time
+        # Raw TIME for HDUList case
+        t = time
+        tz = None
+        hv_meta = hdr0_dict.get('TIMEZERO')
+        if hv_meta is not None:
+            try:
+                tz = float(hv_meta)
+            except Exception:
+                tz = None
 
         # 优先 TOT_RATE；否则 RATE 可能为 (N, M)
         if "TOT_RATE" in cols:
             val = np.asarray(d["TOT_RATE"], float)
             err = np.asarray(d["TOT_ERROR"], float) if "TOT_ERROR" in cols else None
             ax = _ensure_axes(ax)
-            _draw(ax, t, val, err, label)
+            _draw(ax, t, val, err, label, tz)
             axes_to_return = ax
         else:
             rate = d["RATE"] if "RATE" in cols else d["COUNTS"]
@@ -375,11 +392,11 @@ def plot_lightcurve(
                     axes = [axes]
                 for i in range(nb):
                     yerr_i = err[:, i] if (err is not None and err.ndim == 2 and err.shape[1] == nb) else None
-                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"))
+                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz)
                 axes_to_return = list(axes)
             else:
                 ax = _ensure_axes(ax)
-                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label)
+                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label, tz)
                 axes_to_return = ax
 
         if title is None:
@@ -413,7 +430,7 @@ def plot_lightcurve(
 # ----------------------------
 
 def plot_ogip(
-    obj: Union[PhaData, LightcurveData, PathLike, fits.HDUList],
+    obj: Union[Any, PathLike, fits.HDUList],
     **kwargs,
 ) -> Union[Axes, List[Axes]]:
     """统一入口：
