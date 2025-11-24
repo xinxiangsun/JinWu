@@ -916,6 +916,16 @@ class LightcurveFitter:
         source_name: Optional[str] = None,
         xlabel: str = "Time (s)",
         ylabel: str = "Flux (erg/cm2/s)",
+        annotate_params: bool = True,
+        annotation_loc: str = "upper right",
+        annotation_alpha: float = 0.6,
+        # 智能标签放置（可选，默认关闭以保持兼容）
+        smart_labels: bool = False,
+        show_norm_in_labels: bool = False,
+        label_num_candidates: int = 80,
+        label_padding_px: int = 3,
+        label_min_gap_px: int = 2,
+        label_fontsize: int = 10,
         **plot_kwargs,
     ):
         """绘制拟合结果（需要 matplotlib）
@@ -991,8 +1001,10 @@ class LightcurveFitter:
         t_max = np.max(t_plot) if t_plot.size > 0 else np.max(t_arr)
         if np.isfinite(t_min_pos) and np.isfinite(t_max) and t_min_pos > 0 and t_max > t_min_pos:
             t_fine = np.logspace(np.log10(t_min_pos), np.log10(t_max), n_samples)
-        else:
+        elif result.time is not None:
             t_fine = np.linspace(np.maximum(1e-12, result.time.min()), result.time.max(), n_samples)
+        else:
+            t_fine = np.linspace(np.maximum(1e-12, t_arr.min()), t_arr.max(), n_samples)
         y_fine = result.evaluate(t_fine, model_func)
         ax1.plot(t_fine, y_fine, '-', label=f'Fit: {result.model_name}', linewidth=2)
         
@@ -1005,6 +1017,518 @@ class LightcurveFitter:
         title_core = f'{result.model_name} Fit (χ²/dof = {result.reduced_chisq:.2f})'
         title = f'{source_name} - {title_core}' if source_name else title_core
         ax1.set_title(title)
+
+        # 可选：在图内添加一个不重叠的参数面板（mathtext 上/下标误差）
+        if annotate_params and result.params is not None and result.param_names is not None:
+            def _map_math_name(name: str) -> str:
+                # 映射常用参数到数学符号
+                if name == 'norm':
+                    return r'\mathrm{norm}'
+                if name.startswith('index'):
+                    # index, index1, index2, index3 -> \alpha, \alpha_1, ...
+                    if name == 'index':
+                        return r'\alpha'
+                    suffix = name.replace('index', '')
+                    return rf'\alpha_{suffix}' if suffix else r'\alpha'
+                if name == 't_break':
+                    return r't_{\mathrm{break}}'
+                if name.startswith('t_break'):
+                    # t_break1, t_break2
+                    suffix = name.replace('t_break', '')
+                    return rf't_{{\mathrm{{break}}{suffix}}}'
+                if name == 'smoothness':
+                    return r'n'
+                if name == 't0':
+                    return r't_0'
+                return rf'\mathrm{{{name}}}'
+
+            def _format_math(name_math: str, val: float, lo: float | None, up: float | None) -> str:
+                # 统一指数：当需要科学计数法时，将值与误差共同提取 10^e
+                def _needs_sci(x: float) -> bool:
+                    ax = abs(x)
+                    if ax == 0 or not np.isfinite(ax):
+                        return False
+                    e = int(np.floor(np.log10(ax)))
+                    return (e <= -3) or (e >= 4)
+
+                use_sci = _needs_sci(val)
+                if (lo is not None and up is not None and np.isfinite(lo) and np.isfinite(up) and (lo>0 or up>0)):
+                    if use_sci:
+                        if val == 0:
+                            e = 0
+                        else:
+                            e = int(np.floor(np.log10(abs(val))))
+                        scale = 10.0 ** e
+                        m = val / scale
+                        um = up / scale
+                        lm = lo / scale
+                        return f"${name_math} = {m:.3g}^{{+{um:.2g}}}_{{-{lm:.2g}}} \\times 10^{{{e}}}$"
+                    else:
+                        return f"${name_math} = {val:.3g}^{{+{up:.2g}}}_{{-{lo:.2g}}}$"
+                else:
+                    if use_sci:
+                        if val == 0:
+                            return f"${name_math} = 0$"
+                        e = int(np.floor(np.log10(abs(val))))
+                        scale = 10.0 ** e
+                        m = val / scale
+                        return f"${name_math} = {m:.3g} \\times 10^{{{e}}}$"
+                    return f"${name_math} = {val:.3g}$"
+
+            vals = np.asarray(result.params)
+            names = list(result.param_names)
+            if result.errors_lower is not None and result.errors_upper is not None:
+                lo = np.asarray(result.errors_lower)
+                up = np.asarray(result.errors_upper)
+            elif result.errors is not None:
+                lo = up = np.asarray(result.errors)
+            else:
+                lo = np.array([None]*len(vals), dtype=object)
+                up = np.array([None]*len(vals), dtype=object)
+
+            # 组装每行的 mathtext 文本
+            lines = []
+            for i, name in enumerate(names):
+                mname = _map_math_name(name)
+                v = vals[i]
+                lo_i = (lo[i] if i < lo.size else None)
+                up_i = (up[i] if i < up.size else None)
+                lines.append(_format_math(mname, v, lo_i, up_i))
+            panel_text = "\n".join(lines)
+
+            # 放置位置
+            ha = 'right' if 'right' in annotation_loc else 'left'
+            va = 'top' if 'upper' in annotation_loc else 'bottom'
+            x = 0.98 if ha == 'right' else 0.02
+            y = 0.98 if va == 'top' else 0.02
+            ax1.text(
+                x, y, panel_text,
+                transform=ax1.transAxes,
+                ha=ha, va=va,
+                fontsize=9,
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='white', alpha=annotation_alpha),
+                clip_on=False,
+            )
+        
+        # 智能标签：为幂律类模型添加段内斜率 α_i 与折断时间 t_break_i 标签
+        # 规则：
+        # - 横坐标固定（斜率标签：各段几何中心；折断标签：恰在折断时间处）
+        # - 仅沿纵向搜索多个候选，避免与数据点、误差棒、已放置标签重叠，且不超过轴范围
+        # - 默认不展示 norm，仅展示 α 与 t_break（可通过 show_norm_in_labels 控制）
+        if smart_labels and result.params is not None and result.param_names is not None:
+            try:
+                import matplotlib.pyplot as plt  # already imported above, keep local for clarity
+                from matplotlib.transforms import Bbox
+            except Exception:
+                smart_labels = False
+            
+            if smart_labels:
+                fig = ax1.figure
+                # 构建障碍物（数据点与误差棒的显示空间包围盒）
+                def _build_obstacles(ax, xs, ys, yerrs, pad_px: int):
+                    obstacles = []
+                    if xs is None or ys is None or len(xs) == 0:
+                        return obstacles
+                    # 确保已绘制以获得有效度量
+                    try:
+                        fig.canvas.draw()
+                    except Exception:
+                        pass
+                    # 以像素度量，给每个点一个固定的水平半宽
+                    half_w = max(pad_px, 4)
+                    for i in range(len(xs)):
+                        x = xs[i]
+                        y = ys[i]
+                        if not (np.isfinite(x) and np.isfinite(y)):
+                            continue
+                        # 误差棒竖向范围
+                        if yerrs is None:
+                            y_low, y_high = y, y
+                        else:
+                            err_i = yerrs[i]
+                            if np.ndim(err_i) == 0:
+                                y_low, y_high = y - err_i, y + err_i
+                            else:
+                                # 允许 [lo, hi] 非对称
+                                if len(err_i) == 2:
+                                    y_low, y_high = y - err_i[0], y + err_i[1]
+                                else:
+                                    y_low, y_high = y, y
+                        # 转到显示坐标
+                        p_low = ax.transData.transform((x, max(y_low, np.finfo(float).tiny)))
+                        p_mid = ax.transData.transform((x, max(y, np.finfo(float).tiny)))
+                        p_high = ax.transData.transform((x, max(y_high, np.finfo(float).tiny)))
+                        # 垂直包络
+                        y0 = min(p_low[1], p_high[1])
+                        y1 = max(p_low[1], p_high[1])
+                        # 水平给定固定半宽
+                        x0 = p_mid[0] - half_w
+                        x1 = p_mid[0] + half_w
+                        # padding
+                        x0 -= pad_px
+                        x1 += pad_px
+                        y0 -= pad_px
+                        y1 += pad_px
+                        obstacles.append((x0, y0, x1, y1))
+                    return obstacles
+                
+                def _overlap(a, b):
+                    return not (a[2] <= b[0] or a[0] >= b[2] or a[3] <= b[1] or a[1] >= b[3])
+                
+                def _area(a):
+                    return max(0.0, a[2]-a[0]) * max(0.0, a[3]-a[1])
+                
+                def _intersect(a, b):
+                    x0 = max(a[0], b[0]); y0 = max(a[1], b[1])
+                    x1 = min(a[2], b[2]); y1 = min(a[3], b[3])
+                    if x1 <= x0 or y1 <= y0:
+                        return (0,0,0,0)
+                    return (x0, y0, x1, y1)
+                
+                def _text_bbox(ax, s: str, xdata: float, ydata: float):
+                    # 获取在数据坐标 (xdata,ydata) 放置文本 s 的显示坐标包围盒
+                    txt = ax.text(xdata, ydata, s, fontsize=label_fontsize, transform=ax.transData)
+                    try:
+                        fig.canvas.draw()
+                        bb = txt.get_window_extent()
+                        bbox = (bb.x0, bb.y0, bb.x1, bb.y1)
+                    except Exception:
+                        bbox = (0,0,0,0)
+                    finally:
+                        txt.remove()
+                    # 加 padding
+                    return (bbox[0]-label_padding_px, bbox[1]-label_padding_px,
+                            bbox[2]+label_padding_px, bbox[3]+label_padding_px)
+                
+                def _score(bbox, obstacles, occupied, axes_win):
+                    # 评分：优先无重叠；其次窗口溢出像素最小；再按重叠面积最小
+                    # 统计与障碍/已占用重叠
+                    overlap_cnt = 0
+                    overlap_area = 0.0
+                    for ob in obstacles:
+                        if _overlap(bbox, ob):
+                            overlap_cnt += 1
+                            overlap_area += _area(_intersect(bbox, ob))
+                    for oc in occupied:
+                        if _overlap(bbox, oc):
+                            overlap_cnt += 1
+                            overlap_area += _area(_intersect(bbox, oc))
+                    # 轴窗口外溢像素
+                    overflow = 0.0
+                    if bbox[0] < axes_win.x0:
+                        overflow += (axes_win.x0 - bbox[0])
+                    if bbox[2] > axes_win.x1:
+                        overflow += (bbox[2] - axes_win.x1)
+                    if bbox[1] < axes_win.y0:
+                        overflow += (axes_win.y0 - bbox[1])
+                    if bbox[3] > axes_win.y1:
+                        overflow += (bbox[3] - axes_win.y1)
+                    # 返回元组用于排序
+                    return (overlap_cnt, overflow, overlap_area)
+                
+                def _find_best_y(ax, s: str, x_fixed: float, y_candidates: np.ndarray, obstacles, occupied, axes_win):
+                    best = None
+                    for y in y_candidates:
+                        bbox = _text_bbox(ax, s, x_fixed, y)
+                        # 与已占用最小间隔要求
+                        gap_ok = True
+                        for oc in occupied:
+                            # 扩张对比框实现最小间隙
+                            exp = (oc[0]-label_min_gap_px, oc[1]-label_min_gap_px, oc[2]+label_min_gap_px, oc[3]+label_min_gap_px)
+                            if _overlap(bbox, exp):
+                                gap_ok = False
+                                break
+                        if not gap_ok:
+                            continue
+                        score = _score(bbox, obstacles, occupied, axes_win)
+                        if (best is None) or (score < best[0]):
+                            best = (score, y, bbox)
+                    return best[1:] if best is not None else (None, None)
+                
+                # 仅使用正值数据构建障碍
+                obstacles = _build_obstacles(ax1, t_plot, y_plot, yerr_plot, label_padding_px)
+                occupied_bboxes = []
+                
+                # 当前轴窗口（显示坐标）
+                try:
+                    fig.canvas.draw()
+                except Exception:
+                    pass
+                axes_win = ax1.get_window_extent()
+                
+                # y 候选（对数均匀）
+                y_min, y_max = ax1.get_ylim()
+                y_min = max(y_min, np.finfo(float).tiny)
+                if y_max <= y_min:
+                    y_max = y_min * 10.0
+                y_candidates = np.logspace(np.log10(y_min*1.02), np.log10(y_max/1.02), max(5, label_num_candidates))
+                
+                # 构造标签文本（仅 α 与 t_break，norm 可选）
+                vals = np.asarray(result.params)
+                names = list(result.param_names)
+                if result.errors_lower is not None and result.errors_upper is not None:
+                    lo = np.asarray(result.errors_lower)
+                    up = np.asarray(result.errors_upper)
+                elif result.errors is not None:
+                    lo = up = np.asarray(result.errors)
+                else:
+                    lo = np.array([None]*len(vals), dtype=object)
+                    up = np.array([None]*len(vals), dtype=object)
+                
+                def _find_param(name):
+                    if name in names:
+                        i = names.index(name)
+                        return vals[i], (lo[i] if i < lo.size else None), (up[i] if i < up.size else None)
+                    return None
+                
+                # 构造模型特异的段与折断
+                tmin_seg = np.min(t_plot) if t_plot.size>0 else np.min(t_arr[t_arr>0])
+                tmax_seg = np.max(t_plot) if t_plot.size>0 else np.max(t_arr)
+                tmin_seg = max(tmin_seg, np.finfo(float).tiny)
+                
+                def _geom_mean(a, b):
+                    a = max(a, np.finfo(float).tiny)
+                    b = max(b, np.finfo(float).tiny)
+                    return 10**((np.log10(a)+np.log10(b))/2.0)
+                
+                model_name = result.model_name
+                # labels_to_place: list of tuples (text, x_fixed)
+                labels_to_place = []
+                
+                # 内部 mathtext 格式化（不含外层 $...$，用单反斜杠）
+                def _fmt(name_math_inner: str, val: float, lo: float | None, up: float | None) -> str:
+                    def _needs_sci(x: float) -> bool:
+                        ax = abs(x)
+                        if ax == 0 or not np.isfinite(ax):
+                            return False
+                        e = int(np.floor(np.log10(ax)))
+                        return (e <= -3) or (e >= 4)
+                    use_sci = _needs_sci(val)
+                    if (lo is not None and up is not None and np.isfinite(lo) and np.isfinite(up) and (lo>0 or up>0)):
+                        if use_sci:
+                            e = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
+                            scale = 10.0 ** e
+                            m, um, lm = val/scale, up/scale, lo/scale
+                            return f"${name_math_inner} = {m:.3g}^{{+{um:.2g}}}_{{-{lm:.2g}}} \\times 10^{{{e}}}$"
+                        else:
+                            return f"${name_math_inner} = {val:.3g}^{{+{up:.2g}}}_{{-{lo:.2g}}}$"
+                    else:
+                        if use_sci and val != 0:
+                            e = int(np.floor(np.log10(abs(val))))
+                            m = val / (10.0**e)
+                            return f"${name_math_inner} = {m:.3g} \\times 10^{{{e}}}$"
+                        return f"${name_math_inner} = {val:.3g}$"
+                
+                def _alpha_label(idx_name, subscript: str | None = None):
+                    # 构造 mathtext：单反斜杠在最终字符串中
+                    mname = "\\alpha" if not subscript else f"\\alpha_{{{subscript}}}"
+                    p = _find_param(idx_name)
+                    if p is None:
+                        return None
+                    v, lo_i, up_i = p
+                    return _fmt(mname, v, lo_i, up_i)
+                
+                def _tbreak_label(n: int | None = None):
+                    if n is None:
+                        key = 't_break'
+                        sub = '\\mathrm{break}'
+                    else:
+                        key = f't_break{n}'
+                        sub = f'\\mathrm{{break}}{n}'
+                    p = _find_param(key)
+                    if p is None:
+                        return None
+                    v, lo_i, up_i = p
+                    return _fmt(f't_{{{sub}}}', v, lo_i, up_i)
+                
+                # Powerlaw: 仅一个斜率 α
+                if model_name == 'powerlaw':
+                    s = _alpha_label('index')
+                    if s is not None:
+                        x_fixed = _geom_mean(tmin_seg, tmax_seg)
+                        labels_to_place.append((s, x_fixed))
+                    if show_norm_in_labels:
+                        p = _find_param('norm')
+                        if p is not None:
+                            s = _fmt(r'\mathrm{norm}', p[0], p[1], p[2])
+                            labels_to_place.append((s, _geom_mean(tmin_seg, tmax_seg)))
+                
+                # Broken powerlaw: 两段 α1, α2 + t_break
+                if model_name == 'broken_powerlaw':
+                    tb = _find_param('t_break')
+                    if tb is not None:
+                        tb_val = tb[0]
+                        # α1
+                        s1 = _alpha_label('index1', '1')
+                        if s1 is not None and np.isfinite(tb_val) and tb_val>tmin_seg:
+                            labels_to_place.append((s1, _geom_mean(tmin_seg, tb_val)))
+                        # α2
+                        s2 = _alpha_label('index2', '2')
+                        if s2 is not None and np.isfinite(tb_val) and tb_val<tmax_seg:
+                            labels_to_place.append((s2, _geom_mean(tb_val, tmax_seg)))
+                        # t_break 标签（x 固定为 tb）
+                        s_tb = _tbreak_label()
+                        if s_tb is not None and np.isfinite(tb_val):
+                            labels_to_place.append((s_tb, max(tb_val, np.finfo(float).tiny)))
+                    if show_norm_in_labels:
+                        p = _find_param('norm')
+                        if p is not None:
+                            s = _fmt(r'\mathrm{norm}', p[0], p[1], p[2])
+                            labels_to_place.append((s, _geom_mean(tmin_seg, tmax_seg)))
+                
+                # Smoothly broken powerlaw: 两段 α1, α2 + t_break（平滑参数可不显示）
+                if model_name == 'smoothly_broken_powerlaw':
+                    tb = _find_param('t_break')
+                    if tb is not None:
+                        tb_val = tb[0]
+                        s1 = _alpha_label('index1', '1')
+                        if s1 is not None and np.isfinite(tb_val) and tb_val>tmin_seg:
+                            labels_to_place.append((s1, _geom_mean(tmin_seg, tb_val)))
+                        s2 = _alpha_label('index2', '2')
+                        if s2 is not None and np.isfinite(tb_val) and tb_val<tmax_seg:
+                            labels_to_place.append((s2, _geom_mean(tb_val, tmax_seg)))
+                        s_tb = _tbreak_label()
+                        if s_tb is not None and np.isfinite(tb_val):
+                            labels_to_place.append((s_tb, max(tb_val, np.finfo(float).tiny)))
+                    # 可选显示平滑度
+                    # if 'smoothness' in names: ...（按需开启）
+                    if show_norm_in_labels:
+                        p = _find_param('norm')
+                        if p is not None:
+                            s = _fmt(r'\mathrm{norm}', p[0], p[1], p[2])
+                            labels_to_place.append((s, _geom_mean(tmin_seg, tmax_seg)))
+                
+                # Double broken powerlaw: 三段 α1,α2,α3 + t_break1, t_break2
+                if model_name == 'double_broken_powerlaw':
+                    tb1 = _find_param('t_break1')
+                    tb2 = _find_param('t_break2')
+                    tb1_val = tb1[0] if tb1 is not None else None
+                    tb2_val = tb2[0] if tb2 is not None else None
+                    # α1
+                    s1 = _alpha_label('index1', '1')
+                    if s1 is not None and tb1_val is not None and np.isfinite(tb1_val) and tb1_val>tmin_seg:
+                        labels_to_place.append((s1, _geom_mean(tmin_seg, tb1_val)))
+                    # α2
+                    s2 = _alpha_label('index2', '2')
+                    if s2 is not None and (tb1_val is not None) and (tb2_val is not None) \
+                        and np.isfinite(tb1_val) and np.isfinite(tb2_val) and (tb2_val>tb1_val):
+                        labels_to_place.append((s2, _geom_mean(tb1_val, tb2_val)))
+                    # α3
+                    s3 = _alpha_label('index3', '3')
+                    if s3 is not None and tb2_val is not None and np.isfinite(tb2_val) and (tmax_seg>tb2_val):
+                        labels_to_place.append((s3, _geom_mean(tb2_val, tmax_seg)))
+                    # t_break1, t_break2 标签
+                    s_tb1 = _tbreak_label(1)
+                    if s_tb1 is not None and tb1_val is not None and np.isfinite(tb1_val):
+                        labels_to_place.append((s_tb1, max(tb1_val, np.finfo(float).tiny)))
+                    s_tb2 = _tbreak_label(2)
+                    if s_tb2 is not None and tb2_val is not None and np.isfinite(tb2_val):
+                        labels_to_place.append((s_tb2, max(tb2_val, np.finfo(float).tiny)))
+                    if show_norm_in_labels:
+                        p = _find_param('norm')
+                        if p is not None:
+                            s = _fmt(r'\mathrm{norm}', p[0], p[1], p[2])
+                            labels_to_place.append((s, _geom_mean(tmin_seg, tmax_seg)))
+                
+                # 分离 α 标签和 t_break 标签进行不同处理
+                alpha_labels = []
+                tbreak_labels = []
+                other_labels = []
+                for s, x_fixed in labels_to_place:
+                    if '\\alpha' in s:
+                        alpha_labels.append((s, x_fixed))
+                    elif 'break' in s:
+                        tbreak_labels.append((s, x_fixed))
+                    else:
+                        other_labels.append((s, x_fixed))
+                
+                # 处理 norm 等其他标签（保持原逻辑）
+                for s, x_fixed in other_labels:
+                    y_best, bbox_best = _find_best_y(ax1, s, x_fixed, y_candidates, obstacles, occupied_bboxes, axes_win)
+                    if y_best is None:
+                        y_best = y_candidates[len(y_candidates)//2]
+                        bbox_best = _text_bbox(ax1, s, x_fixed, y_best)
+                    txt = ax1.text(
+                        x_fixed, y_best, s,
+                        transform=ax1.transData,
+                        fontsize=label_fontsize,
+                        ha='center', va='center',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.75),
+                        clip_on=True,
+                    )
+                    occupied_bboxes.append(bbox_best)
+                
+                # 处理 t_break 标签：绘制竖直虚线，标签固定在下方 1/5 纵轴高度
+                y_min_log, y_max_log = ax1.get_ylim()
+                y_span_log = np.log10(y_max_log) - np.log10(y_min_log)
+                y_tbreak_offset = 0.2  # 从底部 20% (1/5) 位置
+                y_tbreak = 10**(np.log10(y_min_log) + y_tbreak_offset * y_span_log)
+                
+                for s, x_fixed in tbreak_labels:
+                    # 绘制竖直虚线
+                    ax1.axvline(x_fixed, color='gray', linestyle='--', linewidth=1.5, alpha=0.6)
+                    # 标签放在固定 y 位置
+                    bbox_best = _text_bbox(ax1, s, x_fixed, y_tbreak)
+                    txt = ax1.text(
+                        x_fixed, y_tbreak, s,
+                        transform=ax1.transData,
+                        fontsize=label_fontsize,
+                        ha='center', va='center',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.75),
+                        clip_on=True,
+                    )
+                    occupied_bboxes.append(bbox_best)
+                
+                # 处理 α 标签：放在拟合线附近，距离在 1/8~1/4 纵轴高度之间
+                # 对每个 α 标签，在拟合线上下 1/8~1/4 纵轴范围内搜索
+                offset_min = 0.125  # 1/8
+                offset_max = 0.25   # 1/4
+                
+                for s, x_fixed in alpha_labels:
+                    # 计算拟合线在 x_fixed 处的 y 值（使用 result.evaluate）
+                    fit_y = None
+                    if result.model is not None:
+                        try:
+                            fit_y_raw = result.evaluate(x_fixed)
+                            # 确保返回标量
+                            fit_y = float(np.asarray(fit_y_raw).item()) if np.asarray(fit_y_raw).size == 1 else None
+                        except Exception:
+                            pass
+                    
+                    if fit_y is None or not np.isfinite(fit_y) or fit_y <= 0:
+                        # 回退：使用全局 y 候选
+                        y_best, bbox_best = _find_best_y(ax1, s, x_fixed, y_candidates, obstacles, occupied_bboxes, axes_win)
+                        if y_best is None:
+                            y_best = y_candidates[len(y_candidates)//2]
+                            bbox_best = _text_bbox(ax1, s, x_fixed, y_best)
+                    else:
+                        # 在拟合线附近搜索：对数空间偏移 ±(1/8~1/4)纵轴高度
+                        fit_y_log = np.log10(fit_y)
+                        # 生成候选 y：拟合线上下各 offset_min~offset_max 范围
+                        offset_range = np.linspace(-offset_max, -offset_min, label_num_candidates//4).tolist() + \
+                                       np.linspace(offset_min, offset_max, label_num_candidates//4).tolist()
+                        alpha_y_candidates = [10**(fit_y_log + off * y_span_log) for off in offset_range]
+                        # 确保在轴范围内
+                        alpha_y_candidates = [y for y in alpha_y_candidates if y_min_log <= y <= y_max_log]
+                        if not alpha_y_candidates:
+                            alpha_y_candidates = [fit_y]
+                        
+                        y_best, bbox_best = _find_best_y(ax1, s, x_fixed, np.array(alpha_y_candidates), 
+                                                         obstacles, occupied_bboxes, axes_win)
+                        if y_best is None:
+                            # 回退：直接放在拟合线位置
+                            y_best = fit_y
+                            bbox_best = _text_bbox(ax1, s, x_fixed, y_best)
+                    
+                    txt = ax1.text(
+                        x_fixed, y_best, s,
+                        transform=ax1.transData,
+                        fontsize=label_fontsize,
+                        ha='center', va='center',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.75),
+                        clip_on=True,
+                    )
+                    occupied_bboxes.append(bbox_best)
         
         # 残差
         if show_residuals and ax2 is not None:
@@ -1024,5 +1548,10 @@ class LightcurveFitter:
         elif not show_residuals:
             ax1.set_xlabel(xlabel)
         
-        plt.tight_layout()
+        try:
+            plt.tight_layout()
+        except (ValueError, RuntimeError) as e:
+            # tight_layout 可能在某些情况下失败（特别是智能标签放置后）
+            # 静默忽略，布局可能略有偏差但不影响使用
+            pass
         return ax1, ax2
