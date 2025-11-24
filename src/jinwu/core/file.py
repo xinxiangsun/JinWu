@@ -219,6 +219,32 @@ class ArfData(OgipResponseBase):
         rpt.ok = len(rpt.errors()) == 0
         return rpt
 
+    # --- Plot helper ---
+    def plot(self, ax: Optional[Any] = None, *, energy_unit: str = 'keV', yscale: str = 'linear', title: Optional[str] = None, **kwargs):
+        """绘制 ARF 有效面积曲线。
+
+        参数
+        - ax: 复用的 matplotlib Axes；若为 None 自动创建
+        - energy_unit: 仅标签展示（本身数据默认 keV）
+        - yscale: 'linear' 或 'log'
+        - title: 自定义标题；默认使用文件名
+        - kwargs: 传递给 matplotlib.plot
+        """
+        import matplotlib.pyplot as _plt  # lazy import
+        mid_e = 0.5 * (np.asarray(self.energ_lo) + np.asarray(self.energ_hi))
+        ax = ax or _plt.gca()
+        assert ax is not None
+        kwargs.setdefault('lw', 1.0)
+        ax.plot(mid_e, self.specresp, **kwargs)
+        ax.set_xlabel(f"Energy ({energy_unit})")
+        ax.set_ylabel("Effective Area (cm$^2$)")
+        ax.set_yscale(yscale)
+        if title is None:
+            title = Path(str(getattr(self, 'path', ''))).name or 'ARF'
+        ax.set_title(title)
+        ax.grid(alpha=0.3, ls='--')
+        return ax
+
 @dataclass(slots=True)
 class RmfData(OgipResponseBase):
     """RMF 响应矩阵数据（支持稀疏字段与 EBOUNDS）
@@ -322,6 +348,42 @@ class RmfData(OgipResponseBase):
         """Convenience: 返回重建的稠密矩阵 (缓存可后续扩展)"""
         return self.rebuild_dense()
 
+    def plot(self, ax: Optional[Any] = None, *, kind: str = 'matrix', row: int = 0, yscale: str = 'linear', cmap: str = 'viridis', title: Optional[str] = None, **kwargs):
+        """绘制 RMF 响应：
+
+        kind='matrix' 显示二维响应矩阵；kind='row' 显示单行（某入射能对应的分布）。
+        - ax: 复用 Axes
+        - row: kind='row' 时选择的能 bin 索引
+        - yscale: 行模式下的 y 轴尺度
+        - cmap: 矩阵模式色图
+        - kwargs: 传递给 imshow 或 plot
+        """
+        import matplotlib.pyplot as _plt
+        ax = ax or _plt.gca()
+        assert ax is not None
+        if kind == 'matrix':
+            dm = self.dense_matrix
+            im = ax.imshow(dm, aspect='auto', origin='lower', cmap=cmap, **kwargs)
+            ax.set_xlabel('Channel')
+            ax.set_ylabel('Energy bin')
+            if title is None:
+                title = Path(str(getattr(self, 'path', ''))).name or 'RMF'
+            ax.set_title(title)
+            ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='Prob.')
+        else:
+            dm = self.dense_matrix
+            row = max(0, min(dm.shape[0]-1, int(row)))
+            kwargs.setdefault('lw', 1.0)
+            ax.plot(dm[row], **kwargs)
+            ax.set_xlabel('Channel')
+            ax.set_ylabel('Probability')
+            ax.set_yscale(yscale)
+            if title is None:
+                title = f"RMF row {row}"
+            ax.set_title(title)
+        ax.grid(alpha=0.3, ls='--')
+        return ax
+
 @dataclass(slots=True)
 class PhaData(OgipSpectrumBase):
     """PHA 光子谱数据
@@ -363,6 +425,24 @@ class PhaData(OgipSpectrumBase):
         if self.exposure and self.exposure > 0:
             return self.counts / self.exposure
         return None
+
+    def plot(self, **kwargs):
+        """委托到 plot.plot_spectrum 进行标准 PHA 绘图。
+
+        kwargs 透传给 plot_spectrum，例如 ykind / show_errorbar / ax。
+        """
+        from .plot import plot_spectrum  # lazy to avoid circular import at module import time
+        return plot_spectrum(self, **kwargs)
+
+    def slice(self, *, emin: Optional[float] = None, emax: Optional[float] = None, ch_lo: Optional[int] = None, ch_hi: Optional[int] = None) -> 'PhaData':
+        """按能量或道范围筛选 PHA，返回新实例。委托到 ops.slice_pha。"""
+        from .ops import slice_pha
+        return slice_pha(self, emin=emin, emax=emax, ch_lo=ch_lo, ch_hi=ch_hi)
+
+    def rebin(self, factor: int) -> 'PhaData':
+        """道聚合（每 factor 个道合并）。委托到 ops.rebin_pha。"""
+        from .ops import rebin_pha
+        return rebin_pha(self, factor=factor)
 
 @dataclass(slots=True)
 class LightcurveData(OgipTimeSeriesBase):
@@ -417,6 +497,21 @@ class LightcurveData(OgipTimeSeriesBase):
     # 若可从区域扩展推断（如 WXT 的 REG00101），记录单个区域描述
     region: Optional[RegionArea] = None
 
+    def plot(self, **kwargs):
+        """委托到 plot.plot_lightcurve；支持 ax/T0/multiband 等参数。"""
+        from .plot import plot_lightcurve
+        return plot_lightcurve(self, **kwargs)
+
+    def slice(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'LightcurveData':
+        """按时间范围筛选光变曲线，返回新实例。委托到 ops.slice_lightcurve。"""
+        from .ops import slice_lightcurve
+        return slice_lightcurve(self, tmin=tmin, tmax=tmax)
+
+    def rebin(self, binsize: float, method: Literal['sum', 'mean'] = 'sum') -> 'LightcurveData':
+        """时间重采样。委托到 ops.rebin_lightcurve。"""
+        from .ops import rebin_lightcurve
+        return rebin_lightcurve(self, binsize=binsize, method=method)
+
 @dataclass(slots=True)
 class EventData(OgipTimeSeriesBase):
     """事件列表数据
@@ -457,6 +552,55 @@ class EventData(OgipTimeSeriesBase):
         if self.gti_start is None or self.gti_stop is None:
             return None
         return float(np.sum(self.gti_stop - self.gti_start))
+
+    def plot(self, ax: Optional[Any] = None, *, bin_size: Optional[float] = None, max_bins: int = 200, yscale: str = 'linear', title: Optional[str] = None, **kwargs):
+        """简单事件时间分布绘图。
+
+        - bin_size: 指定时间分辨率；若为 None 自动使用 (tmax-tmin)/min(max_bins, N//5)
+        - max_bins: 自动模式时的最大 bin 数
+        - yscale: y 轴尺度（linear/log）
+        - kwargs: 传给 matplotlib.bar
+        """
+        import matplotlib.pyplot as _plt
+        ax = ax or _plt.gca()
+        assert ax is not None
+        t = np.asarray(self.time, float)
+        if t.size == 0:
+            ax.text(0.5, 0.5, 'No events', transform=ax.transAxes, ha='center')
+            return ax
+        tmin, tmax = float(t.min()), float(t.max())
+        if bin_size is None:
+            span = tmax - tmin
+            est_bins = min(max_bins, max(1, int(t.size // 5)))
+            bin_size = span / est_bins if span > 0 else 1.0
+        nbins = max(1, int(np.ceil((tmax - tmin) / bin_size)))
+        edges = tmin + np.arange(nbins + 1) * bin_size
+        hist, _ = np.histogram(t, bins=edges)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        kwargs.setdefault('alpha', 0.7)
+        ax.bar(centers, hist, width=bin_size * 0.9, align='center', **kwargs)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Counts per bin')
+        ax.set_yscale(yscale)
+        if title is None:
+            title = Path(str(getattr(self, 'path', ''))).name or 'EVENTS'
+        ax.set_title(title)
+        ax.grid(alpha=0.3, ls='--')
+        # 可选叠加 GTI 区域阴影
+        if self.gti_start is not None and self.gti_stop is not None:
+            for s, e in zip(self.gti_start, self.gti_stop):
+                ax.axvspan(float(s), float(e), color='orange', alpha=0.1)
+        return ax
+
+    def slice(self, tmin: Optional[float] = None, tmax: Optional[float] = None, *, pi_min: Optional[int] = None, pi_max: Optional[int] = None, ch_min: Optional[int] = None, ch_max: Optional[int] = None) -> 'EventData':
+        """按时间和/或能量筛选事件，返回新实例。委托到 ops.slice_events。"""
+        from .ops import slice_events
+        return slice_events(self, tmin=tmin, tmax=tmax, pi_min=pi_min, pi_max=pi_max, ch_min=ch_min, ch_max=ch_max)
+
+    def rebin(self, binsize: float, *, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'LightcurveData':
+        """从事件生成分 bin 光变曲线。委托到 ops.rebin_events_to_lightcurve。"""
+        from .ops import rebin_events_to_lightcurve
+        return rebin_events_to_lightcurve(self, binsize=binsize, tmin=tmin, tmax=tmax)
 
 
 # Unified data union
@@ -879,11 +1023,10 @@ class OgipLightcurveReader:
             dt = float(np.median(np.diff(time))) if time.size >= 2 else None
             exposure_val = header.get("EXPOSURE", header.get("EXPTIME", np.nan))
             exposure = float(exposure_val) if np.isfinite(exposure_val) else None
-            # WXT 专用：若存在 REG00101 扩展，解析区域面积信息
+            # 自动推断区域信息：若存在 REG00101 扩展则解析，无论 INSTRUME
             region = None
             try:
-                if (meta.instrume or "").upper() == "WXT":
-                    region = _load_wxt_regions(h)
+                region = _load_regions(h)
             except Exception:
                 # 保守失败，不中断读取
                 region = None
@@ -903,7 +1046,7 @@ class OgipLightcurveReader:
         return self._data.validate()
 
 
-def _load_wxt_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
+def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
     """解析 WXT 光变曲线 REG00101 中的区域面积信息。
 
     只返回单个 `RegionArea`（优先 src，其次 bkg，再次首个条目），
