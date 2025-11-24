@@ -55,7 +55,11 @@ class FitResult:
     covariance : np.ndarray | None
         协方差矩阵（若可用）
     errors : np.ndarray | None
-        参数 1-sigma 误差
+        参数 1-sigma 误差（对称情况）
+    errors_lower : np.ndarray | None
+        参数下误差（非对称情况）
+    errors_upper : np.ndarray | None
+        参数上误差（非对称情况）
     chisq : float
         卡方值
     dof : int
@@ -76,6 +80,8 @@ class FitResult:
         模型预测值（对应 time）
     residuals : np.ndarray
         残差 (data - fitted_curve)
+    model : Callable
+        模型函数引用，签名为 model(t, *params)
     
     English
     -------
@@ -87,16 +93,19 @@ class FitResult:
     param_names: tuple[str, ...]
     covariance: Optional[np.ndarray]
     errors: Optional[np.ndarray]
-    chisq: float
-    dof: int
-    reduced_chisq: float
-    success: bool
-    message: str
-    time: np.ndarray
-    data: np.ndarray
-    data_err: Optional[np.ndarray]
-    fitted_curve: np.ndarray
-    residuals: np.ndarray
+    errors_lower: Optional[np.ndarray] = None
+    errors_upper: Optional[np.ndarray] = None
+    chisq: float = 0.0
+    dof: int = 0
+    reduced_chisq: float = 0.0
+    success: bool = False
+    message: str = ""
+    time: Optional[np.ndarray] = None
+    data: Optional[np.ndarray] = None
+    data_err: Optional[np.ndarray] = None
+    fitted_curve: Optional[np.ndarray] = None
+    residuals: Optional[np.ndarray] = None
+    model: Optional[Callable] = None
     
     def summary(self) -> str:
         """返回拟合结果的文本摘要"""
@@ -112,25 +121,44 @@ class FitResult:
         ]
         for i, name in enumerate(self.param_names):
             val = self.params[i]
-            err_str = f" ± {self.errors[i]:.4g}" if self.errors is not None else ""
+            if self.errors_lower is not None and self.errors_upper is not None:
+                # 显示非对称误差
+                err_str = f" +{self.errors_upper[i]:.4g} -{self.errors_lower[i]:.4g}"
+            elif self.errors is not None:
+                # 显示对称误差
+                err_str = f" ± {self.errors[i]:.4g}"
+            else:
+                err_str = ""
             lines.append(f"  {name}: {val:.4g}{err_str}")
         return "\n".join(lines)
     
-    def evaluate(self, time: np.ndarray, model_func: Callable) -> np.ndarray:
+    def evaluate(self, time: np.ndarray | float, model_func: Optional[Callable] = None) -> np.ndarray | float:
         """在给定时间点评估拟合模型
         
         参数
         ----
-        time : array
+        time : array or float
             时间点
-        model_func : callable
+        model_func : callable, optional
             模型函数，签名为 model_func(t, *params)
+            如果为 None，使用 self.model
         
         返回
         ----
-        array : 模型预测值
+        array or float : 模型预测值
         """
-        return model_func(time, *self.params)
+        func = model_func if model_func is not None else self.model
+        if func is None:
+            raise ValueError("No model function available. Provide model_func or set self.model.")
+        
+        # 确保输入是数组（模型函数通常期望数组）
+        time_array = np.atleast_1d(time)
+        result = func(time_array, *self.params)
+        
+        # 如果输入是标量，返回标量
+        if np.isscalar(time):
+            return float(result[0]) if result.size > 0 else float(result)
+        return result
 
 
 # ---------- 内置模型函数 ----------
@@ -484,9 +512,12 @@ class LightcurveFitter:
         powerlaw_models = {"powerlaw", "broken_powerlaw", "double_broken_powerlaw", "smoothly_broken_powerlaw"}
         use_log_fitting = model_name in powerlaw_models
         
+        errors_lower = None
+        errors_upper = None
+        
         if use_log_fitting:
             # 对数空间拟合
-            popt, pcov, success, message = self._fit_powerlaw_logspace(
+            popt, pcov, success, message, errors_lower, errors_upper = self._fit_powerlaw_logspace(
                 model_name, model_func, pnames, p0, sigma, absolute_sigma, bounds, **kwargs
             )
         else:
@@ -539,6 +570,8 @@ class LightcurveFitter:
             param_names=pnames,
             covariance=pcov,
             errors=errors,
+            errors_lower=errors_lower,
+            errors_upper=errors_upper,
             chisq=chisq,
             dof=dof,
             reduced_chisq=reduced_chisq,
@@ -549,6 +582,7 @@ class LightcurveFitter:
             data_err=sigma.copy() if sigma is not None else None,
             fitted_curve=fitted,
             residuals=residuals,
+            model=model_func,
         )
     
     def _guess_initial_params(self, model_name: str, param_names: tuple[str, ...]) -> np.ndarray:
@@ -596,7 +630,7 @@ class LightcurveFitter:
         absolute_sigma: bool,
         bounds: Optional[tuple],
         **kwargs,
-    ) -> tuple[np.ndarray, Optional[np.ndarray], bool, str]:
+    ) -> tuple[np.ndarray, Optional[np.ndarray], bool, str, Optional[np.ndarray], Optional[np.ndarray]]:
         """在对数空间拟合幂律模型（内部线性拟合）
         
         参数
@@ -641,7 +675,7 @@ class LightcurveFitter:
             # log(F) = log(norm) + index * log(t/t0)
             #        = [log(norm) - index*log(t0)] + index * log(t)
             #        = a + b * log(t)
-            def log_model(log_t, a, b):
+            def log_model_pl(log_t, a, b):
                 return a + b * log_t
             
             # 转换初值: p0 = [norm, index, t0]
@@ -658,7 +692,7 @@ class LightcurveFitter:
             
         elif model_name == "broken_powerlaw":
             # 分段线性模型
-            def log_model(log_t, a, b1, b2, log_tb):
+            def log_model_bpl(log_t, a, b1, b2, log_tb):
                 result = np.zeros_like(log_t)
                 mask1 = log_t < log_tb
                 mask2 = log_t >= log_tb
@@ -680,7 +714,7 @@ class LightcurveFitter:
             
         elif model_name == "double_broken_powerlaw":
             # 三段线性模型
-            def log_model(log_t, a, b1, b2, b3, log_tb1, log_tb2):
+            def log_model_dbpl(log_t, a, b1, b2, b3, log_tb1, log_tb2):
                 result = np.zeros_like(log_t)
                 mask1 = log_t < log_tb1
                 mask2 = (log_t >= log_tb1) & (log_t < log_tb2)
@@ -715,17 +749,20 @@ class LightcurveFitter:
                     p0=p0, sigma=sigma, absolute_sigma=absolute_sigma,
                     bounds=bounds_to_use, **kwargs
                 )
-                return popt, pcov, True, "Fit converged (standard fitting)"
+                return popt, pcov, True, "Fit converged (standard fitting)", None, None
             except Exception as e:
                 warnings.warn(f"Fit failed: {e}")
-                return p0, None, False, str(e)
+                return p0, None, False, str(e), None, None
         else:
             raise ValueError(f"Unknown powerlaw model: {model_name}")
         
         # 执行对数空间拟合
         try:
             log_popt, log_pcov = curve_fit(
-                log_model, log_t, log_y,
+                log_model_pl if model_name == "powerlaw" else (
+                    log_model_bpl if model_name == "broken_powerlaw" else log_model_dbpl
+                ),
+                log_t, log_y,
                 p0=log_p0, sigma=log_sigma, absolute_sigma=absolute_sigma,
                 bounds=log_bounds, **kwargs
             )
@@ -735,6 +772,21 @@ class LightcurveFitter:
                 # log_popt = [a, b] -> [norm, index, t0]
                 # 固定 t0=1 简化：norm = 10^a, index = b
                 popt = np.array([10**log_popt[0], log_popt[1], 1.0])
+                
+                # 计算非对称误差
+                log_errors = np.sqrt(np.diag(log_pcov))  # 对数空间的对称误差
+                
+                # norm参数: 从 10^(a ± σ_a) 得到非对称误差
+                norm_center = 10**log_popt[0]
+                norm_upper = 10**(log_popt[0] + log_errors[0]) - norm_center
+                norm_lower = norm_center - 10**(log_popt[0] - log_errors[0])
+                
+                # index参数: 对数空间为线性,误差对称
+                index_err = log_errors[1]
+                
+                # t0固定为1,误差为0
+                errors_lower = np.array([norm_lower, index_err, 0.0])
+                errors_upper = np.array([norm_upper, index_err, 0.0])
                 
                 # 扩展协方差矩阵以匹配3参数
                 # 对数空间参数 [a, b] 对应原空间 [norm, index]
@@ -749,6 +801,26 @@ class LightcurveFitter:
             elif model_name == "broken_powerlaw":
                 # log_popt = [a, b1, b2, log_tb] -> [norm, index1, index2, t_break]
                 popt = np.array([10**log_popt[0], log_popt[1], log_popt[2], 10**log_popt[3]])
+                
+                # 计算非对称误差
+                log_errors = np.sqrt(np.diag(log_pcov))
+                
+                # norm参数: 从 10^(a ± σ_a) 得到非对称误差
+                norm_center = 10**log_popt[0]
+                norm_upper = 10**(log_popt[0] + log_errors[0]) - norm_center
+                norm_lower = norm_center - 10**(log_popt[0] - log_errors[0])
+                
+                # index1, index2: 线性参数,误差对称
+                index1_err = log_errors[1]
+                index2_err = log_errors[2]
+                
+                # t_break: 从 10^(log_tb ± σ_log_tb) 得到非对称误差
+                tb_center = 10**log_popt[3]
+                tb_upper = 10**(log_popt[3] + log_errors[3]) - tb_center
+                tb_lower = tb_center - 10**(log_popt[3] - log_errors[3])
+                
+                errors_lower = np.array([norm_lower, index1_err, index2_err, tb_lower])
+                errors_upper = np.array([norm_upper, index1_err, index2_err, tb_upper])
                 
                 # 扩展协方差矩阵
                 pcov_expanded = np.zeros((4, 4))
@@ -768,6 +840,33 @@ class LightcurveFitter:
                     10**log_popt[0], log_popt[1], log_popt[2], log_popt[3],
                     10**log_popt[4], 10**log_popt[5]
                 ])
+                
+                # 计算非对称误差
+                log_errors = np.sqrt(np.diag(log_pcov))
+                
+                # norm参数: 从 10^(a ± σ_a) 得到非对称误差
+                norm_center = 10**log_popt[0]
+                norm_upper = 10**(log_popt[0] + log_errors[0]) - norm_center
+                norm_lower = norm_center - 10**(log_popt[0] - log_errors[0])
+                
+                # index参数: 线性,误差对称
+                index1_err = log_errors[1]
+                index2_err = log_errors[2]
+                index3_err = log_errors[3]
+                
+                # t_break参数: 从 10^(log_tb ± σ_log_tb) 得到非对称误差
+                tb1_center = 10**log_popt[4]
+                tb1_upper = 10**(log_popt[4] + log_errors[4]) - tb1_center
+                tb1_lower = tb1_center - 10**(log_popt[4] - log_errors[4])
+                
+                tb2_center = 10**log_popt[5]
+                tb2_upper = 10**(log_popt[5] + log_errors[5]) - tb2_center
+                tb2_lower = tb2_center - 10**(log_popt[5] - log_errors[5])
+                
+                errors_lower = np.array([norm_lower, index1_err, index2_err, index3_err, 
+                                         tb1_lower, tb2_lower])
+                errors_upper = np.array([norm_upper, index1_err, index2_err, index3_err,
+                                         tb1_upper, tb2_upper])
                 
                 # 扩展协方差矩阵
                 pcov_expanded = np.zeros((6, 6))
@@ -794,13 +893,17 @@ class LightcurveFitter:
                 )
                 success = True
                 message = "Fit converged (fallback to standard fitting)"
+                errors_lower = None  # 标准拟合不产生非对称误差
+                errors_upper = None
             except Exception as e2:
                 popt = p0
                 pcov = None
                 success = False
                 message = f"Both log-space and standard fitting failed: {e}, {e2}"
+                errors_lower = None
+                errors_upper = None
         
-        return popt, pcov, success, message
+        return popt, pcov, success, message, errors_lower, errors_upper
     
     def plot_fit(
         self,
