@@ -898,19 +898,17 @@ class RedshiftExtrapolator():
 
         if zmin is None:
             zmin = self._z0
-        if zmax is None:
-            # 默认尝试向上 1.0
-            top_limit, _ = self._get_redshift_param_limits()
-            if top_limit is None:
-                top_limit = 10.0
-            zmax = min(zmin + 1.0, top_limit)
 
         # 获取当前可用上限
         top_limit, max_limit = self._get_redshift_param_limits()
         if top_limit is None:
-            top_limit = 10.0
+            print("⚠️ 无法直接从XSPEC读取红移上限，改用目标上限进行外推。")
+            top_limit = self._redshift_limit_target
         if max_limit is None:
             max_limit = top_limit
+
+        if zmax is None:
+            zmax = min(zmin + 1.0, top_limit)
 
         # 保证 zmax 不超过当前的 top_limit
         zmax = min(zmax, top_limit)
@@ -955,14 +953,14 @@ class RedshiftExtrapolator():
         # 情况 B: 该网格内 SNR 全部 >= 目标
         boundary_snr = snr_grid[-1]
         # 如果已经达到当前参数上限且已经扩展过或无法再扩展
-        if abs(z_grid[-1] - top_limit) < 1e-9:
+        if z_grid[-1] >= top_limit - 1e-4:
             # 若 top < 15 且 z≥9 尝试扩展一次
-            if top_limit < 20.0 - 1e-6 and z_grid[-1] >= 9.0:
-                extended = self._extend_redshift_param_limit(20.0)
+            if top_limit < 30.0 - 1e-6 and z_grid[-1] >= 9.0:
+                extended = self._extend_redshift_param_limit(30.0)
                 if extended:
                     new_top, _ = self._get_redshift_param_limits()
                     if new_top is None:
-                        new_top = 20.0
+                        new_top = 30.0
                     if max_expand > 0:
                         return self.find_redshift_for_snr(
                             snr_target=snr_target,
@@ -974,7 +972,7 @@ class RedshiftExtrapolator():
                             max_expand=max_expand-1
                         )
             # 如果已经到 15 或扩展失败
-            if top_limit >= 20.0 - 1e-6:
+            if top_limit >= 30.0 - 1e-6:
                 if boundary_snr >= snr_target:
                     print(f"⚠️ 在最大允许红移 z={top_limit} 处 SNR={boundary_snr:.2f} 仍 ≥ 目标 {snr_target}，返回上限值。")
                     return float(top_limit)
