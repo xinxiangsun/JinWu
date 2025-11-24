@@ -24,6 +24,7 @@ from . import file as file
 from . import heasoft as heasoft
 from . import plot as plot
 from . import time as time
+from . import ops as ops
 from .datasets import *
 # Selected public API re-export from core.file
 from .file import (
@@ -39,6 +40,12 @@ from .file import (
 	# Unified helpers (direct dataclass returning)
 	OgipData, guess_ogip_kind, readfits, read_arf, read_rmf, read_pha, read_lc, read_evt,
 )
+# Operations from core.ops
+from .ops import (
+	slice_lightcurve, rebin_lightcurve,
+	slice_pha, rebin_pha,
+	slice_events, rebin_events_to_lightcurve,
+)
 
 
 
@@ -51,7 +58,7 @@ except PackageNotFoundError:  # pragma: no cover - during editable installs
 
 __all__ = [
 	# Submodules
-	'file', 'heasoft', 'plot', 'time',
+	'file', 'heasoft', 'plot', 'time', 'ops',
 	# Data containers
 	'EnergyBand', 'ChannelBand', 'ArfData', 'RmfData', 'PhaData', 'LightcurveData', 'EventData',
 	# Dataset containers
@@ -64,6 +71,8 @@ __all__ = [
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
 	# Unified helpers
 	'OgipData', 'guess_ogip_kind', 'readfits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
+	# Operations
+	'slice_lightcurve', 'rebin_lightcurve', 'slice_pha', 'rebin_pha', 'slice_events', 'rebin_events_to_lightcurve',
 	# Dataset helper
 	'netdata',
 	# Package meta
