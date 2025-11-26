@@ -48,6 +48,7 @@ class KConfig:
 	- band: (emin, emax) [keV] 能段 | energy band in keV
 	- exposure/back_exposure: 源/背景曝光秒数 | source/background exposure (s)
 	- xspec_abund/xspec_xsect/xspec_cosmo: XSPEC 环境常量 | XSPEC globals
+	- allow_prompting: 是否允许 XSPEC 交互提示 | whether to allow XSPEC prompting
 	"""
 	arf: str
 	rmf: str
@@ -60,6 +61,7 @@ class KConfig:
 	xspec_abund: str
 	xspec_xsect: str
 	xspec_cosmo: str
+	allow_prompting: bool = False
 
 	def key(self) -> str:
 		"""将配置编码为缓存键（SHA256）。
@@ -84,6 +86,7 @@ class KConfig:
 		upd(self.xspec_abund)
 		upd(self.xspec_xsect)
 		upd(self.xspec_cosmo)
+		upd(str(self.allow_prompting))
 		return h.hexdigest()
 
 
@@ -102,12 +105,12 @@ class XspecSession:
 		if not _HAVE_XSPEC:
 			raise RuntimeError("pyxspec is not available; ensure HEASoft/XSPEC is installed and on PYTHONPATH")
 
-	def compute_K(self, cfg: KConfig) -> float:
+	def compute_K(self, cfg: KConfig) -> Tuple[float, float, float]:
 		# 环境设置 | Set XSPEC globals
 		xspec.Xset.abund = cfg.xspec_abund  # type: ignore
 		xspec.Xset.xsect = cfg.xspec_xsect  # type: ignore
 		xspec.Xset.cosmo = cfg.xspec_cosmo  # type: ignore
-		xspec.Xset.allowPrompting = False  # type: ignore
+		xspec.Xset.allowPrompting = cfg.allow_prompting  # type: ignore
 
 		# 清空数据/模型 | Reset data/models
 		AllData.clear()
@@ -161,7 +164,8 @@ class XspecSession:
 
 		if flux <= 0:
 			raise RuntimeError("XSPEC returned non-positive flux; check model and band")
-		return float(rate / flux)
+		K = float(rate / flux)
+		return K, float(rate), float(flux)
 
 
 class XspecKFactory:
@@ -170,12 +174,14 @@ class XspecKFactory:
 
 	- get_K(...): 返回 K，如缓存未命中则调用 XSPEC 计算并存入缓存。
 	  Return K; compute via XSPEC if cache miss, then store.
+	- get_K_with_values(...): 返回 (K, rate, flux) 元组。
+	  Return (K, rate, flux) tuple.
 	- clear(): 清空缓存。
 	  Clear the cache.
 	"""
 
 	def __init__(self) -> None:
-		self._cache: Dict[str, float] = {}
+		self._cache: Dict[str, Tuple[float, float, float]] = {}  # key -> (K, rate, flux)
 		self._session: Optional[XspecSession] = None
 
 	def _ensure_session(self) -> XspecSession:
@@ -197,6 +203,7 @@ class XspecKFactory:
 		xspec_abund: str,
 		xspec_xsect: str,
 		xspec_cosmo: str,
+		allow_prompting: bool = False,
 	) -> float:
 		arf = str(arf)
 		rmf = str(rmf)
@@ -213,14 +220,65 @@ class XspecKFactory:
 			xspec_abund=xspec_abund,
 			xspec_xsect=xspec_xsect,
 			xspec_cosmo=xspec_cosmo,
+			allow_prompting=allow_prompting,
+		)
+		key = cfg.key()
+		if key in self._cache:
+			return self._cache[key][0]  # 只返回 K
+		session = self._ensure_session()
+		K, rate, flux = session.compute_K(cfg)
+		self._cache[key] = (float(K), float(rate), float(flux))
+		return float(K)
+
+	def get_K_with_values(
+		self,
+		*,
+		arf: str | Path,
+		rmf: str | Path,
+		background: Optional[str | Path],
+		model: str,
+		params: Tuple[float, ...],
+		band: Tuple[float, float],
+		exposure: Numeric,
+		back_exposure: Optional[Numeric],
+		xspec_abund: str,
+		xspec_xsect: str,
+		xspec_cosmo: str,
+		allow_prompting: bool = False,
+	) -> Tuple[float, float, float]:
+		"""返回 (K, rate, flux) 元组
+		
+		参数与 get_K 相同
+		
+		返回：
+		- K: rate/flux 转化因子 [cts/(erg/cm²)]
+		- rate: 带内计数率 [cts/s]
+		- flux: 带内能通量 [erg/cm²/s]
+		"""
+		arf = str(arf)
+		rmf = str(rmf)
+		background_str: Optional[str] = None if background is None else str(background)
+		cfg = KConfig(
+			arf=arf,
+			rmf=rmf,
+			background=background_str,
+			model=model,
+			params=params,
+			band=band,
+			exposure=exposure,
+			back_exposure=back_exposure,
+			xspec_abund=xspec_abund,
+			xspec_xsect=xspec_xsect,
+			xspec_cosmo=xspec_cosmo,
+			allow_prompting=allow_prompting,
 		)
 		key = cfg.key()
 		if key in self._cache:
 			return self._cache[key]
 		session = self._ensure_session()
-		K = session.compute_K(cfg)
-		self._cache[key] = float(K)
-		return float(K)
+		K, rate, flux = session.compute_K(cfg)
+		self._cache[key] = (float(K), float(rate), float(flux))
+		return (float(K), float(rate), float(flux))
 
 	def clear(self) -> None:
 		self._cache.clear()

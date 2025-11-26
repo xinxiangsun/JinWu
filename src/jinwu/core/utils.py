@@ -7,22 +7,16 @@ FilePath: /research/jinwu/src/jinwu/core/utils.py
 '''
 import numpy as np
 from jinwu.core.heasoft import HeasoftEnvManager as hem
-import xspec
-
-from pathlib import Path
-import matplotlib.pyplot as plt
-from jinwu.core.file import ArfReader, RmfReader, RspReader
-from astropy import units as u
-from astropy import constants as const
-from IPython.display import display, Math, Latex
-from astropy.cosmology import Planck18 as cosmo
-from functools import lru_cache
 import xspec as xs
 from xspec import FakeitSettings, AllData
+from jinwu.spectrum.specfake import XspecKFactory
+from typing import Any, Union
 import os
 import gzip
 import shutil
-from typing import Any, Union
+from pathlib import Path
+from astropy.cosmology import Planck18 as cosmo
+from astropy import units as u
 
 
 def generate_download_url(isot_time):
@@ -184,6 +178,9 @@ class RedshiftExtrapolator():
         self._redshift_limit_cache: tuple[float, float] | None = None
         self._redshift_limit_target: float = 20.0
 
+        # K工厂用于计算转化因子
+        self._k_factory = XspecKFactory()
+
 
     @property
     def srcnum(self):
@@ -278,14 +275,14 @@ class RedshiftExtrapolator():
             _hem = hem()
             _hem.init_heasoft()
             if _hem.is_heasoft_initialized():
-                xspec.AllData.clear()
-                xspec.AllModels.clear()
-                xspec.Xset.abund = 'wilm'
-                xspec.Xset.xsect = 'vern'
-                xspec.Xset.cosmo = '67.66 0 0.6888463055445441'
-                xspec.Xset.allowPrompting = False
+                xs.AllData.clear()
+                xs.AllModels.clear()
+                xs.Xset.abund = 'wilm'
+                xs.Xset.xsect = 'vern'
+                xs.Xset.cosmo = '67.66 0 0.6888463055445441'
+                xs.Xset.allowPrompting = False
 
-                self._m1 = xspec.Model(self._model)
+                self._m1 = xs.Model(self._model)
                 
             else:
                 raise RuntimeError("HEASoft 环境未初始化")
@@ -330,6 +327,7 @@ class RedshiftExtrapolator():
                     try:
                         self._par_z = getattr(comp_obj, 'Redshift')
                         self._z_base = float(self._par_z.values[0])
+                            
                     except Exception:
                         pass
 
@@ -813,7 +811,7 @@ class RedshiftExtrapolator():
                     background=self._bkg_file
                 )
                 AllData.fakeit(1, fakeit_settings, noWrite=True)
-                spec: Any = xspec.AllData(1)
+                spec: Any = xs.AllData(1)
                 emin, emax = float(band[0]), float(band[1])
                 AllData.notice("all")
                 AllData.ignore(f"**-{emin} {emax}-**")
@@ -827,7 +825,7 @@ class RedshiftExtrapolator():
                 n_on = rate_src_only * self._duration + self._area_ratio * n_off
                 snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
 
-                xspec.AllModels.calcFlux(f"{emin} {emax}")
+                xs.AllModels.calcFlux(f"{emin} {emax}")
                 flux = spec.flux[0]
 
                 rate_list.append(float(rate_on_total))

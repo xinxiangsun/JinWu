@@ -209,7 +209,7 @@ class TriggerDecider:
         *,
         target: float = 7.0,
         t0_mode: Literal["first_nonzero", "first_time"] = "first_nonzero",
-        max_window: Optional[float] = None,
+        max_window: Optional[float] = 1200,
     ) -> Tuple[bool, dict]:
         """
         Grow cumulatively from T0 and search for the first time SNR>=target.

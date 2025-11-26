@@ -18,13 +18,16 @@ Light-curve builder based on observed counts and pyxspec(fakeit)
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, Any, Union
+from typing import Optional, Tuple, Dict, Any, Union, TYPE_CHECKING
 from pathlib import Path
 import json
 
 import numpy as np
 
 from jinwu.spectrum.specfake import XspecKFactory
+
+if TYPE_CHECKING:
+	from jinwu.background.backprior import BackgroundCountsPosterior
 
 # 统一的数值类型别名（兼容 numpy 数值类型）
 # Unified numeric alias (compatible with numpy numeric scalars)
@@ -49,6 +52,7 @@ class XspecConfig:
 	- exposure: 源区曝光秒数 | source exposure (s)
 	- back_exposure: 背景区曝光秒数（None 表示等于 exposure）| background exposure
 	- xspec_abund/xspec_xsect/xspec_cosmo: XSPEC 环境常量 | XSPEC globals
+	- allow_prompting: 是否允许 XSPEC 交互提示 | whether to allow XSPEC prompting
 	"""
 
 	arf: str
@@ -62,6 +66,7 @@ class XspecConfig:
 	xspec_abund: str = 'wilm'
 	xspec_xsect: str = 'vern'
 	xspec_cosmo: str = '67.66 0 0.6888463055445441'
+	allow_prompting: bool = False
 
 
 @dataclass
@@ -234,6 +239,7 @@ def build_fake_from_npz(
 		xspec_abund=cfg_ref.xspec_abund,
 		xspec_xsect=cfg_ref.xspec_xsect,
 		xspec_cosmo=cfg_ref.xspec_cosmo,
+		allow_prompting=cfg_ref.allow_prompting,
 	)
 	flux = rate_in / float(K_ref)
 
@@ -278,6 +284,7 @@ def build_fake_from_npz(
 		xspec_abund=cfg_eff.xspec_abund,
 		xspec_xsect=cfg_eff.xspec_xsect,
 		xspec_cosmo=cfg_eff.xspec_cosmo,
+		allow_prompting=cfg_eff.allow_prompting,
 	)
 	rate_src = np.clip(flux_out * float(K_tgt), a_min=0.0, a_max=None)
 
@@ -362,6 +369,7 @@ def build_fake_on_off_from_npz(
 		xspec_abund=cfg_ref.xspec_abund,
 		xspec_xsect=cfg_ref.xspec_xsect,
 		xspec_cosmo=cfg_ref.xspec_cosmo,
+		allow_prompting=cfg_ref.allow_prompting,
 	)
 	flux = rate_in / float(K_ref)
 
@@ -403,6 +411,7 @@ def build_fake_on_off_from_npz(
 		xspec_abund=cfg_eff.xspec_abund,
 		xspec_xsect=cfg_eff.xspec_xsect,
 		xspec_cosmo=cfg_eff.xspec_cosmo,
+		allow_prompting=cfg_eff.allow_prompting,
 	)
 	rate_signal_on = np.clip(flux_out * float(K_tgt), a_min=0.0, a_max=None)
 
@@ -575,6 +584,157 @@ def load_on_off_lightcurve(
 	)
 
 
+# ----------------------------- 红移外推光变生成 -----------------------------
+
+def generate_redshift_lightcurves(
+	# 归一化光变轮廓
+	time_norm: np.ndarray,  # T/T100，无量纲
+	counts_norm: np.ndarray,  # 计数率 / 平均计数率，无量纲
+	# 原始参数
+	z0: float,
+	t100: float,  # T100持续时间（秒）
+	dt: float,  # 时间分辨率（秒）
+	mean_rate_z0: float,  # 原始红移下的平均计数率（cts/s）
+	K_z0: float,  # K(z0) 转化因子 [cts/(erg/cm²)]
+	# 目标红移
+	z: float,
+	# 背景后验（用于采样背景率）
+	background_posterior: 'BackgroundCountsPosterior',
+	# XSPEC配置
+	cfg: XspecConfig,
+	# 模拟参数
+	n_curves: int = 1000,
+	rng: Optional[np.random.Generator] = None,
+) -> list[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+	"""
+	基于归一化光变轮廓，在给定红移z生成n_curves条模拟光变曲线。
+	
+	物理流程（符合用户需求）：
+	1. 归一化光变轮廓已经提供：(T/T100, 计数率/平均计数率)
+	2. 计算K(z)转化因子（rate/flux），注意：
+	   - cfg.params 已经在 _adjust_params_for_redshift(z) 中调整过
+	   - K(z) 反映了红移 z 处的 norm 和其他参数
+	3. 红移缩放：时间 × (1+z)/(1+z0)，保持轮廓形状
+	4. 计算源信号期望计数率：
+	   rate(z) = counts_norm × mean_rate_z0 × (K(z) / K(z0))
+	   这里：
+	   - counts_norm = flux_norm（无量纲）
+	   - mean_rate_z0 = mean_flux_z0 × K(z0)
+	   - K(z)/K(z0) 是红移缩放因子
+	5. 从背景后验采样背景率（每条曲线采样一次，整条曲线保持恒定）
+	6. 对每条曲线的每个时间bin：
+	   - 源区域 = Poisson(源信号期望 × dt) + Poisson(源区背景期望 × dt)
+	   - 背景区域 = Poisson(背景区背景期望 × dt)
+	
+	参数：
+	- time_norm: 归一化时间轴 T/T100，无量纲数组
+	- counts_norm: 归一化计数率轮廓（相对于平均计数率），无量纲数组
+	- z0: 观测红移
+	- t100: T100持续时间（秒）
+	- dt: 时间分辨率（秒）
+	- mean_rate_z0: 观测红移下的平均计数率（cts/s）
+	- K_z0: K(z0) 转化因子 [cts/(erg/cm²)]
+	- z: 目标红移
+	- background_posterior: 背景后验对象（BackgroundCountsPosterior）
+	- cfg: XSPEC配置对象（包含已调整为红移 z 的 params）
+	- n_curves: 生成曲线数量（默认10000）
+	- rng: 随机数生成器
+	
+	返回：
+	- list of (time, counts_on, counts_off) tuples
+	  * time: 时间数组（秒，相对于某参考点）
+	  * counts_on: 源区域计数（源信号 + 源区背景）
+	  * counts_off: 背景区域计数（仅背景）
+	"""
+	if rng is None:
+		rng = np.random.default_rng()
+	
+	# 导入背景后验类型（避免循环导入）
+	from jinwu.background.backprior import BackgroundCountsPosterior
+	
+	# 1. 计算转化因子 K(z) - 使用XspecKFactory
+	# 使用 get_K_with_values 同时获取 K(z), rate(z), flux(z)
+	K_z, rate_z, flux_z = _K_FACTORY.get_K_with_values(
+		arf=cfg.arf,
+		rmf=cfg.rmf,
+		background=cfg.background,
+		model=cfg.model,
+		params=tuple(cfg.params),
+		band=cfg.band,
+		exposure=cfg.exposure,
+		back_exposure=cfg.back_exposure,
+		xspec_abund=cfg.xspec_abund,
+		xspec_xsect=cfg.xspec_xsect,
+		xspec_cosmo=cfg.xspec_cosmo,
+		allow_prompting=cfg.allow_prompting,
+	)
+	
+	# 2. 红移缩放因子
+	time_scale = (1 + z) / (1 + z0)
+	
+	# 3. 缩放后的时间和源信号期望计数率
+	t_scaled = time_norm * t100 * time_scale
+	
+	# 计算实际的时间间隔（不假设均匀）
+	if len(t_scaled) > 1:
+		dt_array = np.diff(t_scaled)
+		# 为了匹配 counts 的长度，最后一个 bin 使用倒数第二个 dt
+		dt_array = np.append(dt_array, dt_array[-1])
+	else:
+		dt_array = np.array([dt])
+	
+	# 源信号期望计数率：
+	# rate(z) = counts_norm × mean_rate_z0 × (K(z) / K(z0))
+	# 其中：
+	# - counts_norm = flux_norm（无量纲）
+	# - mean_rate_z0 = mean_flux_z0 × K(z0)
+	# 所以：rate(z) = flux_norm × mean_flux_z0 × K(z)
+	source_rate_expected = counts_norm * mean_rate_z0 * rate_z
+	
+	# 4. 从背景后验采样：生成n_curves个背景率样本
+	# 每条曲线用一个背景率样本（对整个光变曲线保持恒定）
+	t_duration = t_scaled[-1] - t_scaled[0]  # 光变曲线总时长
+	
+	# 采样背景区域（OFF region）的总计数，然后转换为率
+	background_off_counts_samples = background_posterior.sample_off(
+		t=t_duration,
+		size=n_curves,
+		rng=rng
+	)
+	background_off_rate_samples = background_off_counts_samples / t_duration
+	
+	# 源区域（ON region）的背景率 = area_ratio × 背景区域的率
+	area_ratio = background_posterior.area_ratio
+	background_on_rate_samples = background_off_rate_samples * area_ratio
+	
+	# 5. 生成n_curves条光变曲线
+	lightcurves = []
+	for i in range(n_curves):
+		# 源区域：源信号 + 背景
+		# 对每个时间bin：
+		# - 源信号计数 ~ Poisson(source_rate_expected × dt_array)
+		# - 源区背景计数 ~ Poisson(background_on_rate × dt_array)
+		signal_counts = rng.poisson(np.clip(source_rate_expected * dt_array, 0, None))
+		background_on_counts = rng.poisson(
+			max(background_on_rate_samples[i], 0.0) * dt_array
+		)
+		counts_on = signal_counts + background_on_counts
+		
+		# 背景区域：只有背景
+		# 背景区背景计数 ~ Poisson(background_off_rate × dt_array)
+		counts_off = rng.poisson(
+			max(background_off_rate_samples[i], 0.0) * dt_array
+		)
+		
+		lightcurves.append((
+			t_scaled.copy(),
+			counts_on.astype(int),
+			counts_off.astype(int)
+		))
+	
+	return lightcurves
+
+
 __all__ = [
 	'XspecConfig',
 	'LCSimResult',
@@ -584,5 +744,6 @@ __all__ = [
     'build_fake_on_off_from_npz',
     'save_on_off_lightcurve',
     'load_on_off_lightcurve',
+    'generate_redshift_lightcurves',
 ]
 
