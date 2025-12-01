@@ -56,14 +56,16 @@ from . import core
 from . import lightcurve
 from . import background
 from . import spectrum
-from . import missions
 from . import response
 from . import timing
 from . import data
+from . import fermi
+from . import ep
+from . import ftools
 from .core import netdata, readfits
 __all__ = [
 	# Subpackages
-	'core', 'lightcurve', 'background', 'spectrum', 'missions', 'response', 'timing', 'data',
+	'core', 'lightcurve', 'background', 'spectrum', 'fermi', 'ep', 'response', 'timing', 'data','ftools',
 	
 	# Core datasets & helpers from jinwu.core
 	'netdata', 'readfits',

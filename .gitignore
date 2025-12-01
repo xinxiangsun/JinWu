@@ -62,4 +62,5 @@ __pycache__/
 */*.pyc
 */recipe/
 
-test/*.ipynb
+test/*
+external_sources/*

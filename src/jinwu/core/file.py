@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload
+from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload, ClassVar
 
 import numpy as np
 from astropy.io import fits
@@ -190,6 +190,8 @@ class OgipMeta:
     # 新增：时间相关元数据
     binsize: Optional[float]
     timezero: Optional[float]
+    trefpos: Optional[str]
+    dateobs: Optional[str]
 @dataclass(slots=True)
 class ArfData(OgipResponseBase):
     """ARF 响应面积数据
@@ -204,7 +206,7 @@ class ArfData(OgipResponseBase):
     English
     - OGIP ARF: energy bin edges (ENERG_LO/HI) and effective area (SPECRESP).
     """
-    kind: Literal['arf']
+    kind: ClassVar[Literal['arf']] = 'arf'
     energ_lo: np.ndarray  # shape (N,)
     energ_hi: np.ndarray  # shape (N,)
     specresp: np.ndarray  # shape (N,), cm^2
@@ -245,6 +247,28 @@ class ArfData(OgipResponseBase):
         ax.grid(alpha=0.3, ls='--')
         return ax
 
+    def rebin(self, factor: int) -> 'ArfData':
+        """Rebin ARF energy bins by integer factor. Delegates to :func:`jinwu.core.ops.rebin_arf`.
+
+        This merges consecutive energy bins in groups of `factor` and returns
+        a new `ArfData` instance.
+        """
+        # Merge consecutive energy bins by integer factor.
+        if factor <= 0:
+            raise ValueError('factor must be > 0')
+        from ..ftools.ftrbnrmf import rebin_arf
+        elo = np.asarray(self.energ_lo, dtype=float)
+        ehi = np.asarray(self.energ_hi, dtype=float)
+        area = np.asarray(self.specresp, dtype=float)
+        n = elo.size
+        # compute new bin edges by grouping consecutive bins
+        groups = [(i, min(i+factor, n)) for i in range(0, n, factor)]
+        new_elo = np.array([elo[s] for s, e in groups], dtype=float)
+        new_ehi = np.array([ehi[e-1] for s, e in groups], dtype=float)
+        new_area = rebin_arf(elo, ehi, area, new_elo, new_ehi)
+        return ArfData(path=self.path, energ_lo=new_elo, energ_hi=new_ehi, specresp=new_area,
+                   header=self.header, meta=self.meta, headers_dump=self.headers_dump)
+
 @dataclass(slots=True)
 class RmfData(OgipResponseBase):
     """RMF 响应矩阵数据（支持稀疏字段与 EBOUNDS）
@@ -260,7 +284,7 @@ class RmfData(OgipResponseBase):
     - Supports OGIP sparse representation and EBOUNDS mapping.
     - Use rebuild_dense() to obtain (N_E, N_C) dense redistribution matrix.
     """
-    kind: Literal['rmf']
+    kind: ClassVar[Literal['rmf']] = 'rmf'
     energ_lo: np.ndarray  # shape (N_E,)
     energ_hi: np.ndarray  # shape (N_E,)
     # OGIP sparse representation
@@ -384,6 +408,32 @@ class RmfData(OgipResponseBase):
         ax.grid(alpha=0.3, ls='--')
         return ax
 
+    def rebin(self, factor: int) -> 'RmfData':
+        """Rebin RMF input energy bins by integer factor. Delegates to :func:`jinwu.core.ops.rebin_rmf`.
+
+        This collapses consecutive energy bins (rows) by `factor` and returns
+        a new `RmfData` instance with aggregated matrix/energy bounds.
+        """
+        if factor <= 0:
+            raise ValueError('factor must be > 0')
+        # Rebin energy rows by integer factor: aggregate consecutive rows and sum
+        # their probability distributions to form new rows.
+        dense = self.rebuild_dense()
+        n_e, n_c = dense.shape
+        groups = [(i, min(i+factor, n_e)) for i in range(0, n_e, factor)]
+        new_rows = []
+        new_elo = []
+        new_ehi = []
+        for s, e in groups:
+            summed = np.sum(dense[s:e, :], axis=0)
+            new_rows.append(summed)
+            new_elo.append(float(self.energ_lo[s]))
+            new_ehi.append(float(self.energ_hi[e-1]))
+        new_matrix = np.vstack(new_rows)
+        return RmfData(path=self.path, energ_lo=np.asarray(new_elo, dtype=float), energ_hi=np.asarray(new_ehi, dtype=float),
+                   n_grp=None, f_chan=None, n_chan=None, matrix=new_matrix, channel=self.channel, e_min=self.e_min, e_max=self.e_max,
+                   header=self.header, meta=self.meta, headers_dump=self.headers_dump)
+
 @dataclass(slots=True)
 class PhaData(OgipSpectrumBase):
     """PHA 光子谱数据
@@ -399,16 +449,18 @@ class PhaData(OgipSpectrumBase):
     English
     - OGIP PHA SPECTRUM with optional EBOUNDS and quality/grouping vectors.
     """
-    kind: Literal['pha']
+    kind: ClassVar[Literal['pha']] = 'pha'
     channels: np.ndarray  # shape (N,)
     counts: np.ndarray    # shape (N,)
-    stat_err: Optional[np.ndarray]
-    exposure: float
-    backscal: Optional[float]
-    areascal: Optional[float]
-    quality: Optional[np.ndarray]
-    grouping: Optional[np.ndarray]
-    ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]  # (CHANNEL, E_MIN, E_MAX)
+    stat_err: Optional[np.ndarray] = None
+    exposure: float = 0.0
+    backscal: Optional[float] = None
+    areascal: Optional[float] = None
+    respfile: Optional[str] = None
+    ancrfile: Optional[str] = None
+    quality: Optional[np.ndarray] = None
+    grouping: Optional[np.ndarray] = None
+    ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None  # (CHANNEL, E_MIN, E_MAX)
     columns: Tuple[str, ...] = ()
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
@@ -444,6 +496,27 @@ class PhaData(OgipSpectrumBase):
         from .ops import rebin_pha
         return rebin_pha(self, factor=factor)
 
+    def grppha(self, *, min_counts: Optional[float] = None, groupfile: Optional[str] = None, rebin: bool = False, outfile: Optional[str] = None, overwrite: bool = False) -> 'PhaData':
+        """Convenience wrapper to run grppha-like grouping on this PhaData.
+
+        Parameters
+        - min_counts: minimum counts per group (greedy)
+        - groupfile: explicit group ranges file
+        - rebin: if True, return a rebinned PhaData (one row per group)
+        - outfile: optional path to write grouped/rebinned PHA
+        - overwrite: whether to overwrite outfile
+
+        Returns
+        - PhaData: grouped or rebinned spectrum
+        """
+        from ..ftools.grppha import grppha as _grppha
+        return _grppha(self, min_counts=min_counts, groupfile=groupfile, rebin=rebin, outfile=outfile, overwrite=overwrite)
+
+    def group_by_min_counts(self, min_counts: float) -> np.ndarray:
+        """Compute grouping array (int per-channel group id) using min_counts."""
+        from ..ftools.grppha import compute_grouping_by_min_counts
+        return compute_grouping_by_min_counts(self.counts, min_counts)
+
 @dataclass(slots=True)
 class LightcurveData(OgipTimeSeriesBase):
     """光变曲线数据
@@ -460,7 +533,7 @@ class LightcurveData(OgipTimeSeriesBase):
     English
     - Light curve table with TIME and RATE/COUNTS.
     """
-    kind: Literal['lc']
+    kind: ClassVar[Literal['lc']] = 'lc'
     time: np.ndarray   # bin left edges or centers
     value: np.ndarray  # RATE or COUNTS
     error: Optional[np.ndarray]
@@ -494,6 +567,10 @@ class LightcurveData(OgipTimeSeriesBase):
         if self.is_rate and self.dt and self.dt > 0:
             return self.value * self.dt
         return None
+    # Per-bin exposure array (seconds). Optional; when present its length equals
+    # the number of bins and each element is the effective exposure within
+    # that bin (useful for GTI-aware resampling and HEASoft-compatible logic).
+    bin_exposure: Optional[np.ndarray] = None
     # 若可从区域扩展推断（如 WXT 的 REG00101），记录单个区域描述
     region: Optional[RegionArea] = None
 
@@ -512,6 +589,7 @@ class LightcurveData(OgipTimeSeriesBase):
         from .ops import rebin_lightcurve
         return rebin_lightcurve(self, binsize=binsize, method=method)
 
+
 @dataclass(slots=True)
 class EventData(OgipTimeSeriesBase):
     """事件列表数据
@@ -525,12 +603,28 @@ class EventData(OgipTimeSeriesBase):
     English
     - Event list with optional PI/CHANNEL and GTI.
     """
-    kind: Literal['evt']
-    time: np.ndarray   # events times (s)
-    pi: Optional[np.ndarray]       # PI or CHANNEL if present
-    channel: Optional[np.ndarray]
-    gti_start: Optional[np.ndarray]
-    gti_stop: Optional[np.ndarray]
+    kind: ClassVar[Literal['evt']] = 'evt'
+    time: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))   # events times (s)
+    pi: Optional[np.ndarray] = None       # PI or CHANNEL if present
+    channel: Optional[np.ndarray] = None
+    x: Optional[np.ndarray] = None
+    y: Optional[np.ndarray] = None
+    gti_start: Optional[np.ndarray] = None
+    gti_stop: Optional[np.ndarray] = None
+    # GTI as list of (start, stop) tuples for convenience
+    gti: Optional[list] = None
+    # 原始列字典（列名 -> ndarray），便于上层直接访问原始表格数据
+    raw_columns: Optional[Dict[str, np.ndarray]] = None
+    # 别名映射：alias -> 原始列名
+    colmap: Optional[Dict[str, Optional[str]]] = None
+    # 若事件表中包含能量列（ENERGY 等），复制到此字段以方便使用
+    energy: Optional[np.ndarray] = None
+    # 若文件/同目录存在 EBOUNDS 表，记录 (CHANNEL, E_MIN, E_MAX)
+    ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None
+    # 原始头、OGIP 元数据与完整头 dump
+    header: Dict[str, Any] = field(default_factory=dict)
+    meta: Optional[OgipMeta] = None
+    headers_dump: Optional[FitsHeaderDump] = None
     columns: Tuple[str, ...] = ()
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
@@ -552,6 +646,77 @@ class EventData(OgipTimeSeriesBase):
         if self.gti_start is None or self.gti_stop is None:
             return None
         return float(np.sum(self.gti_stop - self.gti_start))
+
+    def copilotget_energy(self, rmf: Optional[RmfData] = None) -> Optional[np.ndarray]:
+        """返回事件能量 (keV)。
+
+        - 若事件表中已包含 `energy` 字段则直接返回；
+        - 若仅有 PI/CHANNEL 且提供 RMF/EBOUNDS，则可在外部实现转换；
+        - 当前实现为占位：若 `energy` 缺失且 no rmf 则返回 None。
+        """
+        if getattr(self, 'energy', None) is not None:
+            return self.energy
+        # Try using provided RMF/RSP (preferred) — attempt RMF-based posterior mapping first
+        if rmf is not None:
+            try:
+                # Obtain dense matrix and energy bin centers from RmfData-like object
+                if hasattr(rmf, 'dense_matrix'):
+                    dm = np.asarray(rmf.dense_matrix)
+                else:
+                    dm = np.asarray(rmf.rebuild_dense())
+                # energy bin centers: prefer energ_lo/energ_hi
+                if getattr(rmf, 'energ_lo', None) is not None and getattr(rmf, 'energ_hi', None) is not None:
+                    e_centers = 0.5 * (np.asarray(rmf.energ_lo) + np.asarray(rmf.energ_hi))
+                elif getattr(rmf, 'e_min', None) is not None and getattr(rmf, 'e_max', None) is not None:
+                    e_centers = 0.5 * (np.asarray(rmf.e_min) + np.asarray(rmf.e_max))
+                else:
+                    e_centers = None
+
+                # normalize orientation: dm may be (N_E, N_C) or (N_C, N_E)
+                if dm.ndim == 2:
+                    if e_centers is not None and dm.shape[0] == e_centers.size and dm.shape[1] != e_centers.size:
+                        # (N_E, N_C) -> transpose to (N_C, N_E)
+                        dm_t = dm.T
+                    else:
+                        # assume rows are channels
+                        dm_t = dm
+                else:
+                    dm_t = np.asarray(dm)
+
+                # choose event channel/PI
+                if getattr(self, 'channel', None) is not None:
+                    ch_ev = np.asarray(self.channel).astype(int)
+                elif getattr(self, 'pi', None) is not None:
+                    ch_ev = np.asarray(self.pi).astype(int)
+                else:
+                    ch_ev = None
+
+                if (ch_ev is not None) and (dm_t is not None) and (e_centers is not None):
+                    # Lazy import of mapping implementation
+                    from ..ftools.rmf_mapping import map_channels_to_energy
+
+                    mapped = map_channels_to_energy(dm_t, e_centers, ch_ev, method='expected')
+                    self.energy = np.asarray(mapped, dtype=float)
+                    return self.energy
+            except Exception:
+                # Fall back to simpler EBOUNDS mapping below on any failure
+                pass
+        # Next, try EBOUNDS found in the same file (stored on EventData.ebounds by reader)
+        if getattr(self, 'ebounds', None) is not None:
+            ch, e_lo, e_hi = self.ebounds
+            emid = 0.5 * (np.asarray(e_lo) + np.asarray(e_hi))
+            if getattr(self, 'channel', None) is not None:
+                ch_ev = np.asarray(self.channel)
+            elif getattr(self, 'pi', None) is not None:
+                ch_ev = np.asarray(self.pi)
+            else:
+                return None
+            cmap = {int(c): float(e) for c, e in zip(np.asarray(ch, int), emid)}
+            mapped = np.array([cmap.get(int(cc), np.nan) for cc in ch_ev], dtype=float)
+            self.energy = mapped
+            return self.energy
+        # No conversion available
+        return None
 
     def plot(self, ax: Optional[Any] = None, *, bin_size: Optional[float] = None, max_bins: int = 200, yscale: str = 'linear', title: Optional[str] = None, **kwargs):
         """简单事件时间分布绘图。
@@ -601,6 +766,215 @@ class EventData(OgipTimeSeriesBase):
         """从事件生成分 bin 光变曲线。委托到 ops.rebin_events_to_lightcurve。"""
         from .ops import rebin_events_to_lightcurve
         return rebin_events_to_lightcurve(self, binsize=binsize, tmin=tmin, tmax=tmax)
+
+    # Convenience wrappers delegating to xselect helpers
+    def filter_time(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'EventData':
+        from . import xselect
+        return xselect.filter_time(self, tmin=tmin, tmax=tmax)
+
+    def filter_region(self, region) -> 'EventData':
+        from . import xselect
+        return xselect.filter_region(self, region)
+
+    def extract_spectrum(self, out_bins=None, **kwargs) -> PhaData:
+        from . import xselect
+        return xselect.extract_spectrum(self, out_bins=out_bins, **kwargs)
+
+    def extract_curve(self, binsize: float, **kwargs) -> 'LightcurveData':
+        from . import xselect
+        return xselect.extract_curve(self, binsize=binsize, **kwargs)
+
+    def extract_image(self, xbins: int | np.ndarray, ybins: int | np.ndarray, **kwargs):
+        from . import xselect
+        return xselect.extract_image(self, xbins=xbins, ybins=ybins, **kwargs)
+
+    def save(self, outpath: str | Path, kind: str = 'evt', overwrite: bool = False, **kwargs) -> Path:
+        """Save EventData or derived products.
+
+        kind: 'evt' (save events as a table), 'lc' (extract+save lightcurve), 'pha' (extract+save pha), 'img' (extract+save image)
+        The kwargs are forwarded to the corresponding xselect writer/extractor.
+        """
+        outp = Path(outpath)
+        if kind == 'evt':
+            # Write events to FITS table while preserving original columns and HDU headers when possible.
+            from astropy.table import Table
+            # Prefer writing original raw_columns if available to preserve all original columns
+            if getattr(self, 'raw_columns', None):
+                try:
+                    t = Table(self.raw_columns)
+                except Exception:
+                    # fallback to building minimal table
+                    cols = {'TIME': self.time}
+                    if getattr(self, 'x', None) is not None:
+                        cols['X'] = getattr(self, 'x')
+                    if getattr(self, 'y', None) is not None:
+                        cols['Y'] = getattr(self, 'y')
+                    if getattr(self, 'energy', None) is not None:
+                        cols['ENERGY'] = getattr(self, 'energy')
+                    t = Table(cols)
+            else:
+                cols = {'TIME': self.time}
+                if getattr(self, 'x', None) is not None:
+                    cols['X'] = getattr(self, 'x')
+                if getattr(self, 'y', None) is not None:
+                    cols['Y'] = getattr(self, 'y')
+                if getattr(self, 'energy', None) is not None:
+                    cols['ENERGY'] = getattr(self, 'energy')
+                t = Table(cols)
+
+            # Write table to file first, then update headers to preserve original header blocks
+            t.write(outp, format='fits', overwrite=overwrite)
+            try:
+                # Re-open and patch primary + event HDU headers from stored dumps if present
+                with fits.open(outp, mode='update') as hdul:
+                    # primary header
+                    if getattr(self, 'headers_dump', None) and getattr(self.headers_dump, 'primary', None):
+                        for k, v in (self.headers_dump.primary or {}).items():
+                            try:
+                                hdul[0].header[k] = v
+                            except Exception:
+                                continue
+                    # event/table header: use self.header if present
+                    if getattr(self, 'header', None) and len(hdul) > 1:
+                        for k, v in (self.header or {}).items():
+                            # avoid overwriting structural keywords created by astropy that are required
+                            if k in ('TFIELDS', 'TTYPE1', 'TFORM1', 'XTENSION', 'BITPIX', 'NAXIS'):
+                                continue
+                            try:
+                                hdul[1].header[k] = v
+                            except Exception:
+                                continue
+                    hdul.flush()
+            except Exception:
+                # best-effort: if header patching fails, still return the written path
+                pass
+            return outp
+        elif kind == 'lc':
+            lc = self.extract_curve(**kwargs)
+            from . import xselect
+            return xselect.write_curve(lc, outp, overwrite=overwrite)
+        elif kind == 'pha':
+            pha = self.extract_spectrum(**kwargs)
+            from . import xselect
+            return xselect.write_pha(pha, outp, overwrite=overwrite)
+        elif kind == 'img':
+            img, xedges, yedges = self.extract_image(**kwargs)
+            from . import xselect
+            return xselect.write_image(img, xedges, yedges, outp, overwrite=overwrite)
+        else:
+            raise ValueError('unknown kind: ' + str(kind))
+
+        
+
+    def clear_region(self, *, use_original: bool = True) -> 'EventData':
+        """Return EventData with any REGION filtering removed, preserving time/energy filters when possible.
+
+        Behavior:
+        - If `use_original` and `self._original_events` exists, use it as the source;
+        - Else if `self.path` exists, re-read the file with `read_evt(self.path)`.
+        - Re-apply time and energy filters inferred from this object (so REGION is cleared,
+            but TIME/ENERGY constraints are preserved).
+        - If neither original nor path is available, raises ValueError.
+        """
+        # Determine source
+        src = None
+        if use_original and getattr(self, '_original_events', None) is not None:
+            src = getattr(self, '_original_events')
+        elif getattr(self, 'path', None) is not None:
+            src = read_evt(self.path)
+        else:
+            raise ValueError('No original events available to clear region')
+
+        # infer time window
+        tmin = None
+        tmax = None
+        if getattr(self, 'time', None) is not None and getattr(self, 'time', None).size:
+            t = np.asarray(self.time, dtype=float)
+            tmin = float(t.min())
+            tmax = float(t.max())
+
+        # infer energy/pichannel window
+        pi_min = None
+        pi_max = None
+        if getattr(self, 'pi', None) is not None:
+            arr = np.asarray(self.pi, dtype=int)
+            if arr.size:
+                pi_min = int(arr.min())
+                pi_max = int(arr.max())
+        elif getattr(self, 'channel', None) is not None:
+            arr = np.asarray(self.channel, dtype=int)
+            if arr.size:
+                pi_min = int(arr.min())
+                pi_max = int(arr.max())
+
+        # lazy import to avoid circular imports
+        from . import xselect as _xsel
+        return _xsel.select_events(src, tmin=tmin, tmax=tmax, pi_min=pi_min, pi_max=pi_max)
+
+    def clear_time(self, *, use_original: bool = True) -> 'EventData':
+        """Return EventData with TIME filtering removed, preserving region/energy when possible.
+
+        Note: EventData does not track an explicit region; therefore this method
+        will preserve energy filters (PI/CHANNEL) when available but cannot
+        re-apply a region unless the original EventData stored in `_original_events`
+        had region information applied by a session. In that case the original
+        source will be used and the region preserved via `select_events`.
+        """
+        src = None
+        if use_original and getattr(self, '_original_events', None) is not None:
+            src = getattr(self, '_original_events')
+        elif getattr(self, 'path', None) is not None:
+            src = read_evt(self.path)
+        else:
+            raise ValueError('No original events available to clear time')
+
+        # infer energy/pichannel window
+        pi_min = None
+        pi_max = None
+        if getattr(self, 'pi', None) is not None:
+            arr = np.asarray(self.pi, dtype=int)
+            if arr.size:
+                pi_min = int(arr.min())
+                pi_max = int(arr.max())
+        elif getattr(self, 'channel', None) is not None:
+            arr = np.asarray(self.channel, dtype=int)
+            if arr.size:
+                pi_min = int(arr.min())
+                pi_max = int(arr.max())
+
+        from . import xselect as _xsel
+        # We cannot infer region here, so pass region=None; select_events will apply only energy
+        return _xsel.select_events(src, region=None, pi_min=pi_min, pi_max=pi_max)
+
+    def clear_energy(self, *, use_original: bool = True) -> 'EventData':
+        """Return EventData with ENERGY/PI filtering removed, preserving time/region when possible.
+
+        Behavior is symmetric to clear_region/clear_time: time window inferred
+        from this object is preserved; region cannot be inferred unless
+        `_original_events` stores it.
+        """
+        src = None
+        if use_original and getattr(self, '_original_events', None) is not None:
+            src = getattr(self, '_original_events')
+        elif getattr(self, 'path', None) is not None:
+            src = read_evt(self.path)
+        else:
+            raise ValueError('No original events available to clear energy')
+
+        # infer time window
+        tmin = None
+        tmax = None
+        if getattr(self, 'time', None) is not None and getattr(self, 'time', None).size:
+            t = np.asarray(self.time, dtype=float)
+            tmin = float(t.min())
+            tmax = float(t.max())
+
+        from . import xselect as _xsel
+        return _xsel.select_events(src, tmin=tmin, tmax=tmax, region=None)
+
+    def clear_all(self, *, use_original: bool = True) -> 'EventData':
+        """Return unfiltered full EventData (alias for clear())."""
+        return self.clear(use_original=use_original)
 
 
 # Unified data union
@@ -710,6 +1084,17 @@ def _build_meta(hdul: fits.HDUList, prefer_header: Optional[Dict[str, Any]]) -> 
         timezero = float(timezero_val) if timezero_val is not None else None
     except Exception:
         timezero = None
+    # 时间参考位置（TREFPOS）与观测起始日期（DATE-OBS）——FITS 4.0 推荐项
+    trefpos_val = _first_non_empty(["TREFPOS", "TREFDIR"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    try:
+        trefpos = str(trefpos_val) if trefpos_val is not None else None
+    except Exception:
+        trefpos = None
+    dateobs_val = _first_non_empty(["DATE-OBS", "DATE_OBS"], *(hdr for hdr in [prefer_header, primary] + other_ext_headers if hdr))
+    try:
+        dateobs = str(dateobs_val) if dateobs_val is not None else None
+    except Exception:
+        dateobs = None
     return OgipMeta(
         telescop=str(telescop) if telescop is not None else None,
         instrume=str(instrume) if instrume is not None else None,
@@ -723,6 +1108,8 @@ def _build_meta(hdul: fits.HDUList, prefer_header: Optional[Dict[str, Any]]) -> 
         obs_id=str(obs_id) if obs_id is not None else None,
         binsize=binsize,
         timezero=timezero,
+        trefpos=trefpos,
+        dateobs=dateobs,
     )
 
 def band_from_arf_bins(arf_path: str | Path, bin_lo: int = 81, bin_hi: int = 780) -> EnergyBand:
@@ -786,8 +1173,21 @@ class OgipArfReader:
             header = dict(cast(Any, hd.header))
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
+
+            # If EBOUNDS extension present in file, extract and attach to event
+            ebounds = None
+            if 'EBOUNDS' in h:
+                try:
+                    de = cast(Any, h['EBOUNDS']).data
+                    ebounds = (
+                        np.asarray(de['CHANNEL'], int),
+                        np.asarray(de['E_MIN'], float),
+                        np.asarray(de['E_MAX'], float),
+                    )
+                except Exception:
+                    ebounds = None
         self._data = ArfData(
-            kind='arf', path=self.path,
+            path=self.path,
             energ_lo=energ_lo, energ_hi=energ_hi, specresp=specresp,
             header=header, meta=meta, headers_dump=headers_dump,
         )
@@ -846,7 +1246,6 @@ class OgipRmfReader:
                 e_max = np.asarray(de["E_MAX"], float)
 
         self._data = RmfData(
-            kind='rmf',
             path=self.path,
             energ_lo=energ_lo,
             energ_hi=energ_hi,
@@ -916,10 +1315,26 @@ class OgipPhaReader:
             header = dict(header_map)
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
+        # RESPFILE / ANCRFILE may be present in the SPECTRUM header; normalize to str or None
+        respfile = None
+        ancrfile = None
+        try:
+            if 'RESPFILE' in header and header.get('RESPFILE') not in (None, '', ' '):
+                respfile = str(header.get('RESPFILE'))
+        except Exception:
+            respfile = None
+        try:
+            if 'ANCRFILE' in header and header.get('ANCRFILE') not in (None, '', ' '):
+                ancrfile = str(header.get('ANCRFILE'))
+        except Exception:
+            ancrfile = None
+
         self._data = PhaData(
-            kind='pha', path=self.path,
+            path=self.path,
             channels=channels, counts=counts, stat_err=stat_err,
             exposure=exposure, backscal=backscal, areascal=areascal,
+            respfile=respfile,
+            ancrfile=ancrfile,
             quality=quality, grouping=grouping, ebounds=ebounds,
             header=header, meta=meta, headers_dump=headers_dump,
         )
@@ -1032,9 +1447,9 @@ class OgipLightcurveReader:
                 region = None
 
         self._data = LightcurveData(
-            kind='lc', path=self.path,
+            path=self.path,
             time=time, value=val, error=err, dt=dt, exposure=exposure,
-            is_rate=is_rate, header=header, meta=meta, headers_dump=headers_dump,
+            is_rate=is_rate, bin_exposure=None, header=header, meta=meta, headers_dump=headers_dump,
             region=region,
         )
         return self._data
@@ -1250,25 +1665,99 @@ class OgipEventReader:
             if hevt is None:
                 raise ValueError("No EVENTS-like HDU with TIME column found")
             de = cast(Any, hevt.data)
-            time = np.asarray(de["TIME"], float)
-            pi = np.asarray(de["PI"], int) if "PI" in de.columns.names else None
-            channel = np.asarray(de["CHANNEL"], int) if "CHANNEL" in de.columns.names else None
+            # collect all column names and raw columns as numpy arrays
+            colnames = list(getattr(de, 'columns').names) if getattr(de, 'columns', None) is not None else []
+            raw_columns: Dict[str, np.ndarray] = {}
+            for cn in colnames:
+                try:
+                    raw_columns[cn] = np.asarray(de[cn])
+                except Exception:
+                    # some columns may be ragged; coerce to ndarray of objects
+                    try:
+                        raw_columns[cn] = np.asarray([r[cn] for r in de])
+                    except Exception:
+                        raw_columns[cn] = np.asarray([])
+
+            time = np.asarray(raw_columns.get('TIME') if 'TIME' in raw_columns else de['TIME'], float)
+            pi = np.asarray(raw_columns['PI'], int) if 'PI' in raw_columns else None
+            channel = np.asarray(raw_columns['CHANNEL'], int) if 'CHANNEL' in raw_columns else None
             header = dict(cast(Any, hevt.header))
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
 
-            # GTI
-            gti_start = gti_stop = None
-            if "GTI" in h:
-                hg = cast(Any, h["GTI"]).data
-                gti_start = np.asarray(hg["START"], float)
-                gti_stop = np.asarray(hg["STOP"], float)
+            # Try to read EBOUNDS extension in the same file (if present)
+            ebounds = None
+            try:
+                if 'EBOUNDS' in h:
+                    de = cast(Any, h['EBOUNDS']).data
+                    ebounds = (
+                        np.asarray(de['CHANNEL'], int),
+                        np.asarray(de['E_MIN'], float),
+                        np.asarray(de['E_MAX'], float),
+                    )
+            except Exception:
+                ebounds = None
 
+            # GTI: prefer using OgipTimeSeriesBase.extract_gti helper
+            gti_start = gti_stop = None
+            gti_list = None
+            try:
+                from .ogip import OgipTimeSeriesBase
+                # extract_gti is defined as an instance method but does not use `self`;
+                # call it with `None` as the implicit self so the hdul is received correctly.
+                gti_list = OgipTimeSeriesBase.extract_gti(None, h)
+            except Exception:
+                gti_list = None
+            if gti_list:
+                try:
+                    gti_arr = np.asarray(gti_list, float)
+                    if gti_arr.ndim == 2 and gti_arr.shape[1] == 2:
+                        gti_start = gti_arr[:, 0]
+                        gti_stop = gti_arr[:, 1]
+                except Exception:
+                    gti_start = gti_stop = None
+            # Build alias map for common coordinate and energy column names
+            # case-insensitive lookup
+            u2orig = {cn.upper(): cn for cn in colnames}
+
+            def _find(*cands: str) -> Optional[str]:
+                for c in cands:
+                    if c is None:
+                        continue
+                    uc = c.upper()
+                    if uc in u2orig:
+                        return u2orig[uc]
+                return None
+
+            colmap: Dict[str, Optional[str]] = {}
+            # x/y candidates
+            colmap['x'] = _find('X', 'XRAW', 'RAWX', 'DETX', 'DET_X', 'SKX', 'XDET')
+            colmap['y'] = _find('Y', 'YRAW', 'RAWY', 'DETY', 'DET_Y', 'SKY', 'YDET')
+            # sky coords
+            colmap['ra'] = _find('RA', 'RA_OBJ', 'RAX', 'RA_DEG')
+            colmap['dec'] = _find('DEC', 'DEC_OBJ', 'DECX', 'DEC_DEG')
+            # energy / pha
+            colmap['energy'] = _find('ENERGY', 'E', 'ENERG', 'PHOTON_ENERGY')
+            colmap['pha'] = _find('PHA', 'PI')
+
+            # fill convenient arrays if available (guard against None keys)
+            key_x = colmap.get('x')
+            key_y = colmap.get('y')
+            key_energy = colmap.get('energy')
+            xarr = np.asarray(raw_columns[key_x]) if (key_x is not None and key_x in raw_columns) else None
+            yarr = np.asarray(raw_columns[key_y]) if (key_y is not None and key_y in raw_columns) else None
+            energy = np.asarray(raw_columns[key_energy]) if (key_energy is not None and key_energy in raw_columns) else None
+
+        # ebounds was set inside the fits.open(...) block when available
         self._data = EventData(
-            kind='evt', path=self.path,
+            path=self.path,
             time=time, pi=pi, channel=channel,
-            gti_start=gti_start, gti_stop=gti_stop,
+            x=xarr, y=yarr,
+            gti_start=gti_start, gti_stop=gti_stop, gti=(gti_list if 'gti_list' in locals() else None),
+            raw_columns=raw_columns, colmap=colmap, energy=energy,
+            ebounds=ebounds,
             header=header, meta=meta, headers_dump=headers_dump,
+            columns=tuple(colnames),
         )
         return self._data
 

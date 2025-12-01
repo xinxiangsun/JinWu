@@ -11,7 +11,7 @@ more concrete analysis needs arise.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 import numpy as np
 
@@ -144,13 +144,13 @@ class LightcurveDataset:
     def _apply_mask(self, mask: np.ndarray) -> "LightcurveDataset":
         d = self.data
         new = LightcurveData(
-            kind=d.kind,
             path=d.path,
             time=d.time[mask],
             value=d.value[mask],
             error=d.error[mask] if d.error is not None else None,
             dt=d.dt,
             exposure=d.exposure,
+            bin_exposure=(d.bin_exposure[mask] if (hasattr(d, 'bin_exposure') and d.bin_exposure is not None) else None),
             is_rate=d.is_rate,
             header=d.header,
             meta=d.meta,
@@ -216,13 +216,14 @@ class LightcurveDataset:
             error=err,
             dt=src.dt,
             exposure=src.exposure,
+            bin_exposure=(src.bin_exposure if (hasattr(src, 'bin_exposure') and src.bin_exposure is not None) else None),
             is_rate=src.is_rate,
             header=src.header,
             meta=src.meta,
             headers_dump=src.headers_dump,
             region=src.region,
         )
-        return LightcurveDataset(data=new, label=self.label, background=None)
+        return LightcurveDataset(data=new, label=self.label, background=None, area_ratio=self.area_ratio)
 
 
 @dataclass(slots=True)
@@ -289,6 +290,8 @@ def netdata(
     label: Optional[str] = None,
     background_label: Optional[str] = None,
     area_ratio: Optional[float] = None,
+    offset: float = 0.0,
+    resample: Literal['strict', 'resample'] = 'resample',
 ) -> LightcurveDataset:
     """Return a light-curve dataset (net if possible).
 
@@ -314,16 +317,98 @@ def netdata(
     if bkg_lc is not None:
         background_ds = LightcurveDataset(data=bkg_lc, label=background_label)
 
+    # area_ratio is expected to be provided by the caller when a background
+    # light curve is supplied (typical workflow: user computes area ratio
+    # from region areas or BACKSCAL and passes it here). If a background is
+    # present but no area_ratio is available, raise a clear error rather
+    # than silently attempting to infer or returning an unexpected result.
     ratio = area_ratio
-    if ratio is None and bkg_lc is not None:
-        ratio = _infer_area_ratio(src_lc, bkg_lc)
+    if bkg_lc is None:
+        # No background: return source dataset as-is
+        return LightcurveDataset(
+            data=src_lc,
+            label=label,
+            background=None,
+            area_ratio=None,
+        )
 
-    dataset = LightcurveDataset(
-        data=src_lc,
-        label=label,
-        background=background_ds,
-        area_ratio=ratio,
+    # Background is provided: area_ratio must be explicit or inferable
+    if ratio is None:
+        inferred = _infer_area_ratio(src_lc, bkg_lc)
+        if inferred is None:
+            raise ValueError(
+                "Background provided to netdata but no area_ratio supplied and could not be inferred."
+            )
+        ratio = inferred
+
+    # If needed, resample background to match source time bins
+    if resample == 'resample':
+        from .ops import rebin_lightcurve
+        # If dt or time arrays differ, rebin background to source binsize and alignment
+        src_dt = getattr(src_lc, 'dt', None)
+        bkg_dt = getattr(bkg_lc, 'dt', None)
+        times_equal = (src_lc.time.shape == bkg_lc.time.shape) and np.allclose(src_lc.time, bkg_lc.time)
+        if (src_dt is None or bkg_dt is None) or (not times_equal) or (abs((src_dt or 0.0) - (bkg_dt or 0.0)) > 1e-12):
+            if src_lc.dt is None:
+                raise ValueError("Source lightcurve has unknown dt; cannot resample background to match.")
+            bkg_lc = rebin_lightcurve(bkg_lc, binsize=src_lc.dt, method='sum', align_ref=(src_lc.meta.timezero if getattr(src_lc, 'meta', None) is not None else None))
+    else:
+        # strict: require identical time axes
+        if not ((src_lc.time.shape == bkg_lc.time.shape) and np.allclose(src_lc.time, bkg_lc.time)):
+            raise ValueError("Background and source light curves have different time axes; set resample='resample' to align.")
+
+    # Now perform subtraction in counts space for robust propagation
+    src_dt = src_lc.dt if src_lc.dt is not None else 1.0
+    # source counts
+    if src_lc.is_rate:
+        src_counts = src_lc.value * src_dt
+        src_err_counts = (src_lc.error * src_dt) if src_lc.error is not None else np.sqrt(np.maximum(src_counts, 0.0))
+    else:
+        src_counts = src_lc.value
+        src_err_counts = src_lc.error if src_lc.error is not None else np.sqrt(np.maximum(src_counts, 0.0))
+
+    # background counts
+    if bkg_lc.is_rate:
+        bkg_counts = bkg_lc.value * (bkg_lc.dt if bkg_lc.dt is not None else src_dt)
+        bkg_err_counts = (bkg_lc.error * (bkg_lc.dt if bkg_lc.dt is not None else src_dt)) if bkg_lc.error is not None else np.sqrt(np.maximum(bkg_counts, 0.0))
+    else:
+        bkg_counts = bkg_lc.value
+        bkg_err_counts = bkg_lc.error if bkg_lc.error is not None else np.sqrt(np.maximum(bkg_counts, 0.0))
+
+    # subtract with scaling and optional offset (offset assumed in same units as counts)
+    net_counts = src_counts - float(ratio) * bkg_counts - float(offset)
+    net_var = (src_err_counts ** 2) + (float(ratio) ** 2) * (bkg_err_counts ** 2)
+
+    # produce output LightcurveData in same is_rate as source
+    if src_lc.is_rate:
+        out_value = net_counts / src_dt
+        out_err = np.sqrt(net_var) / src_dt
+    else:
+        out_value = net_counts
+        out_err = np.sqrt(net_var)
+    # If source provides per-bin exposure, mark bins with zero exposure as gaps (NaN)
+    src_bin_expos = (src_lc.bin_exposure if (hasattr(src_lc, 'bin_exposure') and src_lc.bin_exposure is not None) else None)
+    if src_bin_expos is not None:
+        zero_mask = (np.asarray(src_bin_expos, dtype=float) == 0.0)
+        if np.any(zero_mask):
+            out_value = out_value.astype(float)
+            out_err = out_err.astype(float)
+            out_value[zero_mask] = np.nan
+            out_err[zero_mask] = np.nan
+
+        new = LightcurveData(
+            path=src_lc.path,
+        time=src_lc.time,
+        value=out_value,
+        error=out_err,
+        dt=src_lc.dt,
+        exposure=src_lc.exposure,
+        bin_exposure=src_bin_expos,
+        is_rate=src_lc.is_rate,
+        header=src_lc.header,
+        meta=src_lc.meta,
+        headers_dump=src_lc.headers_dump,
+        region=src_lc.region,
     )
-    if background_ds is None or dataset.area_ratio is None:
-        return dataset
-    return dataset.subtract_background()
+
+    return LightcurveDataset(data=new, label=label, background=LightcurveDataset(data=bkg_lc, label=background_label), area_ratio=ratio)
