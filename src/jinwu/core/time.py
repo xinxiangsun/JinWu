@@ -44,7 +44,7 @@ __all__ = [
     'Time',
     # Mission time formats
     'TimeFermi', 'TimeEP', 'TimeLEIA', 'TimeGECAM', 'TimeHXMT', 'TimeSwift',
-    'TimeGrid', 'TimeMAXI', 'TimeLIGO', 'TimeSuzaku', 'TimeNewton', 'TimeXRISM',
+    'TimeGrid', 'TimeMAXI', 'TimeLIGO', 'TimeSuzaku', 'TimeNewton', 'TimeXRISM','TimeAstroSat',
     # Swift helpers
     'swift_leapseconds_utc', 'swift_leapseconds_met', 'swift_utcf_at_utc',
     # Interval utilities
@@ -591,6 +591,18 @@ class TimeXRISM(TimeFromEpoch):
     epoch_scale = 'utc'
     epoch_format = 'iso'
 
+class TimeAstrSat(TimeFromEpoch):
+    """
+    AstroSat 任务 MET: 自 2010-01-01 00:00:00 UTC 起的秒数。
+
+    XRISM MET: seconds since 2019-01-01 00:00:00 UTC.
+    """
+    name = 'astrosat'
+    unit = 1.0 / erfa.DAYSEC  # seconds to days
+    epoch_val = '2010-01-01 00:00:00'
+    epoch_val2 = None
+    epoch_scale = 'utc'
+    epoch_format = 'iso'
 
 # ============================================================================
 # 自定义格式通过 TimeFromEpoch 元类自动注册到 astropy.time.Time

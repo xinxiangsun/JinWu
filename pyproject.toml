@@ -20,8 +20,8 @@ dependencies = [
     "sherpa",
     "bxa",
     "pymc",
-    "swiftbat"，
-    “numba”
+    "swiftbat",
+    "numba",
 ]
 keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
 
