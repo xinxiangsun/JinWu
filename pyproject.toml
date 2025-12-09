@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu"
-version = "0.0.16"
+version = "0.0.18"
 description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -15,13 +15,16 @@ requires-python = ">=3.11"
 dependencies = [
     "numpy",
     "scipy",
-    "astropy",
+    "astropy>=7.1.0",
     "emcee",
     "sherpa",
     "bxa",
     "pymc",
     "swiftbat",
-    "numba",
+    "regions",
+    "ipyaladin",
+    "requests",
+    "pillow"
 ]
 keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
 

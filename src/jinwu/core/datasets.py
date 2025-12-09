@@ -11,7 +11,7 @@ more concrete analysis needs arise.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Union
 
 import numpy as np
 
@@ -124,6 +124,78 @@ class LightcurveDataset:
             )
         return self.data.value / float(self.dt)
 
+    def rebin(self, binsize: float, method: Literal['sum', 'mean'] = 'sum') -> "LightcurveDataset":
+        """Rebin the underlying light curve to a new time resolution.
+
+        Parameters
+        ----------
+        binsize : float
+            New time bin width (seconds).
+        method : {'sum', 'mean'}, default='sum'
+            Aggregation method: 'sum' for counts, 'mean' for rates.
+
+        Returns
+        -------
+        LightcurveDataset
+            A new dataset with rebinned light curve.
+        """
+        from .ops import rebin_lightcurve
+        new_data = rebin_lightcurve(self.data, binsize=binsize, method=method)
+        # Rebin background if present
+        new_bg = self.background.rebin(binsize, method=method) if self.background is not None else None
+        return LightcurveDataset(
+            data=new_data,
+            label=self.label,
+            background=new_bg,
+            area_ratio=self.area_ratio,
+        )
+
+    def plot(self, *, ax=None, ykind: Literal['auto', 'rate', 'counts', 'flux'] = 'auto', 
+              multiband: Union[bool, str] = "auto", color=None, label=None, title=None, 
+              grid: bool = True, flux_array=None, **kwargs):
+        """Plot the light curve using the underlying plot_lightcurve function.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes, optional
+            Axes object to draw on; if None, creates new axes.
+        ykind : {'auto', 'rate', 'counts', 'flux'}, default='auto'
+            Vertical axis unit.
+        multiband : bool | 'auto', default='auto'
+            If True or 'auto', plot multi-band light curves as subplots.
+        color : str, optional
+            Line color.
+        label : str, optional
+            Legend label; defaults to self.label if available.
+        title : str, optional
+            Plot title.
+        grid : bool, default=True
+            Whether to show grid.
+        flux_array : np.ndarray, optional
+            External flux values for ykind='flux' (TODO: support in LightcurveData).
+        **kwargs
+            Additional arguments passed to plot_lightcurve.
+
+        Returns
+        -------
+        matplotlib.axes.Axes or list of Axes
+        """
+        from .plot import plot_lightcurve
+        if label is None and self.label is not None:
+            label = self.label
+        return plot_lightcurve(
+            self.data,
+            ax=ax,
+            ykind=ykind,
+            multiband=multiband,
+            color=color,
+            label=label,
+            title=title,
+            grid=grid,
+            flux_array=flux_array,
+            **kwargs
+        )
+
     # ---- simple selection/slicing ----
 
     def select_time(self, tmin: float | None = None, tmax: float | None = None) -> "LightcurveDataset":
@@ -144,14 +216,14 @@ class LightcurveDataset:
     def _apply_mask(self, mask: np.ndarray) -> "LightcurveDataset":
         d = self.data
         new = LightcurveData(
-            path=d.path,
             time=d.time[mask],
             value=d.value[mask],
             error=d.error[mask] if d.error is not None else None,
             dt=d.dt,
             exposure=d.exposure,
-            bin_exposure=(d.bin_exposure[mask] if (hasattr(d, 'bin_exposure') and d.bin_exposure is not None) else None),
             is_rate=d.is_rate,
+            bin_exposure=(d.bin_exposure[mask] if (hasattr(d, 'bin_exposure') and d.bin_exposure is not None) else None),
+            path=d.path,
             header=d.header,
             meta=d.meta,
             headers_dump=d.headers_dump,
@@ -209,15 +281,14 @@ class LightcurveDataset:
             err = None
 
         new = LightcurveData(
-            kind=src.kind,
-            path=src.path,
             time=src.time,
             value=val,
             error=err,
             dt=src.dt,
             exposure=src.exposure,
-            bin_exposure=(src.bin_exposure if (hasattr(src, 'bin_exposure') and src.bin_exposure is not None) else None),
             is_rate=src.is_rate,
+            bin_exposure=(src.bin_exposure if (hasattr(src, 'bin_exposure') and src.bin_exposure is not None) else None),
+            path=src.path,
             header=src.header,
             meta=src.meta,
             headers_dump=src.headers_dump,
@@ -397,18 +468,18 @@ def netdata(
             out_err[zero_mask] = np.nan
 
         new = LightcurveData(
+            time=src_lc.time,
+            value=out_value,
+            error=out_err,
+            dt=src_lc.dt,
+            exposure=src_lc.exposure,
+            is_rate=src_lc.is_rate,
+            bin_exposure=src_bin_expos,
             path=src_lc.path,
-        time=src_lc.time,
-        value=out_value,
-        error=out_err,
-        dt=src_lc.dt,
-        exposure=src_lc.exposure,
-        bin_exposure=src_bin_expos,
-        is_rate=src_lc.is_rate,
-        header=src_lc.header,
-        meta=src_lc.meta,
-        headers_dump=src_lc.headers_dump,
-        region=src_lc.region,
-    )
+            header=src_lc.header,
+            meta=src_lc.meta,
+            headers_dump=src_lc.headers_dump,
+            region=src_lc.region,
+        )
 
     return LightcurveDataset(data=new, label=label, background=LightcurveDataset(data=bkg_lc, label=background_label), area_ratio=ratio)

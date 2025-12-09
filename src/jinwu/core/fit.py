@@ -23,7 +23,8 @@ from pathlib import Path
 import warnings
 
 import numpy as np
-from scipy.optimize import curve_fit, minimize
+from astropy.modeling import Fittable1DModel, Parameter
+from astropy.modeling.fitting import LMLSQFitter, TRFLSQFitter
 
 from jinwu.core.file import LightcurveData
 from jinwu.core.datasets import LightcurveDataset
@@ -32,9 +33,6 @@ __all__ = [
     "FitResult",
     "LightcurveFitter",
     "ModelRegistry",
-    # 内置模型函数
-    "powerlaw", "broken_powerlaw", "double_broken_powerlaw", "exponential", "gaussian", 
-    "constant", "linear", "smoothly_broken_powerlaw",
 ]
 
 
@@ -81,7 +79,11 @@ class FitResult:
     residuals : np.ndarray
         残差 (data - fitted_curve)
     model : Callable
-        模型函数引用，签名为 model(t, *params)
+        模型评估器，签名为 model(t, *params)，对 astropy 模型进行评估
+    mcmc_samples : np.ndarray | None
+        MCMC 采样结果 (n_samples, n_params)，仅在使用贝叶斯方法时可用
+    mcmc_logprob : np.ndarray | None
+        MCMC 对数概率，仅在使用贝叶斯方法时可用
     
     English
     -------
@@ -106,6 +108,8 @@ class FitResult:
     fitted_curve: Optional[np.ndarray] = None
     residuals: Optional[np.ndarray] = None
     model: Optional[Callable] = None
+    mcmc_samples: Optional[np.ndarray] = None
+    mcmc_logprob: Optional[np.ndarray] = None
     
     def summary(self) -> str:
         """返回拟合结果的文本摘要"""
@@ -161,137 +165,131 @@ class FitResult:
         return result
 
 
-# ---------- 内置模型函数 ----------
+# ---------- Astropy 自定义模型类 ----------
 
-def powerlaw(t: np.ndarray, norm: float, index: float, t0: float = 1.0) -> np.ndarray:
-    """幂律模型: norm * (t/t0)^index
+class PowerLawModel(Fittable1DModel):
+    """幂律模型: norm * (t/t0)^index"""
+    norm = Parameter(default=1.0)
+    index = Parameter(default=-1.0)
+    t0 = Parameter(default=1.0, fixed=True)
     
-    参数
-    ----
-    t : 时间
-    norm : 归一化常数
-    index : 幂律指数
-    t0 : 参考时间（默认1.0）
-    """
-    return norm * np.power(t / t0, index)
+    @staticmethod
+    def evaluate(t, norm, index, t0):
+        return norm * np.power(t / t0, index)
 
+class BrokenPowerLawModel(Fittable1DModel):
+    """分段幂律模型"""
+    norm = Parameter(default=1.0)
+    index1 = Parameter(default=-1.0)
+    index2 = Parameter(default=-2.0)
+    t_break = Parameter(default=100.0)
+    
+    @staticmethod
+    def evaluate(t, norm, index1, index2, t_break):
+        result = np.empty_like(t)
+        mask1 = t < t_break
+        mask2 = ~mask1
+        result[mask1] = norm * np.power(t[mask1] / t_break, index1)
+        result[mask2] = norm * np.power(t[mask2] / t_break, index2)
+        return result
 
-def broken_powerlaw(t: np.ndarray, norm: float, index1: float, index2: float, t_break: float) -> np.ndarray:
-    """分段幂律: 在 t_break 处从 index1 转为 index2
+class SmoothlyBrokenPowerLawModel(Fittable1DModel):
+    """平滑分段幂律（Willingale 2007 风格）"""
+    norm = Parameter(default=1.0)
+    index1 = Parameter(default=-1.0)
+    index2 = Parameter(default=-2.0)
+    t_break = Parameter(default=100.0)
+    smoothness = Parameter(default=0.3)
     
-    参数
-    ----
-    norm : t_break 处的归一化
-    index1 : t < t_break 的指数
-    index2 : t >= t_break 的指数
-    t_break : 转折时间
-    """
-    result = np.empty_like(t)
-    mask1 = t < t_break
-    mask2 = ~mask1
-    result[mask1] = norm * np.power(t[mask1] / t_break, index1)
-    result[mask2] = norm * np.power(t[mask2] / t_break, index2)
-    return result
+    @staticmethod
+    def evaluate(t, norm, index1, index2, t_break, smoothness):
+        x = t / t_break
+        s = smoothness
+        term1 = np.power(x, -index1 * s)
+        term2 = np.power(x, -index2 * s)
+        return norm * np.power(term1 + term2, -1.0 / s)
 
+class DoubleBrokenPowerLawModel(Fittable1DModel):
+    """三段幂律（双折断）"""
+    norm = Parameter(default=1.0)
+    index1 = Parameter(default=0.0)
+    index2 = Parameter(default=-2.0)
+    index3 = Parameter(default=-1.0)
+    t_break1 = Parameter(default=50.0)
+    t_break2 = Parameter(default=200.0)
+    
+    @staticmethod
+    def evaluate(t, norm, index1, index2, index3, t_break1, t_break2):
+        result = np.empty_like(t)
+        mask1 = t < t_break1
+        mask2 = (t >= t_break1) & (t < t_break2)
+        mask3 = t >= t_break2
+        result[mask1] = norm * np.power(t[mask1] / t_break1, index1)
+        result[mask2] = norm * np.power(t[mask2] / t_break1, index2)
+        norm_late = norm * np.power(t_break2 / t_break1, index2)
+        result[mask3] = norm_late * np.power(t[mask3] / t_break2, index3)
+        return result
 
-def smoothly_broken_powerlaw(
-    t: np.ndarray, norm: float, index1: float, index2: float, t_break: float, smoothness: float = 0.3
-) -> np.ndarray:
-    """平滑分段幂律（Willingale 2007 风格）
+class SmoothlyDoubleBrokenPowerLawModel(Fittable1DModel):
+    """平滑三段幂律（两次平滑折断）"""
+    norm = Parameter(default=1e-9)
+    index1 = Parameter(default=0.0)
+    index2 = Parameter(default=-2.0)
+    index3 = Parameter(default=-1.0)
+    t_break1 = Parameter(default=50.0)
+    t_break2 = Parameter(default=200.0)
+    smoothness1 = Parameter(default=0.3)
+    smoothness2 = Parameter(default=0.3)
     
-    F(t) = norm * [(t/t_break)^(-index1*s) + (t/t_break)^(-index2*s)]^(-1/s)
-    
-    参数
-    ----
-    smoothness : 平滑参数（越小越接近硬转折）
-    """
-    x = t / t_break
-    s = smoothness
-    term1 = np.power(x, -index1 * s)
-    term2 = np.power(x, -index2 * s)
-    return norm * np.power(term1 + term2, -1.0 / s)
+    @staticmethod
+    def evaluate(t, norm, index1, index2, index3, t_break1, t_break2, smoothness1, smoothness2):
+        x1 = t / t_break1
+        x2 = t / t_break2
+        s1 = smoothness1
+        s2 = smoothness2
+        term1 = np.power(np.power(x1, -index1 * s1) + np.power(x1, -index2 * s1), -1.0 / s1)
+        term2 = np.power(np.power(x2, -index2 * s2) + np.power(x2, -index3 * s2), -1.0 / s2)
+        return norm * term1 * term2
 
+class ExponentialModel(Fittable1DModel):
+    """指数衰减模型"""
+    norm = Parameter(default=1.0)
+    decay = Parameter(default=0.1)
+    t0 = Parameter(default=0.0)
+    
+    @staticmethod
+    def evaluate(t, norm, decay, t0):
+        return norm * np.exp(-decay * (t - t0))
 
-def double_broken_powerlaw(
-    t: np.ndarray, 
-    norm: float, 
-    index1: float, 
-    index2: float, 
-    index3: float,
-    t_break1: float,
-    t_break2: float
-) -> np.ndarray:
-    """三段幂律（双折断）: 在 t_break1 和 t_break2 处发生两次转折
+class GaussianModel(Fittable1DModel):
+    """高斯脉冲模型"""
+    amplitude = Parameter(default=1.0)
+    mean = Parameter(default=0.0)
+    sigma = Parameter(default=1.0)
     
-    适用于早期平台→中期过渡→后期陡衰减的典型 GRB 光变曲线
-    
-    参数
-    ----
-    norm : 第一个折断处 (t=t_break1) 的通量归一化
-    index1 : t < t_break1 的幂律指数（早期，通常接近0表示平台）
-    index2 : t_break1 <= t < t_break2 的幂律指数（中期，通常为负陡衰减）
-    index3 : t >= t_break2 的幂律指数（后期，通常为负缓衰减）
-    t_break1 : 第一个转折时间（早期→中期）
-    t_break2 : 第二个转折时间（中期→后期）
-    
-    返回
-    ----
-    flux : 三段连续幂律，在 t_break1 和 t_break2 处保持连续
-    
-    注记
-    ----
-    - 在 t=t_break1 处: F = norm
-    - 在 t=t_break2 处: 自动匹配以保持连续性
-    - 各段采用相对该段起点的归一化，确保折断处连续
-    """
-    result = np.empty_like(t)
-    
-    # 分段：早期、中期、后期
-    mask1 = t < t_break1
-    mask2 = (t >= t_break1) & (t < t_break2)
-    mask3 = t >= t_break2
-    
-    # 早期（相对 t_break1，斜率 index1）
-    # F(t) = norm * (t/t_break1)^index1
-    result[mask1] = norm * np.power(t[mask1] / t_break1, index1)
-    
-    # 中期（相对 t_break1，斜率 index2）
-    # 在 t=t_break1 处与早期段连续: F(t_break1) = norm
-    result[mask2] = norm * np.power(t[mask2] / t_break1, index2)
-    
-    # 后期（相对 t_break2，斜率 index3）
-    # 在 t=t_break2 处与中期段连续: F(t_break2) = norm * (t_break2/t_break1)^index2
-    norm_late = norm * np.power(t_break2 / t_break1, index2)
-    result[mask3] = norm_late * np.power(t[mask3] / t_break2, index3)
-    
-    return result
+    @staticmethod
+    def evaluate(t, amplitude, mean, sigma):
+        return amplitude * np.exp(-0.5 * np.power((t - mean) / sigma, 2))
 
-
-def exponential(t: np.ndarray, norm: float, decay: float, t0: float = 0.0) -> np.ndarray:
-    """指数衰减: norm * exp(-decay * (t - t0))
-    
-    参数
-    ----
-    norm : 初始幅度
-    decay : 衰减率
-    t0 : 起始时间
-    """
-    return norm * np.exp(-decay * (t - t0))
-
-
-def gaussian(t: np.ndarray, amplitude: float, mean: float, sigma: float) -> np.ndarray:
-    """高斯脉冲: amplitude * exp(-0.5*((t-mean)/sigma)^2)"""
-    return amplitude * np.exp(-0.5 * np.power((t - mean) / sigma, 2))
-
-
-def constant(t: np.ndarray, level: float) -> np.ndarray:
+class ConstantModel(Fittable1DModel):
     """常数模型"""
-    return np.full_like(t, level)
+    level = Parameter(default=1.0)
+    
+    @staticmethod
+    def evaluate(t, level):
+        return np.full_like(t, level)
+
+class LinearModel(Fittable1DModel):
+    """线性模型"""
+    slope = Parameter(default=0.0)
+    intercept = Parameter(default=0.0)
+    
+    @staticmethod
+    def evaluate(t, slope, intercept):
+        return slope * t + intercept
 
 
-def linear(t: np.ndarray, slope: float, intercept: float) -> np.ndarray:
-    """线性模型: slope * t + intercept"""
-    return slope * t + intercept
+# 纯 astropy 模型实现，删除了函数式模型以统一接口
 
 
 # ---------- 模型注册表 ----------
@@ -307,35 +305,31 @@ class ModelRegistry:
     """
     
     def __init__(self):
-        self._models: Dict[str, tuple[Callable, tuple[str, ...]]] = {}
+        # 注册表: 名称 -> (AstropyModelClass, param_names)
+        self._models: Dict[str, tuple[type[Fittable1DModel], tuple[str, ...]]] = {}
         self._register_builtin()
     
     def _register_builtin(self):
-        """注册内置模型"""
-        self.register("powerlaw", powerlaw, ("norm", "index", "t0"))
-        self.register("broken_powerlaw", broken_powerlaw, ("norm", "index1", "index2", "t_break"))
-        self.register("double_broken_powerlaw", double_broken_powerlaw, 
-                     ("norm", "index1", "index2", "index3", "t_break1", "t_break2"))
-        self.register("smoothly_broken_powerlaw", smoothly_broken_powerlaw, 
-                     ("norm", "index1", "index2", "t_break", "smoothness"))
-        self.register("exponential", exponential, ("norm", "decay", "t0"))
-        self.register("gaussian", gaussian, ("amplitude", "mean", "sigma"))
-        self.register("constant", constant, ("level",))
-        self.register("linear", linear, ("slope", "intercept"))
+        """注册内置 astropy 模型类"""
+        self.register("powerlaw", PowerLawModel, ("norm", "index", "t0"))
+        self.register("broken_powerlaw", BrokenPowerLawModel, ("norm", "index1", "index2", "t_break"))
+        self.register("double_broken_powerlaw", DoubleBrokenPowerLawModel,
+                      ("norm", "index1", "index2", "index3", "t_break1", "t_break2"))
+        self.register("smoothly_broken_powerlaw", SmoothlyBrokenPowerLawModel,
+                      ("norm", "index1", "index2", "t_break", "smoothness"))
+        self.register("smoothly_double_broken_powerlaw", SmoothlyDoubleBrokenPowerLawModel,
+                      ("norm", "index1", "index2", "index3", "t_break1", "t_break2", "smoothness1", "smoothness2"))
+        self.register("exponential", ExponentialModel, ("norm", "decay", "t0"))
+        self.register("gaussian", GaussianModel, ("amplitude", "mean", "sigma"))
+        self.register("constant", ConstantModel, ("level",))
+        self.register("linear", LinearModel, ("slope", "intercept"))
     
-    def register(self, name: str, func: Callable, param_names: tuple[str, ...]):
-        """注册新模型
-        
-        参数
-        ----
-        name : 模型名称
-        func : 模型函数，签名 func(t, *params)
-        param_names : 参数名称元组
-        """
-        self._models[name] = (func, param_names)
+    def register(self, name: str, model_class: type[Fittable1DModel], param_names: tuple[str, ...]):
+        """注册新 astropy 模型类"""
+        self._models[name] = (model_class, param_names)
     
-    def get(self, name: str) -> tuple[Callable, tuple[str, ...]]:
-        """获取模型函数与参数名"""
+    def get(self, name: str) -> tuple[type[Fittable1DModel], tuple[str, ...]]:
+        """获取 astropy 模型类与参数名"""
         if name not in self._models:
             raise ValueError(f"Unknown model '{name}'. Available: {list(self._models.keys())}")
         return self._models[name]
@@ -446,11 +440,10 @@ class LightcurveFitter:
         model: Union[str, Callable],
         p0: Optional[list[float] | np.ndarray] = None,
         param_names: Optional[tuple[str, ...]] = None,
-        # SciPy 接受任何 array-like；这里放宽类型并允许 None 作为“无界”
         bounds: Optional[tuple[Sequence[float] | np.ndarray, Sequence[float] | np.ndarray]] = None,
-        method: Literal["curve_fit", "least_squares"] = "curve_fit",
         sigma: Optional[np.ndarray] = None,
         absolute_sigma: bool = False,
+        fitter_method: Literal["lm", "trf"] = "lm",
         **kwargs,
     ) -> FitResult:
         """执行拟合
@@ -466,30 +459,56 @@ class LightcurveFitter:
             参数名称（仅用于自定义函数）
         bounds : 2-tuple of array-like, optional
             参数边界 (lower, upper)
-        method : {"curve_fit", "least_squares"}
+        method : {"curve_fit", "least_squares", "lmfit"}
             拟合方法
         sigma : array, optional
             覆盖数据误差（默认使用 self.error）
         absolute_sigma : bool
             是否将 sigma 视为绝对误差（影响协方差缩放）
-        **kwargs : 传递给 scipy.optimize.curve_fit 的额外参数
+        bayesian : bool
+            是否使用贝叶斯 MCMC 方法（需要 emcee）
+        mcmc_nwalkers : int
+            MCMC walker 数量（仅 bayesian=True 时）
+        mcmc_nsteps : int
+            MCMC 采样步数（仅 bayesian=True 时）
+        mcmc_burn : int
+            MCMC burn-in 步数（仅 bayesian=True 时）
+        mcmc_thin : int
+            MCMC 采样间隔（仅 bayesian=True 时）
+        use_lmfit : bool
+            是否使用 astropy.modeling 进行拟合（默认 True）
+        lmfit_method : str
+            'lm' - Levenberg-Marquardt (LMLSQFitter，默认)
+            'trf' - Trust Region Reflective (TRFLSQFitter，可选)
+        **kwargs : 传递给底层拟合函数的额外参数
         
         返回
         ----
         FitResult : 拟合结果对象
+        
+        注记
+        ----
+        - 全面使用 astropy.modeling 拟合；支持 LM（默认）与 TRF
         """
         # 解析模型
         if isinstance(model, str):
-            model_func, pnames = self.registry.get(model)
+            model_class, pnames = self.registry.get(model)
             model_name = model
         elif callable(model):
-            model_func = model
-            model_name = getattr(model, "__name__", "custom")
-            if param_names is None:
-                raise ValueError("param_names must be provided for custom model functions")
-            pnames = param_names
+            # 支持用户传入自定义 astropy 模型类或可调用；若为函数，需提供 param_names
+            if isinstance(model, type) and issubclass(model, Fittable1DModel):
+                model_class = model
+                model_name = getattr(model_class, "__name__", "custom_astropy")
+                if param_names is None:
+                    # 尝试从模型属性推断参数名
+                    attrs = [a for a in dir(model_class) if isinstance(getattr(model_class, a), Parameter)]
+                    pnames = tuple(attrs)
+                else:
+                    pnames = param_names
+            else:
+                raise TypeError("仅支持 astropy Fittable1DModel 子类或注册名称作为模型输入")
         else:
-            raise TypeError("model must be str or callable")
+            raise TypeError("model must be str or astropy model class")
         
         # 准备误差
         if sigma is None:
@@ -508,61 +527,120 @@ class LightcurveFitter:
             p0 = self._guess_initial_params(model_name, pnames)
         p0 = np.asarray(p0, dtype=float)
         
-        # 检查是否为幂律模型，若是则在对数空间拟合
-        powerlaw_models = {"powerlaw", "broken_powerlaw", "double_broken_powerlaw", "smoothly_broken_powerlaw"}
-        use_log_fitting = model_name in powerlaw_models
+        # 边界估计：如果未提供，使用智能默认边界
+        if bounds is None:
+            bounds = self._get_default_bounds(model_name, pnames)
         
-        errors_lower = None
-        errors_upper = None
+        # 统一使用 astropy 拟合
+        return self._fit_astropy(
+            model_class, model_name, pnames, p0, sigma, bounds,
+            fitter_method, absolute_sigma, **kwargs
+        )
+    
+    # 移除 SciPy 路径
+    
+    def _fit_astropy(
+        self,
+        model_class: type[Fittable1DModel],
+        model_name: str,
+        pnames: tuple[str, ...],
+        p0: np.ndarray,
+        sigma: np.ndarray,
+        bounds: Optional[tuple],
+        astropy_method: str = "lm",
+        absolute_sigma: bool = False,
+        **kwargs,
+    ) -> FitResult:
+        """使用 astropy.modeling 进行拟合
         
-        if use_log_fitting:
-            # 对数空间拟合
-            popt, pcov, success, message, errors_lower, errors_upper = self._fit_powerlaw_logspace(
-                model_name, model_func, pnames, p0, sigma, absolute_sigma, bounds, **kwargs
-            )
-        else:
-            # 标准拟合
-            # 处理边界：None 代表无界，相当于 (-inf, inf)
-            bounds_to_use: tuple[Any, Any]
-            if bounds is None:
-                bounds_to_use = (-np.inf, np.inf)
+        参数
+        ----
+        astropy_method : str
+            'lm' - Levenberg-Marquardt (LMLSQFitter, 默认)
+            'trf' - Trust Region Reflective (TRFLSQFitter，可选)
+        """
+        try:
+            # 创建模型实例并设置初始参数/边界
+            model_instance = model_class()
+            for i, name in enumerate(pnames):
+                setattr(model_instance, name, p0[i])
+                if bounds is not None:
+                    param = getattr(model_instance, name)
+                    min_val = bounds[0][i] if i < len(bounds[0]) else None
+                    max_val = bounds[1][i] if i < len(bounds[1]) else None
+                    if min_val is not None or max_val is not None:
+                        param.bounds = (min_val, max_val)
+            
+            # 选择拟合器（默认 LM，可切换 TRF）
+            if astropy_method == "trf":
+                fitter = TRFLSQFitter()
             else:
-                bounds_to_use = bounds
-
-            try:
-                popt, pcov = curve_fit(
-                    model_func,
-                    self.time,
-                    self.value,
-                    p0=p0,
-                    sigma=sigma,
-                    absolute_sigma=absolute_sigma,
-                    bounds=bounds_to_use,
-                    **kwargs,
-                )
-                success = True
-                message = "Fit converged successfully"
-            except Exception as e:
-                warnings.warn(f"Fit failed: {e}")
-                popt = p0
+                fitter = LMLSQFitter()
+                astropy_method = "lm"
+            
+            # 执行拟合
+            weights = 1.0 / sigma if sigma is not None else None
+            fitted_model = fitter(model_instance, self.time, self.value, weights=weights, **kwargs)
+            
+            # 提取结果
+            popt = np.array([getattr(fitted_model, name).value for name in pnames])
+            
+            # 计算误差（从协方差矩阵），并对固定参数补零以匹配参数总数
+            if hasattr(fitter, 'fit_info') and 'param_cov' in fitter.fit_info:
+                pcov_raw = fitter.fit_info['param_cov']
+                if pcov_raw is not None:
+                    errors_raw = np.sqrt(np.diag(pcov_raw))
+                    # 若存在固定参数（如 powerlaw.t0 固定），协方差矩阵维度会小于参数总数
+                    # 此时对误差与协方差进行零填充以匹配 pnames 长度
+                    if errors_raw.size < len(pnames):
+                        errors = np.zeros(len(pnames))
+                        # 将前面对应的自由参数误差填入（astropy 通常按可变参数顺序）
+                        errors[:errors_raw.size] = errors_raw
+                        pcov = np.zeros((len(pnames), len(pnames)))
+                        pcov[:errors_raw.size, :errors_raw.size] = pcov_raw
+                    else:
+                        errors = errors_raw
+                        pcov = pcov_raw
+                else:
+                    errors = np.zeros(len(pnames))
+                    pcov = None
+            else:
+                errors = np.zeros(len(pnames))
                 pcov = None
-                success = False
-                message = str(e)
-        
-        # 计算拟合曲线与统计量
-        fitted = model_func(self.time, *popt)
-        residuals = self.value - fitted
-        chisq = np.sum((residuals / sigma) ** 2)
-        dof = len(self.time) - len(popt)
-        reduced_chisq = chisq / dof if dof > 0 else np.inf
-        
-        # 提取参数误差
-        errors = None
-        if pcov is not None:
-            try:
-                errors = np.sqrt(np.diag(pcov))
-            except Exception:
-                errors = None
+            
+            fitted = fitted_model(self.time)
+            residuals = self.value - fitted
+            
+            # 计算卡方
+            if sigma is not None:
+                chisq = np.sum((residuals / sigma) ** 2)
+            else:
+                chisq = np.sum(residuals ** 2)
+            
+            dof = len(self.time) - len(popt)
+            reduced_chisq = chisq / dof if dof > 0 else np.inf
+            
+            success = True
+            message = f"astropy {astropy_method} converged successfully"
+            
+        except Exception as e:
+            warnings.warn(f"astropy fitting failed: {e}")
+            popt = p0
+            pcov = None
+            errors = np.zeros(len(pnames))
+            # 失败时用初值评估
+            fitted = model_instance(self.time)
+            residuals = self.value - fitted
+            
+            if sigma is not None:
+                chisq = np.sum((residuals / sigma) ** 2)
+            else:
+                chisq = np.sum(residuals ** 2)
+            
+            dof = len(self.time) - len(p0)
+            reduced_chisq = chisq / dof if dof > 0 else np.inf
+            success = False
+            message = f"astropy fitting error: {str(e)}"
         
         return FitResult(
             model_name=model_name,
@@ -570,8 +648,8 @@ class LightcurveFitter:
             param_names=pnames,
             covariance=pcov,
             errors=errors,
-            errors_lower=errors_lower,
-            errors_upper=errors_upper,
+            errors_lower=None,
+            errors_upper=None,
             chisq=chisq,
             dof=dof,
             reduced_chisq=reduced_chisq,
@@ -582,328 +660,203 @@ class LightcurveFitter:
             data_err=sigma.copy() if sigma is not None else None,
             fitted_curve=fitted,
             residuals=residuals,
-            model=model_func,
+            # 提供一个评估器，使得 FitResult.evaluate(t, *params) 工作
+            model=lambda t, *params: self._evaluate_astropy_model(model_class, pnames, params, t),
         )
     
+    # 移除 MCMC 路径
+
+    def _evaluate_astropy_model(self, model_class: type[Fittable1DModel], pnames: tuple[str, ...], params: Sequence[float], t: np.ndarray) -> np.ndarray:
+        """辅助: 使用给定参数评估 astropy 模型类"""
+        m = model_class()
+        for i, name in enumerate(pnames):
+            setattr(m, name, params[i])
+        return m(t)
+    
     def _guess_initial_params(self, model_name: str, param_names: tuple[str, ...]) -> np.ndarray:
-        """简单的初值猜测启发式"""
+        """智能初值猜测启发式
+        
+        基于数据统计量为各模型提供合理的初值估计
+        """
         n = len(param_names)
         p0 = np.ones(n)
         
         # 数据统计量
+        t_min, t_max = self.time.min(), self.time.max()
         t_mid = np.median(self.time)
-        t_span = self.time.max() - self.time.min()
+        t_span = t_max - t_min
         v_mean = np.mean(self.value)
         v_max = np.max(self.value)
+        v_min = np.min(self.value)
+        
+        # 估计衰减趋势（用于判断是上升还是下降）
+        if len(self.time) > 1:
+            # 用前20%和后20%的均值比较
+            n_pts = len(self.time)
+            n_early = max(1, n_pts // 5)
+            early_mean = np.mean(self.value[:n_early])
+            late_mean = np.mean(self.value[-n_early:])
+            is_declining = early_mean > late_mean
+        else:
+            is_declining = True
         
         if model_name == "powerlaw":
-            p0 = np.array([v_mean, -1.0, t_mid])
+            # norm, index, t0
+            # index: 通常负值表示衰减，正值表示上升
+            index_guess = -1.5 if is_declining else 0.5
+            p0 = np.array([v_max, index_guess, 1.0])
+            
         elif model_name == "broken_powerlaw":
-            p0 = np.array([v_mean, -1.0, -2.0, t_mid])
+            # norm, index1, index2, t_break
+            # 早期较平，后期较陡
+            idx1 = -0.5 if is_declining else 0.5
+            idx2 = -2.0 if is_declining else 1.0
+            p0 = np.array([v_max, idx1, idx2, t_mid])
+            
         elif model_name == "double_broken_powerlaw":
-            # 三段: 早期平台(~0)、中期(-1.5)、后期(-2.5), 折断在 1/3 和 2/3 处
-            t1 = np.percentile(self.time, 33)
-            t2 = np.percentile(self.time, 67)
-            p0 = np.array([v_max, 0.0, -1.5, -2.5, t1, t2])
+            # norm, index1, index2, index3, t_break1, t_break2
+            # 典型GRB: 平台期(~0) -> 快衰减(-1.5~-2.5) -> 慢衰减(-1.0)
+            t1 = np.percentile(self.time, 25)
+            t2 = np.percentile(self.time, 75)
+            if is_declining:
+                p0 = np.array([v_max, 0.0, -2.0, -1.0, t1, t2])
+            else:
+                p0 = np.array([v_min, 0.5, 1.5, 0.5, t1, t2])
+                
         elif model_name == "smoothly_broken_powerlaw":
-            p0 = np.array([v_mean, -1.0, -2.0, t_mid, 0.3])
+            # norm, index1, index2, t_break, smoothness
+            idx1 = -0.5 if is_declining else 0.5
+            idx2 = -2.0 if is_declining else 1.0
+            p0 = np.array([v_max, idx1, idx2, t_mid, 0.5])
+            
+        elif model_name == "smoothly_double_broken_powerlaw":
+            # norm, index1, index2, index3, t_break1, t_break2, smoothness1, smoothness2
+            t1 = np.percentile(self.time, 25)
+            t2 = np.percentile(self.time, 75)
+            if is_declining:
+                p0 = np.array([v_max, 0.0, -2.0, -1.0, t1, t2, 0.5, 0.5])
+            else:
+                p0 = np.array([v_min, 0.5, 1.5, 0.5, t1, t2, 0.5, 0.5])
+                
         elif model_name == "exponential":
-            p0 = np.array([v_max, 1.0 / t_span, self.time.min()])
+            # norm, decay, t0
+            decay_guess = 2.0 / t_span if t_span > 0 else 0.1
+            p0 = np.array([v_max, decay_guess, t_min])
+            
         elif model_name == "gaussian":
-            p0 = np.array([v_max, t_mid, t_span / 4.0])
+            # amplitude, mean, sigma
+            sigma_guess = t_span / 6.0  # ~3-sigma覆盖
+            p0 = np.array([v_max - v_min, t_mid, sigma_guess])
+            
         elif model_name == "constant":
+            # level
             p0 = np.array([v_mean])
+            
         elif model_name == "linear":
-            # 简单线性回归斜率估计
-            slope = (self.value[-1] - self.value[0]) / (self.time[-1] - self.time[0]) if len(self.time) > 1 else 0.0
-            p0 = np.array([slope, v_mean])
+            # slope, intercept
+            if len(self.time) > 1:
+                slope = (self.value[-1] - self.value[0]) / (self.time[-1] - self.time[0])
+            else:
+                slope = 0.0
+            intercept = v_mean - slope * t_mid
+            p0 = np.array([slope, intercept])
         
         return p0
     
-    def _fit_powerlaw_logspace(
-        self,
-        model_name: str,
-        model_func: Callable,
-        param_names: tuple[str, ...],
-        p0: np.ndarray,
-        sigma: np.ndarray,
-        absolute_sigma: bool,
-        bounds: Optional[tuple],
-        **kwargs,
-    ) -> tuple[np.ndarray, Optional[np.ndarray], bool, str, Optional[np.ndarray], Optional[np.ndarray]]:
-        """在对数空间拟合幂律模型（内部线性拟合）
+    def _get_default_bounds(self, model_name: str, param_names: tuple[str, ...]) -> tuple:
+        """为各模型生成智能默认边界
         
         参数
         ----
         model_name : str
             模型名称
-        model_func : callable
-            原始模型函数（用于最终评估）
-        param_names : tuple
-            参数名称
-        p0 : ndarray
-            初始猜测（原始空间）
-        sigma : ndarray
-            误差
-        absolute_sigma : bool
-            是否使用绝对误差
-        bounds : tuple or None
-            参数边界
-        **kwargs : dict
-            额外参数
+        param_names : tuple[str, ...]
+            参数名称列表
         
         返回
         ----
-        popt : ndarray
-            优化后的参数（原始空间）
-        pcov : ndarray or None
-            协方差矩阵
-        success : bool
-            是否成功
-        message : str
-            状态消息
+        bounds : tuple of (lower, upper)
+            参数下界和上界的元组
+        
+        注记
+        ----
+        幂律指数范围统一设为 [-10, 3]，覆盖常见天体物理情况
         """
-        # 转换到对数空间
-        log_t = np.log10(self.time)
-        log_y = np.log10(self.value)
+        t_min, t_max = self.time.min(), self.time.max()
+        v_min, v_max = self.value.min(), self.value.max()
+        v_range = v_max - v_min
+        t_range = t_max - t_min
         
-        # 误差传播: σ(log y) ≈ σ(y) / (y * ln(10))
-        log_sigma = sigma / (self.value * np.log(10))
+        # 振幅/归一化的通用边界：从 0 到无穷
+        norm_lower = 0.0
+        norm_upper = np.inf
         
-        # 定义对数空间的线性模型
+        # 时间参数的通用边界
+        t_lower = max(t_min * 0.1, t_min - t_range)
+        t_upper = min(t_max * 10, t_max + t_range)
+        
+        # 幂律指数边界：[-10, 3] 覆盖绝大多数情况
+        index_lower = -10.0
+        index_upper = 3.0
+        
         if model_name == "powerlaw":
-            # log(F) = log(norm) + index * log(t/t0)
-            #        = [log(norm) - index*log(t0)] + index * log(t)
-            #        = a + b * log(t)
-            def log_model_pl(log_t, a, b):
-                return a + b * log_t
-            
-            # 转换初值: p0 = [norm, index, t0]
-            # a = log(norm) - index * log(t0), b = index
-            log_p0 = [np.log10(p0[0]) - p0[1] * np.log10(p0[2]), p0[1]]
-            
-            # 转换边界
-            if bounds is not None:
-                # bounds = ([norm_min, index_min, t0_min], [norm_max, index_max, t0_max])
-                # 简化：只限制 index
-                log_bounds = ([- np.inf, bounds[0][1]], [np.inf, bounds[1][1]])
-            else:
-                log_bounds = (-np.inf, np.inf)
+            # norm, index, t0
+            lower = [norm_lower, index_lower, 1e-10]
+            upper = [norm_upper, index_upper, np.inf]
             
         elif model_name == "broken_powerlaw":
-            # 分段线性模型
-            def log_model_bpl(log_t, a, b1, b2, log_tb):
-                result = np.zeros_like(log_t)
-                mask1 = log_t < log_tb
-                mask2 = log_t >= log_tb
-                result[mask1] = a + b1 * log_t[mask1]
-                result[mask2] = a + b1 * log_tb + b2 * (log_t[mask2] - log_tb)
-                return result
-            
-            # 转换初值: p0 = [norm, index1, index2, t_break]
-            log_p0 = [np.log10(p0[0]), p0[1], p0[2], np.log10(p0[3])]
-            
-            # 转换边界
-            if bounds is not None:
-                log_bounds = (
-                    [-np.inf, bounds[0][1], bounds[0][2], np.log10(bounds[0][3])],
-                    [np.inf, bounds[1][1], bounds[1][2], np.log10(bounds[1][3])]
-                )
-            else:
-                log_bounds = (-np.inf, np.inf)
+            # norm, index1, index2, t_break
+            lower = [norm_lower, index_lower, index_lower, t_min]
+            upper = [norm_upper, index_upper, index_upper, t_max]
             
         elif model_name == "double_broken_powerlaw":
-            # 三段线性模型
-            def log_model_dbpl(log_t, a, b1, b2, b3, log_tb1, log_tb2):
-                result = np.zeros_like(log_t)
-                mask1 = log_t < log_tb1
-                mask2 = (log_t >= log_tb1) & (log_t < log_tb2)
-                mask3 = log_t >= log_tb2
-                result[mask1] = a + b1 * log_t[mask1]
-                result[mask2] = a + b1 * log_tb1 + b2 * (log_t[mask2] - log_tb1)
-                result[mask3] = (a + b1 * log_tb1 + b2 * (log_tb2 - log_tb1) +
-                                b3 * (log_t[mask3] - log_tb2))
-                return result
+            # norm, index1, index2, index3, t_break1, t_break2
+            # 确保 t_break2 > t_break1
+            t_mid = (t_min + t_max) / 2
+            lower = [norm_lower, index_lower, index_lower, index_lower, t_min, t_mid]
+            upper = [norm_upper, index_upper, index_upper, index_upper, t_mid, t_max]
             
-            # 转换初值: p0 = [norm, index1, index2, index3, t_break1, t_break2]
-            log_p0 = [np.log10(p0[0]), p0[1], p0[2], p0[3], np.log10(p0[4]), np.log10(p0[5])]
-            
-            # 转换边界
-            if bounds is not None:
-                log_bounds = (
-                    [-np.inf, bounds[0][1], bounds[0][2], bounds[0][3], 
-                     np.log10(bounds[0][4]), np.log10(bounds[0][5])],
-                    [np.inf, bounds[1][1], bounds[1][2], bounds[1][3],
-                     np.log10(bounds[1][4]), np.log10(bounds[1][5])]
-                )
-            else:
-                log_bounds = (-np.inf, np.inf)
-                
         elif model_name == "smoothly_broken_powerlaw":
-            # 平滑折断幂律不适合简单线性化，使用标准拟合
-            warnings.warn(f"{model_name} 无法线性化，使用标准拟合")
-            bounds_to_use = bounds if bounds is not None else (-np.inf, np.inf)
-            try:
-                popt, pcov = curve_fit(
-                    model_func, self.time, self.value,
-                    p0=p0, sigma=sigma, absolute_sigma=absolute_sigma,
-                    bounds=bounds_to_use, **kwargs
-                )
-                return popt, pcov, True, "Fit converged (standard fitting)", None, None
-            except Exception as e:
-                warnings.warn(f"Fit failed: {e}")
-                return p0, None, False, str(e), None, None
+            # norm, index1, index2, t_break, smoothness
+            lower = [norm_lower, index_lower, index_lower, t_min, 0.01]
+            upper = [norm_upper, index_upper, index_upper, t_max, 5.0]
+            
+        elif model_name == "smoothly_double_broken_powerlaw":
+            # norm, index1, index2, index3, t_break1, t_break2, smoothness1, smoothness2
+            t_mid = (t_min + t_max) / 2
+            lower = [norm_lower, index_lower, index_lower, index_lower, t_min, t_mid, 0.01, 0.01]
+            upper = [norm_upper, index_upper, index_upper, index_upper, t_mid, t_max, 5.0, 5.0]
+            
+        elif model_name == "exponential":
+            # norm, decay, t0
+            lower = [0.0, 0.0, t_lower]
+            upper = [norm_upper, 100.0 / (t_range if t_range > 0 else 1.0), t_upper]
+            
+        elif model_name == "gaussian":
+            # amplitude, mean, sigma
+            lower = [0.0, t_min, 0.0]
+            upper = [norm_upper * 2, t_max, t_range * 2]
+            
+        elif model_name == "constant":
+            # level
+            lower = [-np.inf]
+            upper = [np.inf]
+            
+        elif model_name == "linear":
+            # slope, intercept
+            # 允许任意斜率和截距
+            lower = [-np.inf, -np.inf]
+            upper = [np.inf, np.inf]
+            
         else:
-            raise ValueError(f"Unknown powerlaw model: {model_name}")
+            # 未知模型：返回无约束边界
+            n = len(param_names)
+            lower = [-np.inf] * n
+            upper = [np.inf] * n
         
-        # 执行对数空间拟合
-        try:
-            log_popt, log_pcov = curve_fit(
-                log_model_pl if model_name == "powerlaw" else (
-                    log_model_bpl if model_name == "broken_powerlaw" else log_model_dbpl
-                ),
-                log_t, log_y,
-                p0=log_p0, sigma=log_sigma, absolute_sigma=absolute_sigma,
-                bounds=log_bounds, **kwargs
-            )
-            
-            # 转换回原始空间参数
-            if model_name == "powerlaw":
-                # log_popt = [a, b] -> [norm, index, t0]
-                # 固定 t0=1 简化：norm = 10^a, index = b
-                popt = np.array([10**log_popt[0], log_popt[1], 1.0])
-                
-                # 计算非对称误差
-                log_errors = np.sqrt(np.diag(log_pcov))  # 对数空间的对称误差
-                
-                # norm参数: 从 10^(a ± σ_a) 得到非对称误差
-                norm_center = 10**log_popt[0]
-                norm_upper = 10**(log_popt[0] + log_errors[0]) - norm_center
-                norm_lower = norm_center - 10**(log_popt[0] - log_errors[0])
-                
-                # index参数: 对数空间为线性,误差对称
-                index_err = log_errors[1]
-                
-                # t0固定为1,误差为0
-                errors_lower = np.array([norm_lower, index_err, 0.0])
-                errors_upper = np.array([norm_upper, index_err, 0.0])
-                
-                # 扩展协方差矩阵以匹配3参数
-                # 对数空间参数 [a, b] 对应原空间 [norm, index]
-                # norm = 10^a => σ(norm) = norm * ln(10) * σ(a)
-                # t0固定为1，误差为0
-                pcov_expanded = np.zeros((3, 3))
-                pcov_expanded[0, 0] = (10**log_popt[0] * np.log(10))**2 * log_pcov[0, 0]  # var(norm)
-                pcov_expanded[1, 1] = log_pcov[1, 1]  # var(index)
-                pcov_expanded[0, 1] = pcov_expanded[1, 0] = (10**log_popt[0] * np.log(10)) * log_pcov[0, 1]
-                pcov = pcov_expanded
-                
-            elif model_name == "broken_powerlaw":
-                # log_popt = [a, b1, b2, log_tb] -> [norm, index1, index2, t_break]
-                popt = np.array([10**log_popt[0], log_popt[1], log_popt[2], 10**log_popt[3]])
-                
-                # 计算非对称误差
-                log_errors = np.sqrt(np.diag(log_pcov))
-                
-                # norm参数: 从 10^(a ± σ_a) 得到非对称误差
-                norm_center = 10**log_popt[0]
-                norm_upper = 10**(log_popt[0] + log_errors[0]) - norm_center
-                norm_lower = norm_center - 10**(log_popt[0] - log_errors[0])
-                
-                # index1, index2: 线性参数,误差对称
-                index1_err = log_errors[1]
-                index2_err = log_errors[2]
-                
-                # t_break: 从 10^(log_tb ± σ_log_tb) 得到非对称误差
-                tb_center = 10**log_popt[3]
-                tb_upper = 10**(log_popt[3] + log_errors[3]) - tb_center
-                tb_lower = tb_center - 10**(log_popt[3] - log_errors[3])
-                
-                errors_lower = np.array([norm_lower, index1_err, index2_err, tb_lower])
-                errors_upper = np.array([norm_upper, index1_err, index2_err, tb_upper])
-                
-                # 扩展协方差矩阵
-                pcov_expanded = np.zeros((4, 4))
-                # norm = 10^a
-                pcov_expanded[0, 0] = (10**log_popt[0] * np.log(10))**2 * log_pcov[0, 0]
-                # index1, index2 直接对应
-                pcov_expanded[1, 1] = log_pcov[1, 1]
-                pcov_expanded[2, 2] = log_pcov[2, 2]
-                # t_break = 10^log_tb
-                pcov_expanded[3, 3] = (10**log_popt[3] * np.log(10))**2 * log_pcov[3, 3]
-                # 协方差项（简化处理，仅对角元素）
-                pcov = pcov_expanded
-                
-            elif model_name == "double_broken_powerlaw":
-                # log_popt = [a, b1, b2, b3, log_tb1, log_tb2]
-                popt = np.array([
-                    10**log_popt[0], log_popt[1], log_popt[2], log_popt[3],
-                    10**log_popt[4], 10**log_popt[5]
-                ])
-                
-                # 计算非对称误差
-                log_errors = np.sqrt(np.diag(log_pcov))
-                
-                # norm参数: 从 10^(a ± σ_a) 得到非对称误差
-                norm_center = 10**log_popt[0]
-                norm_upper = 10**(log_popt[0] + log_errors[0]) - norm_center
-                norm_lower = norm_center - 10**(log_popt[0] - log_errors[0])
-                
-                # index参数: 线性,误差对称
-                index1_err = log_errors[1]
-                index2_err = log_errors[2]
-                index3_err = log_errors[3]
-                
-                # t_break参数: 从 10^(log_tb ± σ_log_tb) 得到非对称误差
-                tb1_center = 10**log_popt[4]
-                tb1_upper = 10**(log_popt[4] + log_errors[4]) - tb1_center
-                tb1_lower = tb1_center - 10**(log_popt[4] - log_errors[4])
-                
-                tb2_center = 10**log_popt[5]
-                tb2_upper = 10**(log_popt[5] + log_errors[5]) - tb2_center
-                tb2_lower = tb2_center - 10**(log_popt[5] - log_errors[5])
-                
-                errors_lower = np.array([norm_lower, index1_err, index2_err, index3_err, 
-                                         tb1_lower, tb2_lower])
-                errors_upper = np.array([norm_upper, index1_err, index2_err, index3_err,
-                                         tb1_upper, tb2_upper])
-                
-                # 扩展协方差矩阵
-                pcov_expanded = np.zeros((6, 6))
-                pcov_expanded[0, 0] = (10**log_popt[0] * np.log(10))**2 * log_pcov[0, 0]
-                pcov_expanded[1, 1] = log_pcov[1, 1]
-                pcov_expanded[2, 2] = log_pcov[2, 2]
-                pcov_expanded[3, 3] = log_pcov[3, 3]
-                pcov_expanded[4, 4] = (10**log_popt[4] * np.log(10))**2 * log_pcov[4, 4]
-                pcov_expanded[5, 5] = (10**log_popt[5] * np.log(10))**2 * log_pcov[5, 5]
-                pcov = pcov_expanded
-            
-            success = True
-            message = "Fit converged successfully (log-space linear fitting)"
-            
-        except Exception as e:
-            warnings.warn(f"Log-space fit failed: {e}, trying standard fitting")
-            # 回退到标准拟合
-            bounds_to_use = bounds if bounds is not None else (-np.inf, np.inf)
-            try:
-                popt, pcov = curve_fit(
-                    model_func, self.time, self.value,
-                    p0=p0, sigma=sigma, absolute_sigma=absolute_sigma,
-                    bounds=bounds_to_use, **kwargs
-                )
-                success = True
-                message = "Fit converged (fallback to standard fitting)"
-                errors_lower = None  # 标准拟合不产生非对称误差
-                errors_upper = None
-            except Exception as e2:
-                popt = p0
-                pcov = None
-                success = False
-                message = f"Both log-space and standard fitting failed: {e}, {e2}"
-                errors_lower = None
-                errors_upper = None
-        
-        return popt, pcov, success, message, errors_lower, errors_upper
+        return (lower, upper)
+    
+    # 删除对数空间拟合（SciPy）路径，全面改为 astropy
     
     def plot_fit(
         self,
@@ -956,10 +909,8 @@ class LightcurveFitter:
             raise ImportError("matplotlib is required for plotting")
         
         if model_func is None:
-            try:
-                model_func, _ = self.registry.get(result.model_name)
-            except ValueError:
-                raise ValueError("model_func must be provided for custom models")
+            # 使用结果内的评估器（astropy 统一）
+            model_func = result.model
         
         if ax is None:
             if show_residuals:
@@ -1398,8 +1349,8 @@ class LightcurveFitter:
                             s = _fmt(r'\mathrm{norm}', p[0], p[1], p[2])
                             labels_to_place.append((s, _geom_mean(tmin_seg, tmax_seg)))
                 
-                # Double broken powerlaw: 三段 α1,α2,α3 + t_break1, t_break2
-                if model_name == 'double_broken_powerlaw':
+                # Double broken powerlaw 及其平滑版: 三段 α1,α2,α3 + t_break1, t_break2
+                if model_name in ('double_broken_powerlaw', 'smoothly_double_broken_powerlaw'):
                     tb1 = _find_param('t_break1')
                     tb2 = _find_param('t_break2')
                     tb1_val = tb1[0] if tb1 is not None else None

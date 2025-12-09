@@ -15,8 +15,9 @@ jinwu.core.plot
 
 from __future__ import annotations
 
-from typing import Optional, Union, List, Tuple, Any, Callable, cast
+from typing import Optional, Union, List, Tuple, Any, Callable, cast, Literal
 from pathlib import Path
+import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -246,17 +247,20 @@ def plot_lightcurve(
     *,
     ax: Optional[Axes] = None,
     T0: Optional[float] = None,
+    ykind: Literal['auto', 'rate', 'counts', 'flux'] = 'auto',  # auto: 根据 is_rate 自动选择；flux 需要外部提供 flux_array 或从 spectrum 反演
     multiband: Union[bool, str] = "auto",  # auto: 若 value 为 (N,M) 则分面
     color: Optional[str] = None,
     label: Optional[str] = None,
     title: Optional[str] = None,
     grid: bool = True,
     out: Optional[PathLike] = None,
+    flux_array: Optional[np.ndarray] = None,  # TODO: 待基类扩展后改为 LightcurveData.flux 字段并支持自动推导
 ) -> Union[Axes, List[Axes]]:
     """绘制光变曲线（单能段或多能段）。
 
     - src 可为 LightcurveData 或 LC 文件路径（或 HDUList）。
     - 若 value 维度为 (N,M)，则 M>1 视为多能段；multiband=True/"auto" 时按行分面绘制。
+    - ykind='flux' 时需通过 flux_array 提供 flux 值；TODO: 后续通过基类扩展支持自动推导。
     - 仅负责绘图，时间过滤/能段合成等请在外部完成。
     """
     lc: Optional[Any] = None
@@ -275,7 +279,7 @@ def plot_lightcurve(
     else:
         raise TypeError("plot_lightcurve 需要 LightcurveData、路径或 HDUList 作为输入")
 
-    def _draw(ax_: Axes, t: np.ndarray, y: np.ndarray, yerr: Optional[np.ndarray], lab: Optional[str], timezero: Optional[float]):
+    def _draw(ax_: Axes, t: np.ndarray, y: np.ndarray, yerr: Optional[np.ndarray], lab: Optional[str], timezero: Optional[float], ylab: str):
         if yerr is not None:
             ax_.errorbar(t, y, yerr=yerr, fmt="-", lw=1.0, color=color, label=lab)
         else:
@@ -284,15 +288,98 @@ def plot_lightcurve(
             ax_.set_xlabel(f"Time (s)  TIMEZERO={timezero:.3f}s")
         else:
             ax_.set_xlabel("Time (s)")
-        ax_.set_ylabel("Rate (counts s$^{-1}$)")
+        ax_.set_ylabel(ylab)
         if grid:
             ax_.grid(alpha=0.3, ls="--")
 
     # 情况 A：LightcurveData
     if lc is not None:
         time = np.asarray(lc.time, float)
-        val = np.asarray(lc.value)
-        err = None if lc.error is None else np.asarray(lc.error)
+        val = np.asarray(lc.value, float)
+        err = None if lc.error is None else np.asarray(lc.error, float)
+
+        # 根据 is_rate / ykind 选择绘制 counts 还是 rate；必要时用 dt/bin_exposure 进行转换
+        def _width_array_like(v: np.ndarray) -> Optional[np.ndarray]:
+            width = None
+            if getattr(lc, 'bin_exposure', None) is not None:
+                width = np.asarray(lc.bin_exposure, float)
+            elif getattr(lc, 'dt', None) is not None and lc.dt:
+                width = float(lc.dt)
+            if width is None:
+                return None
+            if np.ndim(width) == 0:
+                return np.full(v.shape[0], float(width), dtype=float)
+            width_arr = np.asarray(width, float)
+            return width_arr
+
+        def _to_rate(v: np.ndarray, e: Optional[np.ndarray]) -> tuple[np.ndarray, Optional[np.ndarray], bool]:
+            w = _width_array_like(v)
+            if w is None:
+                return v, e, False
+            w = np.where(w > 0.0, w, np.nan)
+            w_b = w[:, None] if (v.ndim == 2 and w.ndim == 1) else w
+            rate_val = v / w_b
+            rate_err = e / w_b if e is not None else None
+            return rate_val, rate_err, True
+
+        def _to_counts(v: np.ndarray, e: Optional[np.ndarray]) -> tuple[np.ndarray, Optional[np.ndarray], bool]:
+            w = _width_array_like(v)
+            if w is None:
+                return v, e, False
+            w = np.where(w > 0.0, w, np.nan)
+            w_b = w[:, None] if (v.ndim == 2 and w.ndim == 1) else w
+            cnt_val = v * w_b
+            cnt_err = e * w_b if e is not None else None
+            return cnt_val, cnt_err, True
+
+        if ykind == 'auto':
+            eff_kind: Literal['rate', 'counts', 'flux'] = 'rate' if lc.is_rate else 'counts'
+        else:
+            eff_kind = ykind  # type: ignore[assignment]
+
+        ylab = "Rate (counts s$^{-1}$)" if eff_kind == 'rate' else ("Counts" if eff_kind == 'counts' else "Flux (erg cm$^{-2}$ s$^{-1}$)")
+
+        # TODO: 后续基类扩展 LightcurveData 时，添加 flux / flux_error 字段以及可选的响应矩阵信息
+        #       以便自动从 counts/rate 反演 flux；目前需要外部提供 flux_array。
+        if eff_kind == 'flux':
+            if flux_array is not None:
+                y = np.asarray(flux_array, float)
+                # TODO: 计算 flux_error 的传播（需要 counts/rate error + 响应矩阵）
+                yerr = None
+            else:
+                # 未提供 flux_array 则降级到 rate
+                warnings.warn("ykind='flux' 但未提供 flux_array；降级到 rate", UserWarning)
+                eff_kind = 'rate'
+                ylab = "Rate (counts s$^{-1}$)"
+                if lc.is_rate:
+                    y = val
+                    yerr = err
+                else:
+                    y, yerr, ok = _to_rate(val, err)
+                    if not ok:
+                        y, yerr = val, err
+                        ylab = "Counts"
+        elif eff_kind == 'rate':
+            if lc.is_rate:
+                y = val
+                yerr = err
+            else:
+                y, yerr, ok = _to_rate(val, err)
+                if not ok:
+                    # 无法转换则退回 counts 并更新标签
+                    y, yerr = val, err
+                    ylab = "Counts"
+            # 如果转换导致标签变化，保持 ylab 与实际一致
+        else:  # eff_kind == 'counts'
+            if not lc.is_rate:
+                y = val
+                yerr = err
+            else:
+                y, yerr, ok = _to_counts(val, err)
+                if not ok:
+                    # 无法转换则退回 rate 并更新标签
+                    y, yerr = val, err
+                    ylab = "Rate (counts s$^{-1}$)"
 
         # 使用原始 TIME，不再减去 TRIGTIME/T0；仅在标签中标注 TIMEZERO
         t = time
@@ -318,8 +405,8 @@ def plot_lightcurve(
             if nb == 1:
                 axes = [axes]
             for i in range(nb):
-                yerr_i = err[:, i] if (err is not None and err.ndim == 2 and err.shape[1] == nb) else None
-                _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz)
+                yerr_i = yerr[:, i] if (yerr is not None and yerr.ndim == 2 and yerr.shape[1] == nb) else None
+                _draw(axes[i], t, y[:, i], yerr_i, (label or f"Band {i+1}"), tz, ylab)
                 axes[i].legend(loc="upper right", fontsize=9)
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
@@ -329,9 +416,9 @@ def plot_lightcurve(
             axes_to_return = list(axes)
         else:
             ax = _ensure_axes(ax)
-            y = val.reshape(-1)
-            yerr = err.reshape(-1) if (err is not None and err.ndim > 1) else err
-            _draw(ax, t, y, yerr, label, tz)
+            y1d = y.reshape(-1) if y.ndim > 1 else y
+            yerr1d = yerr.reshape(-1) if (yerr is not None and yerr.ndim > 1) else yerr
+            _draw(ax, t, y1d, yerr1d, label, tz, ylab)
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
                 title = base or "Lightcurve"
@@ -379,12 +466,13 @@ def plot_lightcurve(
             val = np.asarray(d["TOT_RATE"], float)
             err = np.asarray(d["TOT_ERROR"], float) if "TOT_ERROR" in cols else None
             ax = _ensure_axes(ax)
-            _draw(ax, t, val, err, label, tz)
+            _draw(ax, t, val, err, label, tz, "Rate (counts s$^{-1}$)")
             axes_to_return = ax
         else:
             rate = d["RATE"] if "RATE" in cols else d["COUNTS"]
             val = np.asarray(rate)
             err = np.asarray(d["ERROR"], float) if "ERROR" in cols else None
+            ylab = "Rate (counts s$^{-1}$)" if "RATE" in cols else "Counts"
             if val.ndim == 2 and val.shape[1] > 1 and (multiband is True or multiband == "auto"):
                 nb = val.shape[1]
                 fig, axes = plt.subplots(nb, 1, sharex=True, figsize=(8.0, 1.9 * nb), constrained_layout=True)
@@ -392,11 +480,11 @@ def plot_lightcurve(
                     axes = [axes]
                 for i in range(nb):
                     yerr_i = err[:, i] if (err is not None and err.ndim == 2 and err.shape[1] == nb) else None
-                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz)
+                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz, ylab)
                 axes_to_return = list(axes)
             else:
                 ax = _ensure_axes(ax)
-                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label, tz)
+                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label, tz, ylab)
                 axes_to_return = ax
 
         if title is None:
