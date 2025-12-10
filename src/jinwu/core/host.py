@@ -34,7 +34,7 @@ REQUESTS_AVAILABLE = True
 warnings.filterwarnings('ignore')
 
 
-class HostGalaxyCandidateFinder:
+class HostGalaxyFinder:
     """
     查找暂现源周围宿主星系候选的工具类
     
@@ -43,18 +43,40 @@ class HostGalaxyCandidateFinder:
     
     Parameters
     ----------
-    ra : float
-        源的赤经 (度)
-    dec : float
-        源的赤纬 (度)
-    error_radius : float
-        位置不确定度半径 (角秒)
-    search_radius : float
-        搜索半径 (角秒)
+    ra : float, Quantity, or None
+        源的赤经 (度或Quantity对象). 如果提供coord则忽略
+    dec : float, Quantity, or None
+        源的赤纬 (度或Quantity对象). 如果提供coord则忽略
+    error_radius : float or Quantity
+        位置不确定度半径 (角秒或Quantity对象)
+    search_radius : float or Quantity
+        搜索半径 (角秒或Quantity对象)
     source_name : str, optional
-        源名称，用于输出和标题
+        源名称，用于输出和标题 (默认: "Transient Source")
     output_dir : str or Path, optional
         输出目录，默认为当前路径。None表示使用运行目录
+    coord : SkyCoord, optional
+        SkyCoord对象，如果提供则忽略ra/dec参数
+        
+    Examples
+    --------
+    使用浮点数和角秒::
+    
+        finder = HostGalaxyFinder(ra=290.38565, dec=4.68515, 
+                                  error_radius=2.3, search_radius=30)
+    
+    使用Quantity对象::
+    
+        import astropy.units as u
+        finder = HostGalaxyFinder(ra=290.38565*u.deg, dec=4.68515*u.deg,
+                                  error_radius=2.3*u.arcsec, search_radius=30*u.arcsec)
+    
+    使用SkyCoord对象::
+    
+        from astropy.coordinates import SkyCoord
+        coord = SkyCoord(ra=290.38565, dec=4.68515, unit=u.deg)
+        finder = HostGalaxyFinder(coord=coord, error_radius=2.3*u.arcsec, 
+                                  search_radius=30*u.arcsec)
         
     Attributes
     ----------
@@ -70,17 +92,62 @@ class HostGalaxyCandidateFinder:
     
     def __init__(
         self,
-        ra: float,
-        dec: float,
-        error_radius: float,
-        search_radius: float,
+        ra=None,
+        dec=None,
+        error_radius=None,
+        search_radius=None,
         source_name: str = "Transient Source",
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        coord: Optional[SkyCoord] = None
     ):
-        """初始化查找器"""
-        self.ra = ra
-        self.dec = dec
+        """
+        初始化查找器
+        
+        Parameters
+        ----------
+        ra : float, Quantity, or None
+            源的赤经 (度或Quantity对象)
+        dec : float, Quantity, or None
+            源的赤纬 (度或Quantity对象)
+        error_radius : float, Quantity, or None
+            位置不确定度半径 (角秒或Quantity对象)
+        search_radius : float, Quantity, or None
+            搜索半径 (角秒或Quantity对象)
+        source_name : str, optional
+            源名称，用于输出和标题
+        output_dir : str or Path, optional
+            输出目录，默认为当前路径。None表示使用运行目录
+        coord : SkyCoord, optional
+            SkyCoord对象，如果提供则忽略ra/dec参数
+        """
         self.source_name = source_name
+        
+        # 处理坐标输入（支持SkyCoord或ra/dec）
+        if coord is not None:
+            if not isinstance(coord, SkyCoord):
+                raise TypeError("coord必须是SkyCoord对象")
+            self.coord = coord
+            self.ra = coord.ra.deg
+            self.dec = coord.dec.deg
+        else:
+            # 处理ra输入
+            if ra is None:
+                raise ValueError("必须提供ra或coord参数")
+            if isinstance(ra, u.Quantity):
+                self.ra = ra.to(u.deg).value
+            else:
+                self.ra = float(ra)
+            
+            # 处理dec输入
+            if dec is None:
+                raise ValueError("必须提供dec或coord参数")
+            if isinstance(dec, u.Quantity):
+                self.dec = dec.to(u.deg).value
+            else:
+                self.dec = float(dec)
+            
+            # 创建坐标对象
+            self.coord = SkyCoord(ra=self.ra*u.deg, dec=self.dec*u.deg, frame='icrs')
         
         # 设置输出目录
         if output_dir is None:
@@ -89,10 +156,21 @@ class HostGalaxyCandidateFinder:
             self.output_dir = Path(output_dir)
             self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # 创建坐标对象
-        self.coord = SkyCoord(ra=ra*u.deg, dec=dec*u.deg, frame='icrs')
-        self.error_radius = error_radius * u.arcsec
-        self.search_radius = search_radius * u.arcsec
+        # 处理error_radius（支持float或Quantity）
+        if error_radius is None:
+            raise ValueError("必须提供error_radius参数")
+        if isinstance(error_radius, u.Quantity):
+            self.error_radius = error_radius.to(u.arcsec)
+        else:
+            self.error_radius = float(error_radius) * u.arcsec
+        
+        # 处理search_radius（支持float或Quantity）
+        if search_radius is None:
+            raise ValueError("必须提供search_radius参数")
+        if isinstance(search_radius, u.Quantity):
+            self.search_radius = search_radius.to(u.arcsec)
+        else:
+            self.search_radius = float(search_radius) * u.arcsec
         
         # 初始化数据框
         self.ps1_df = pd.DataFrame()
@@ -113,7 +191,7 @@ class HostGalaxyCandidateFinder:
         
         print(f"✓ 初始化完成")
         print(f"  源: {source_name}")
-        print(f"  坐标: RA={ra}°, Dec={dec}°")
+        print(f"  坐标: RA={self.ra:.5f}°, Dec={self.dec:.5f}°")
         print(f"  位置不确定度: {self.error_radius.to(u.arcsec).value:.2f}\"")
         print(f"  搜索半径: {self.search_radius.to(u.arcsec).value:.1f}\"")
         print(f"  输出目录: {self.output_dir.resolve()}")
@@ -453,10 +531,26 @@ class HostGalaxyCandidateFinder:
                     self.aladin.add_table(cat_data, name='PanSTARRS星系', color='orange', 
                                          source_size=12, shape='circle')
             
+            # 添加Gaia星系
+            if not self.gaia_df.empty:
+                gaia_galaxies = self.gaia_df[self.gaia_df['Type'] == 'Galaxy'].copy()
+                if len(gaia_galaxies) > 0:
+                    gaia_cat_data = Table({
+                        'RA': gaia_galaxies['RA'].values,
+                        'DEC': gaia_galaxies['Dec'].values,
+                        'name': [f"Gaia-{int(sid)}" for sid in gaia_galaxies['Source_ID'].values],
+                        'Gmag': gaia_galaxies['Gmag'].values,
+                        'sep': gaia_galaxies['Separation_arcsec'].values,
+                        'reason': gaia_galaxies['Features'].values
+                    })
+                    self.aladin.add_table(gaia_cat_data, name='Gaia星系', color='magenta', 
+                                         source_size=12, shape='square')
+            
             print("✓ Aladin视图创建完成")
             print(f"  - 红色圆圈: GRB误差范围 ({self.error_radius.to(u.arcsec).value:.1f}\")")
             print(f"  - 黄色圆圈: 搜索半径 ({self.search_radius.to(u.arcsec).value:.1f}\")")
             print(f"  - 橙色圆点: PanSTARRS星系候选")
+            print(f"  - 紫色方块: Gaia星系候选")
         except Exception as e:
             print(f"✗ Aladin视图创建失败: {e}")
             self.aladin = None
@@ -544,7 +638,11 @@ class HostGalaxyCandidateFinder:
                 for _, r in ps1_stars.iterrows()
             ])
         
-        gaia_gal = self.gaia_df[self.gaia_df['Type'] == 'Galaxy'].copy()
+        if not self.gaia_df.empty:
+            gaia_gal = self.gaia_df[self.gaia_df['Type'] == 'Galaxy'].copy()
+        else:
+            gaia_gal = pd.DataFrame()
+            
         if len(gaia_gal) > 0:
             gaia_gal['offset_ra'], gaia_gal['offset_dec'] = zip(*[
                 self._to_arcsec_offset(r['RA'], r['Dec']) 
@@ -598,7 +696,7 @@ class HostGalaxyCandidateFinder:
                 mode='markers', name='Gaia星系',
                 marker=dict(size=8, color='rgba(0,0,0,0)', symbol='diamond',
                             line=dict(width=2, color='magenta')),
-                text=[f"ID:{int(r['Source_ID'])}<br>距离:{r['Separation_arcsec']:.2f}\"" 
+                text=[f"ID:{int(r['Source_ID'])}<br>距离:{r['Separation_arcsec']:.2f}\"<br>Gmag:{r['Gmag']:.2f}" 
                       for _, r in gaia_gal.iterrows()],
                 hoverinfo='text'
             ))
@@ -710,7 +808,7 @@ class HostGalaxyCandidateFinder:
             print("  使用 `pip install kaleido` 来启用PNG导出")
             return None
     
-    def run_full_analysis(self, save_aladin: bool = True, save_plotly_html: bool = True,
+    def run(self, save_aladin: bool = True, save_plotly_html: bool = True,
                          aladin_path: Optional[str] = None, plotly_path: Optional[str] = None) -> None:
         """执行完整分析流程"""
         print("\n" + "="*70)
@@ -745,18 +843,3 @@ class HostGalaxyCandidateFinder:
         print("✓ 分析完成")
         print("="*70 + "\n")
 
-
-if __name__ == "__main__":
-    # 使用示例
-    finder = HostGalaxyCandidateFinder(
-        ra=290.38565,
-        dec=4.68515,
-        error_radius=2.3,
-        search_radius=30,
-        source_name="GRB 250615a"
-    )
-    
-    finder.run_full_analysis(
-        save_aladin=True,
-        save_plotly_html=True
-    )
