@@ -15,6 +15,19 @@ from __future__ import annotations
 from typing import Optional, Tuple, List
 import numpy as np
 
+try:
+    from numba import njit
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+    def njit(*args, **kwargs):
+        """Dummy decorator when numba is not available."""
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+
 
 def merge_gti(starts: Optional[np.ndarray], stops: Optional[np.ndarray], *, tol: float = 1e-9) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """合并并规范化 GTI 列表：返回非重叠、升序的 (starts, stops)。
@@ -147,16 +160,42 @@ def adjust_gti_to_frame(starts: np.ndarray, stops: np.ndarray, frame_dt: float, 
     return np.asarray(new_s, dtype=float), np.asarray(new_e, dtype=float)
 
 
+if _HAVE_NUMBA:
+    @njit
+    def _exposure_per_bins_core(ms: np.ndarray, me: np.ndarray, bins: np.ndarray) -> np.ndarray:
+        """Numba-accelerated core for exposure_per_bins calculation."""
+        nb = bins.size - 1
+        expo = np.zeros(nb, dtype=np.float64)
+        for i in range(nb):
+            b0 = bins[i]
+            b1 = bins[i + 1]
+            for j in range(ms.size):
+                s = ms[j]
+                e = me[j]
+                lo = max(b0, s)
+                hi = min(b1, e)
+                if hi > lo:
+                    expo[i] += (hi - lo)
+        return expo
+else:
+    def _exposure_per_bins_core(ms: np.ndarray, me: np.ndarray, bins: np.ndarray) -> np.ndarray:
+        """Pure Python fallback for exposure_per_bins calculation."""
+        nb = bins.size - 1
+        expo = np.zeros(nb, dtype=float)
+        for i in range(nb):
+            b0 = float(bins[i])
+            b1 = float(bins[i + 1])
+            for s, e in zip(ms, me):
+                lo = max(b0, float(s))
+                hi = min(b1, float(e))
+                if hi > lo:
+                    expo[i] += (hi - lo)
+        return expo
+
+
 def exposure_per_bins(ms: np.ndarray, me: np.ndarray, bins: np.ndarray) -> np.ndarray:
     """计算每个时间 bin 与合并 GTI 的重叠曝光时长。bins 为 edges（len = nbins+1）。"""
-    nb = bins.size - 1
-    expo = np.zeros(nb, dtype=float)
-    for i in range(nb):
-        b0 = float(bins[i])
-        b1 = float(bins[i + 1])
-        for s, e in zip(ms, me):
-            lo = max(b0, float(s))
-            hi = min(b1, float(e))
-            if hi > lo:
-                expo[i] += (hi - lo)
-    return expo
+    ms = np.asarray(ms, dtype=np.float64)
+    me = np.asarray(me, dtype=np.float64)
+    bins = np.asarray(bins, dtype=np.float64)
+    return _exposure_per_bins_core(ms, me, bins)

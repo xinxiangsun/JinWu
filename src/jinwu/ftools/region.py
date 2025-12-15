@@ -16,6 +16,19 @@ from pathlib import Path
 import numpy as np
 
 try:
+    from numba import njit
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+    def njit(*args, **kwargs):
+        """Dummy decorator when numba is not available."""
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+
+try:
     from astropy.wcs import WCS  # type: ignore
     _HAVE_WCS = True
 except Exception:
@@ -216,68 +229,159 @@ def _points_in_polygon_mpl(xs: np.ndarray, ys: np.ndarray, poly: List[Tuple[floa
     return path.contains_points(pts)
 
 
-def _points_in_polygon_numpy(xs: np.ndarray, ys: np.ndarray, poly: List[Tuple[float, float]]) -> np.ndarray:
-    # ray casting algorithm for polygon point-in-polygon
-    x = xs
-    y = ys
-    n = len(poly)
-    inside = np.zeros_like(x, dtype=bool)
-    px = np.array([p[0] for p in poly])
-    py = np.array([p[1] for p in poly])
-    for i in range(n):
-        j = (i + 1) % n
-        xi = px[i]
-        yi = py[i]
-        xj = px[j]
-        yj = py[j]
-        intersect = ((yi > y) != (yj > y)) & (x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi)
-        inside ^= intersect
-    return inside
+if _HAVE_NUMBA:
+    @njit
+    def _points_in_polygon_numpy(xs: np.ndarray, ys: np.ndarray, poly_x: np.ndarray, poly_y: np.ndarray) -> np.ndarray:
+        """Numba-accelerated ray casting for polygon point-in-polygon test."""
+        n_points = xs.size
+        n_poly = poly_x.size
+        inside = np.zeros(n_points, dtype=np.bool_)
+        
+        for k in range(n_points):
+            x = xs[k]
+            y = ys[k]
+            count = 0
+            
+            for i in range(n_poly):
+                j = (i + 1) % n_poly
+                xi = poly_x[i]
+                yi = poly_y[i]
+                xj = poly_x[j]
+                yj = poly_y[j]
+                
+                if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi):
+                    count += 1
+            
+            inside[k] = (count % 2) == 1
+        
+        return inside
+    
+    def _points_in_polygon_wrapper(xs: np.ndarray, ys: np.ndarray, poly: List[Tuple[float, float]]) -> np.ndarray:
+        """Wrapper to convert polygon list to arrays for numba."""
+        px = np.array([p[0] for p in poly], dtype=np.float64)
+        py = np.array([p[1] for p in poly], dtype=np.float64)
+        return _points_in_polygon_numpy(xs, ys, px, py)
+else:
+    def _points_in_polygon_wrapper(xs: np.ndarray, ys: np.ndarray, poly: List[Tuple[float, float]]) -> np.ndarray:
+        """Pure numpy ray casting algorithm for polygon point-in-polygon."""
+        x = xs
+        y = ys
+        n = len(poly)
+        inside = np.zeros_like(x, dtype=bool)
+        px = np.array([p[0] for p in poly])
+        py = np.array([p[1] for p in poly])
+        for i in range(n):
+            j = (i + 1) % n
+            xi = px[i]
+            yi = py[i]
+            xj = px[j]
+            yj = py[j]
+            intersect = ((yi > y) != (yj > y)) & (x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi)
+            inside ^= intersect
+        return inside
 
 
-def points_in_shape(xs: np.ndarray, ys: np.ndarray, shape: Dict[str, Any]) -> np.ndarray:
-    """对于给定 shape dict，返回与 xs/ys 对应的布尔 mask 表示点是否在 shape 内。"""
-    typ = shape.get('type', '').lower()
-    if typ == 'circle':
-        cx = float(shape['x'])
-        cy = float(shape['y'])
-        r = float(shape['r'])
+if _HAVE_NUMBA:
+    @njit
+    def _circle_mask(xs: np.ndarray, ys: np.ndarray, cx: float, cy: float, r: float) -> np.ndarray:
+        """Numba-accelerated circle mask."""
+        n = xs.size
+        mask = np.zeros(n, dtype=np.bool_)
+        r2 = r * r
+        for i in range(n):
+            dx = xs[i] - cx
+            dy = ys[i] - cy
+            mask[i] = (dx * dx + dy * dy) <= r2
+        return mask
+    
+    @njit
+    def _annulus_mask(xs: np.ndarray, ys: np.ndarray, cx: float, cy: float, rin: float, rout: float) -> np.ndarray:
+        """Numba-accelerated annulus mask."""
+        n = xs.size
+        mask = np.zeros(n, dtype=np.bool_)
+        rin2 = rin * rin
+        rout2 = rout * rout
+        for i in range(n):
+            dx = xs[i] - cx
+            dy = ys[i] - cy
+            r2 = dx * dx + dy * dy
+            mask[i] = (r2 >= rin2) and (r2 <= rout2)
+        return mask
+    
+    @njit
+    def _box_mask(xs: np.ndarray, ys: np.ndarray, cx: float, cy: float, w: float, h: float, angle: float) -> np.ndarray:
+        """Numba-accelerated rotated box mask."""
+        n = xs.size
+        mask = np.zeros(n, dtype=np.bool_)
+        theta = np.deg2rad(angle)
+        ca = np.cos(-theta)
+        sa = np.sin(-theta)
+        hw = w / 2.0
+        hh = h / 2.0
+        for i in range(n):
+            dx = xs[i] - cx
+            dy = ys[i] - cy
+            xr = dx * ca - dy * sa
+            yr = dx * sa + dy * ca
+            mask[i] = (abs(xr) <= hw) and (abs(yr) <= hh)
+        return mask
+else:
+    def _circle_mask(xs: np.ndarray, ys: np.ndarray, cx: float, cy: float, r: float) -> np.ndarray:
+        """Pure numpy circle mask."""
         dx = xs - cx
         dy = ys - cy
         return (dx * dx + dy * dy) <= (r * r)
-    if typ == 'annulus':
-        cx = float(shape['x'])
-        cy = float(shape['y'])
-        rin = float(shape['r_in'])
-        rout = float(shape['r_out'])
+    
+    def _annulus_mask(xs: np.ndarray, ys: np.ndarray, cx: float, cy: float, rin: float, rout: float) -> np.ndarray:
+        """Pure numpy annulus mask."""
         dx = xs - cx
         dy = ys - cy
         rr = dx * dx + dy * dy
         return (rr >= rin * rin) & (rr <= rout * rout)
-    if typ == 'box':
-        cx = float(shape.get('x', 0.0))
-        cy = float(shape.get('y', 0.0))
-        w = float(shape.get('width', shape.get('w', 1.0)))
-        h = float(shape.get('height', shape.get('h', 1.0)))
-        ang = float(shape.get('angle', 0.0))
-        # handle rotated box: angle in degrees, positive rotates box about center
-        # compute coordinates in box-local frame by rotating points by -angle
-        theta = np.deg2rad(ang)
+    
+    def _box_mask(xs: np.ndarray, ys: np.ndarray, cx: float, cy: float, w: float, h: float, angle: float) -> np.ndarray:
+        """Pure numpy rotated box mask."""
+        theta = np.deg2rad(angle)
         ca = np.cos(-theta)
         sa = np.sin(-theta)
         dx = xs - cx
         dy = ys - cy
         xr = dx * ca - dy * sa
         yr = dx * sa + dy * ca
-        mask = (np.abs(xr) <= (w / 2.0)) & (np.abs(yr) <= (h / 2.0))
-        return mask
+        return (np.abs(xr) <= (w / 2.0)) & (np.abs(yr) <= (h / 2.0))
+
+
+def points_in_shape(xs: np.ndarray, ys: np.ndarray, shape: Dict[str, Any]) -> np.ndarray:
+    """对于给定 shape dict，返回与 xs/ys 对应的布尔 mask 表示点是否在 shape 内。"""
+    xs = np.asarray(xs, dtype=np.float64)
+    ys = np.asarray(ys, dtype=np.float64)
+    
+    typ = shape.get('type', '').lower()
+    if typ == 'circle':
+        cx = float(shape['x'])
+        cy = float(shape['y'])
+        r = float(shape['r'])
+        return _circle_mask(xs, ys, cx, cy, r)
+    if typ == 'annulus':
+        cx = float(shape['x'])
+        cy = float(shape['y'])
+        rin = float(shape['r_in'])
+        rout = float(shape['r_out'])
+        return _annulus_mask(xs, ys, cx, cy, rin, rout)
+    if typ == 'box':
+        cx = float(shape.get('x', 0.0))
+        cy = float(shape.get('y', 0.0))
+        w = float(shape.get('width', shape.get('w', 1.0)))
+        h = float(shape.get('height', shape.get('h', 1.0)))
+        ang = float(shape.get('angle', 0.0))
+        return _box_mask(xs, ys, cx, cy, w, h, ang)
     if typ == 'polygon':
         pts = shape['points']
         if _HAVE_SHAPELY:
             poly = Polygon(pts)
             return np.array([poly.contains(Point(xx, yy)) for xx, yy in zip(xs, ys)], dtype=bool)
         else:
-            return _points_in_polygon_mpl(xs, ys, pts)
+            return _points_in_polygon_wrapper(xs, ys, pts)
     if typ == 'ellipse':
         # approximate ellipse using affine transform (angle in degrees)
         cx = float(shape.get('x', 0.0))

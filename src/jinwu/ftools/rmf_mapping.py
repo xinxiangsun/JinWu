@@ -6,16 +6,29 @@
 - EBOUNDS 中点的回退策略
 
 该实现尽量向量化：对大量事件先对唯一道号做一次后验计算/采样，然后将结果广播回事件数组。
-若需要更高性能，可在 map_channels_to_energy 中为循环采样部分使用 numba 或将矩阵运算迁移到 jax（需额外依赖）。
+使用 numba 加速核心循环以提升性能。
 使用时请注意传入 RMF 矩阵的方向：本模块接受 `matrix` 形状为 (n_channels, n_energies) 或 (n_energies, n_channels)，
 函数会自动检测并调整。
 """
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Any
 
 import numpy as np
+
+try:
+    from numba import njit
+    _HAVE_NUMBA = True
+except ImportError:
+    _HAVE_NUMBA = False
+    def njit(*args, **kwargs):
+        """Dummy decorator when numba is not available."""
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
 
 __all__ = [
     'ebounds_midpoints',
