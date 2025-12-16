@@ -77,7 +77,8 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
 
     if arr.size == 0:
         exposure = _estimate_exposure_from_eventdata(ev)
-        return PhaData(kind='pha', path=ev.path, channels=np.array([], dtype=int), counts=np.array([], dtype=float),
+        # PhaData.kind 是 ClassVar，不需要在构造函数中传入
+        return PhaData(path=ev.path, channels=np.array([], dtype=int), counts=np.array([], dtype=float),
                        stat_err=None, exposure=exposure, backscal=None, areascal=None,
                        quality=None, grouping=None, ebounds=None, header=ev.header, meta=ev.meta,
                        headers_dump=ev.headers_dump, columns=())
@@ -102,7 +103,8 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
     stat_err = np.sqrt(counts.astype(float))
     exposure = _estimate_exposure_from_eventdata(ev)
 
-    pha = PhaData(kind='pha', path=ev.path, channels=channels, counts=counts.astype(float), stat_err=stat_err,
+    # 构造 PhaData 时同样不需要传入 kind
+    pha = PhaData(path=ev.path, channels=channels, counts=counts.astype(float), stat_err=stat_err,
                   exposure=exposure, backscal=None, areascal=None, quality=None, grouping=None, ebounds=None,
-                  header=ev.header, meta=ev.meta, headers_dump=ev.headers_dump, columns=('CHANNEL','COUNTS'))
+                  header=ev.header, meta=ev.meta, headers_dump=ev.headers_dump, columns=('CHANNEL', 'COUNTS'))
     return pha

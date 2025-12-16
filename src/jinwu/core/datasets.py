@@ -15,7 +15,9 @@ from typing import List, Optional, Literal, Union
 
 import numpy as np
 
-from jinwu.core.file import LightcurveData, PhaData, OgipData
+from jinwu.core.file import LightcurveData, PhaData
+from jinwu.core.file import RegionArea
+from jinwu.core.ops import rebin_lightcurve
 
 __all__ = [
     "LightcurveDataset",
@@ -27,7 +29,7 @@ __all__ = [
 
 # ---- typing helpers -------------------------------------------------------
 
-LightcurveInput = LightcurveData | OgipData
+LightcurveInput = LightcurveData | PhaData
 
 
 def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData:
@@ -48,253 +50,116 @@ def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData
 
 @dataclass(slots=True)
 class LightcurveDataset:
-    """High-level light-curve container.
-
-    Parameters
-    ----------
-    data : LightcurveData
-        The underlying OGIP-like light-curve data object.
-    label : str, optional
-        A human-readable label (e.g. instrument/band name).
-    background : LightcurveDataset | None, optional
-        Optional background light curve associated with this source.
-
-    Notes
-    -----
-    This class is meant to be a thin convenience wrapper around
-    :class:`jinwu.core.file.LightcurveData`, adding methods for selection
-    and simple arithmetic. It does **not** try to hide the underlying
-    data object; you can always access ``.data`` directly.
+    """光变曲线容器类（支持多条曲线统一绘图）
+    
+    参数
+    ----
+    data : List[LightcurveData] | LightcurveData
+        单个或多个光变曲线
+    labels : List[str] | str | None, optional
+        每条曲线的标签
+    
+    示例
+    ----
+    >>> ds = LightcurveDataset(data=[lc1, lc2, lc3], labels=["Src", "Bkg", "Net"])
+    >>> ds.plot(ykind='rate', multiband=True)
+    >>> ds = lc1 + lc2 + lc3  # 链式创建
+    >>> ds = ds + lc4  # 添加新曲线
     """
-
-    data: LightcurveData
-    label: Optional[str] = None
-    background: Optional["LightcurveDataset"] = None
-    # area_ratio: how many "source areas" correspond to one background area.
-    # Typically area_ratio = A_src / A_bkg. It is *not* inferred automatically
-    # here; callers should compute it from RegionArea/region keywords or
-    # BACKSCAL and set it explicitly when creating the dataset.
-    area_ratio: Optional[float] = None
-
-    # ---- basic views ----
-
-    @property
-    def time(self) -> np.ndarray:
-        return self.data.time
-
-    @property
-    def value(self) -> np.ndarray:
-        return self.data.value
-
-    @property
-    def error(self) -> Optional[np.ndarray]:
-        return self.data.error
-
-    @property
-    def dt(self) -> Optional[float]:
-        return getattr(self.data, "dt", None)
-
-    @property
-    def timezero(self) -> Optional[float]:
-        meta = getattr(self.data, "meta", None)
-        return getattr(meta, "timezero", None)
-
-    @property
-    def tstart(self) -> Optional[float]:
-        meta = getattr(self.data, "meta", None)
-        return getattr(meta, "tstart", None)
-
-    @property
-    def tstop(self) -> Optional[float]:
-        meta = getattr(self.data, "meta", None)
-        return getattr(meta, "tstop", None)
-
-    @property
-    def instrument(self) -> Optional[str]:
-        meta = getattr(self.data, "meta", None)
-        return getattr(meta, "instrume", None)
-
-    @property
-    def rate(self) -> np.ndarray:
-        if self.data.is_rate:
-            return self.data.value
-        if self.dt is None or self.dt <= 0:
-            raise ValueError(
-                "Cannot derive rates from counts without a positive dt."
+    
+    data: List[LightcurveData]
+    labels: Optional[List[str]] = None
+    
+    def __post_init__(self):
+        """确保 data 是列表"""
+        if not isinstance(self.data, list):
+            self.data = [self.data]
+        if self.labels is not None and not isinstance(self.labels, list):
+            self.labels = [self.labels]
+        if self.labels is not None and len(self.labels) != len(self.data):
+            raise ValueError(f"labels length ({len(self.labels)}) != data length ({len(self.data)})")
+    
+    def __len__(self) -> int:
+        return len(self.data)
+    
+    def __getitem__(self, index: int) -> LightcurveData:
+        return self.data[index]
+    
+    def __add__(self, other: Union[LightcurveData, 'LightcurveDataset']) -> 'LightcurveDataset':
+        """添加新的光变曲线到容器
+        
+        示例
+        ----
+        >>> ds = ds + new_lc
+        >>> ds = ds1 + ds2  # 合并两个 dataset
+        """
+        if isinstance(other, LightcurveData):
+            return LightcurveDataset(
+                data=self.data + [other],
+                labels=self.labels
             )
-        return self.data.value / float(self.dt)
-
-    def rebin(self, binsize: float, method: Literal['sum', 'mean'] = 'sum') -> "LightcurveDataset":
-        """Rebin the underlying light curve to a new time resolution.
-
-        Parameters
-        ----------
-        binsize : float
-            New time bin width (seconds).
-        method : {'sum', 'mean'}, default='sum'
-            Aggregation method: 'sum' for counts, 'mean' for rates.
-
-        Returns
-        -------
-        LightcurveDataset
-            A new dataset with rebinned light curve.
-        """
-        from .ops import rebin_lightcurve
-        new_data = rebin_lightcurve(self.data, binsize=binsize, method=method)
-        # Rebin background if present
-        new_bg = self.background.rebin(binsize, method=method) if self.background is not None else None
-        return LightcurveDataset(
-            data=new_data,
-            label=self.label,
-            background=new_bg,
-            area_ratio=self.area_ratio,
-        )
-
-    def plot(self, *, ax=None, ykind: Literal['auto', 'rate', 'counts', 'flux'] = 'auto', 
-              multiband: Union[bool, str] = "auto", color=None, label=None, title=None, 
-              grid: bool = True, flux_array=None, **kwargs):
-        """Plot the light curve using the underlying plot_lightcurve function.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes object to draw on; if None, creates new axes.
-        ykind : {'auto', 'rate', 'counts', 'flux'}, default='auto'
-            Vertical axis unit.
-        multiband : bool | 'auto', default='auto'
-            If True or 'auto', plot multi-band light curves as subplots.
-        color : str, optional
-            Line color.
-        label : str, optional
-            Legend label; defaults to self.label if available.
-        title : str, optional
-            Plot title.
-        grid : bool, default=True
-            Whether to show grid.
-        flux_array : np.ndarray, optional
-            External flux values for ykind='flux' (TODO: support in LightcurveData).
-        **kwargs
-            Additional arguments passed to plot_lightcurve.
-
-        Returns
-        -------
-        matplotlib.axes.Axes or list of Axes
-        """
-        from .plot import plot_lightcurve
-        if label is None and self.label is not None:
-            label = self.label
-        return plot_lightcurve(
-            self.data,
-            ax=ax,
-            ykind=ykind,
-            multiband=multiband,
-            color=color,
-            label=label,
-            title=title,
-            grid=grid,
-            flux_array=flux_array,
-            **kwargs
-        )
-
-    # ---- simple selection/slicing ----
-
-    def select_time(self, tmin: float | None = None, tmax: float | None = None) -> "LightcurveDataset":
-        """Return a new dataset restricted to a time interval.
-
-        The selection is half-open in spirit: [tmin, tmax]. If any is
-        ``None``, it is left unbounded on that side.
-        """
-
-        t = self.data.time
-        mask = np.ones_like(t, dtype=bool)
-        if tmin is not None:
-            mask &= t >= tmin
-        if tmax is not None:
-            mask &= t <= tmax
-        return self._apply_mask(mask)
-
-    def _apply_mask(self, mask: np.ndarray) -> "LightcurveDataset":
-        d = self.data
-        new = LightcurveData(
-            time=d.time[mask],
-            value=d.value[mask],
-            error=d.error[mask] if d.error is not None else None,
-            dt=d.dt,
-            exposure=d.exposure,
-            is_rate=d.is_rate,
-            bin_exposure=(d.bin_exposure[mask] if (hasattr(d, 'bin_exposure') and d.bin_exposure is not None) else None),
-            path=d.path,
-            header=d.header,
-            meta=d.meta,
-            headers_dump=d.headers_dump,
-            region=d.region,
-        )
-        bg = self.background._apply_mask(mask) if self.background is not None else None
-        return LightcurveDataset(
-            data=new,
-            label=self.label,
-            background=bg,
-            area_ratio=self.area_ratio,
-        )
-
-    # ---- simple background subtraction hook ----
-
-    def subtract_background(self) -> "LightcurveDataset":
-        """Return a background-subtracted light curve.
-
-        公式
-        ------
-        使用
-
-        ``value_net = value_src - area_ratio * value_bkg``
-
-        其中 ``area_ratio`` 一般由调用方根据源/背景区域面积
-        （例如 :class:`jinwu.core.file.RegionArea` 或 BACKSCAL）
-        预先计算并填写到 ``LightcurveDataset.area_ratio`` 中。
-
-        若 ``area_ratio`` 为 ``None`` 或背景缺失，则直接返回自身
-        （不做减背景）。
-
-        误差按独立误差传播：
-
-        ``err_net = sqrt(err_src^2 + (area_ratio * err_bkg)^2)``。
-
-        当前实现仍然假定源与背景 time 轴完全对齐；更通用的
-        重采样/对齐可在上层工具中实现。
-        """
-
-        if self.background is None or self.area_ratio is None:
-            return self
-
-        src = self.data
-        bkg = self.background.data
-        if src.time.shape != bkg.time.shape or not np.allclose(src.time, bkg.time):
-            raise ValueError("Source and background light curves must share the same time bins for now.")
-
-        area_ratio = float(self.area_ratio)
-        val = src.value - area_ratio * bkg.value
-        if src.error is not None or bkg.error is not None:
-            src_err = src.error if src.error is not None else np.zeros_like(src.value)
-            bkg_err = bkg.error if bkg.error is not None else np.zeros_like(bkg.value)
-            err = np.sqrt(src_err**2 + (area_ratio * bkg_err) ** 2)
+        elif isinstance(other, LightcurveDataset):
+            new_labels = None
+            if self.labels is not None or other.labels is not None:
+                new_labels = (self.labels or [None]*len(self.data)) + (other.labels or [None]*len(other.data))
+            return LightcurveDataset(
+                data=self.data + other.data,
+                labels=new_labels
+            )
         else:
-            err = None
-
-        new = LightcurveData(
-            time=src.time,
-            value=val,
-            error=err,
-            dt=src.dt,
-            exposure=src.exposure,
-            is_rate=src.is_rate,
-            bin_exposure=(src.bin_exposure if (hasattr(src, 'bin_exposure') and src.bin_exposure is not None) else None),
-            path=src.path,
-            header=src.header,
-            meta=src.meta,
-            headers_dump=src.headers_dump,
-            region=src.region,
-        )
-        return LightcurveDataset(data=new, label=self.label, background=None, area_ratio=self.area_ratio)
+            return NotImplemented
+    
+    def plot(self, *, ax=None, ykind: Literal['auto', 'rate', 'counts', 'flux'] = 'auto', 
+              multiband: Union[bool, str] = "auto", colors=None, title=None, 
+              grid: bool = True, **kwargs):
+        """绘制光变曲线
+        
+        参数
+        ----
+        multiband : bool | 'auto', default='auto'
+            True: 多子图模式；False: 叠加模式；'auto': 自动选择
+        colors : list[str], optional
+            每条曲线的颜色
+        其他参数传递给 plot_lightcurve
+        """
+        from jinwu.core.plot import plot_lightcurve
+        import matplotlib.pyplot as plt
+        
+        # 单条曲线：直接绘制
+        if len(self.data) == 1:
+            label = self.labels[0] if self.labels else None
+            color = colors[0] if colors else None
+            return plot_lightcurve(
+                self.data[0], ax=ax, ykind=ykind, multiband=multiband,
+                color=color, label=label, title=title, grid=grid, **kwargs
+            )
+        
+        # 多条曲线
+        if multiband == True or (multiband == "auto" and len(self.data) > 3):
+            # 多子图模式
+            fig, axes = plt.subplots(len(self.data), 1, figsize=(10, 3*len(self.data)), sharex=True)
+            if not isinstance(axes, np.ndarray):
+                axes = [axes]
+            for i, lc in enumerate(self.data):
+                label = self.labels[i] if self.labels else None
+                color = colors[i] if colors else None
+                plot_lightcurve(lc, ax=axes[i], ykind=ykind, color=color, label=label, grid=grid, **kwargs)
+            if title:
+                fig.suptitle(title)
+            return axes
+        else:
+            # 叠加模式
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(10, 6))
+            for i, lc in enumerate(self.data):
+                label = self.labels[i] if self.labels else None
+                color = colors[i] if colors else None
+                plot_lightcurve(lc, ax=ax, ykind=ykind, color=color, label=label, grid=grid, **kwargs)
+            if title:
+                ax.set_title(title)
+            if self.labels:
+                ax.legend()
+            return ax
 
 
 @dataclass(slots=True)
@@ -334,152 +199,149 @@ class JointDataset:
         self.spectra.append(spec)
 
 
-def _region_area_value(lc: LightcurveData) -> Optional[float]:
-    reg = lc.region
-    if reg is None or reg.area is None:
-        return None
-    if reg.area <= 0:
-        return None
-    try:
-        return float(reg.area)
-    except Exception:
-        return None
-
-
-def _infer_area_ratio(source: LightcurveData, background: LightcurveData) -> Optional[float]:
-    src_area = _region_area_value(source)
-    bkg_area = _region_area_value(background)
-    if src_area is None or bkg_area is None or bkg_area == 0:
-        return None
-    return src_area / bkg_area
-
-
 def netdata(
     source: LightcurveInput,
     background: Optional[LightcurveInput] = None,
     *,
-    label: Optional[str] = None,
-    background_label: Optional[str] = None,
-    area_ratio: Optional[float] = None,
+    ratio: Optional[float] = None,
+    use_exposure_weighted_ratio: bool = True,
     offset: float = 0.0,
-    resample: Literal['strict', 'resample'] = 'resample',
-) -> LightcurveDataset:
-    """Return a light-curve dataset (net if possible).
-
-    Parameters
-    ----------
+) -> LightcurveData:
+    """计算净光变曲线（源 - 背景）
+    
+    这是核心的背景减除函数，支持 LightcurveData 和未来的 PhaData。
+    所有减法操作（包括 `src - bkg`）最终都调用此函数。
+    
+    参数
+    ----
     source : LightcurveData | OgipData
-        Light-curve data (e.g. from ``readfits``). Non-LC data will raise.
-    background : LightcurveData | OgipData | None, optional
-        Optional background light curve.
-
-    行为概述
-    --------
-    1. 先把源/背景光变包装成 :class:`LightcurveDataset`；
-    2. 若未提供 ``area_ratio`` 且源/背景区域面积可得，则自动计算；
-    3. 若背景和 ``area_ratio`` 均可用，则立即执行减背景并返回净光变；
-       否则返回带背景引用的原始数据集，方便上层后续手动处理。
+        源光变曲线
+    background : LightcurveData | OgipData | None
+        背景光变曲线
+    ratio : float, optional
+        源背景缩放比例（None 则自动计算）
+    use_exposure_weighted_ratio : bool, default=True
+        自动计算时是否使用 (区域面积×曝光时间) 比值
+    offset : float, default=0.0
+        额外计数偏移（在计数空间减去）
+    
+    返回
+    ----
+    LightcurveData
+        净光变曲线（若无背景则返回源本身）
+    
+    示例
+    ----
+    >>> net = netdata(src, bkg)  # 自动计算 ratio
+    >>> net = netdata(src, bkg, ratio=1.5)  # 手动 ratio
+    >>> net = src - bkg  # 等效于 netdata(src, bkg)
+    
+    说明
+    ----
+    算法流程：
+    1. 确定 ratio（自动或手动）
+    2. 对齐时间轴（若需要 rebin 背景）
+    3. 转换到计数空间（使用 bin_exposure）
+    4. 执行减法：net = src - ratio * bkg - offset
+    5. 误差传播：err² = src_err² + (ratio * bkg_err)²
+    6. 转回原始单位（rate/counts）
+    7. 零曝光 bin 标记为 NaN
     """
-
+    import numpy as np
+    
     src_lc = _coerce_lightcurve(source, arg_name="source")
-    bkg_lc = _coerce_lightcurve(background, arg_name="background") if background is not None else None
-
-    background_ds = None
-    if bkg_lc is not None:
-        background_ds = LightcurveDataset(data=bkg_lc, label=background_label)
-
-    # area_ratio is expected to be provided by the caller when a background
-    # light curve is supplied (typical workflow: user computes area ratio
-    # from region areas or BACKSCAL and passes it here). If a background is
-    # present but no area_ratio is available, raise a clear error rather
-    # than silently attempting to infer or returning an unexpected result.
-    ratio = area_ratio
-    if bkg_lc is None:
-        # No background: return source dataset as-is
-        return LightcurveDataset(
-            data=src_lc,
-            label=label,
-            background=None,
-            area_ratio=None,
-        )
-
-    # Background is provided: area_ratio must be explicit or inferable
+    
+    if background is None:
+        return src_lc
+    
+    bkg_lc = _coerce_lightcurve(background, arg_name="background")
+    
+    # ========== 1. 确定 ratio ==========
     if ratio is None:
-        inferred = _infer_area_ratio(src_lc, bkg_lc)
-        if inferred is None:
-            raise ValueError(
-                "Background provided to netdata but no area_ratio supplied and could not be inferred."
-            )
-        ratio = inferred
-
-    # If needed, resample background to match source time bins
-    if resample == 'resample':
-        from .ops import rebin_lightcurve
-        # If dt or time arrays differ, rebin background to source binsize and alignment
-        src_dt = getattr(src_lc, 'dt', None)
-        bkg_dt = getattr(bkg_lc, 'dt', None)
-        times_equal = (src_lc.time.shape == bkg_lc.time.shape) and np.allclose(src_lc.time, bkg_lc.time)
-        if (src_dt is None or bkg_dt is None) or (not times_equal) or (abs((src_dt or 0.0) - (bkg_dt or 0.0)) > 1e-12):
-            if src_lc.dt is None:
-                raise ValueError("Source lightcurve has unknown dt; cannot resample background to match.")
-            bkg_lc = rebin_lightcurve(bkg_lc, binsize=src_lc.dt, method='sum', align_ref=(src_lc.meta.timezero if getattr(src_lc, 'meta', None) is not None else None))
-    else:
-        # strict: require identical time axes
-        if not ((src_lc.time.shape == bkg_lc.time.shape) and np.allclose(src_lc.time, bkg_lc.time)):
-            raise ValueError("Background and source light curves have different time axes; set resample='resample' to align.")
-
-    # Now perform subtraction in counts space for robust propagation
-    src_dt = src_lc.dt if src_lc.dt is not None else 1.0
-    # source counts
-    if src_lc.is_rate:
-        src_counts = src_lc.value * src_dt
-        src_err_counts = (src_lc.error * src_dt) if src_lc.error is not None else np.sqrt(np.maximum(src_counts, 0.0))
-    else:
-        src_counts = src_lc.value
-        src_err_counts = src_lc.error if src_lc.error is not None else np.sqrt(np.maximum(src_counts, 0.0))
-
-    # background counts
-    if bkg_lc.is_rate:
-        bkg_counts = bkg_lc.value * (bkg_lc.dt if bkg_lc.dt is not None else src_dt)
-        bkg_err_counts = (bkg_lc.error * (bkg_lc.dt if bkg_lc.dt is not None else src_dt)) if bkg_lc.error is not None else np.sqrt(np.maximum(bkg_counts, 0.0))
-    else:
-        bkg_counts = bkg_lc.value
-        bkg_err_counts = bkg_lc.error if bkg_lc.error is not None else np.sqrt(np.maximum(bkg_counts, 0.0))
-
-    # subtract with scaling and optional offset (offset assumed in same units as counts)
+        if use_exposure_weighted_ratio:
+            src_area = src_lc.region.area if (src_lc.region and src_lc.region.area) else None
+            bkg_area = bkg_lc.region.area if (bkg_lc.region and bkg_lc.region.area) else None
+            src_exp = src_lc.exposure if src_lc.exposure else ValueError("Source exposure is None")
+            bkg_exp = bkg_lc.exposure if bkg_lc.exposure else ValueError("Background exposure is None")
+            
+            if src_area is None or bkg_area is None or bkg_area == 0:
+                raise ValueError(
+                    "Cannot infer ratio: region area missing. "
+                    "Provide ratio explicitly or ensure both have valid region.area"
+                )
+            ratio = (src_area * src_exp) / (bkg_area * bkg_exp)
+        else:
+            src_area = src_lc.region.area if (src_lc.region and src_lc.region.area) else None
+            bkg_area = bkg_lc.region.area if (bkg_lc.region and bkg_lc.region.area) else None
+            if src_area is None or bkg_area is None or bkg_area == 0:
+                raise ValueError("Cannot infer ratio from areas. Provide explicitly.")
+            ratio = src_area / bkg_area
+    
+    # ========== 2. 对齐时间轴 ==========
+    bkg_aligned = bkg_lc
+    if not (src_lc.time.shape == bkg_lc.time.shape and np.allclose(src_lc.time, bkg_lc.time)):
+        from jinwu.core.ops import rebin_lightcurve
+        if src_lc.dt is None:
+            raise ValueError("Cannot align: source.dt is None")
+        bkg_aligned = rebin_lightcurve(
+            bkg_lc, binsize=src_lc.dt, method='sum',
+            align_ref=src_lc.timezero if src_lc.timezero else None
+        )
+    
+    # ========== 3. 转换到计数空间 ==========
+    def _to_counts(lc):
+        """将 LightcurveData 转为计数空间，返回 (counts, err_counts, exposure_array)"""
+        exp = lc.bin_exposure if lc.bin_exposure is not None else (lc.dt if lc.dt is not None else 1.0)
+        exp_arr = np.asarray(exp, dtype=float)
+        
+        if lc.is_rate:
+            counts = lc.value * exp_arr
+            err_counts = (lc.error * exp_arr) if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
+        else:
+            counts = lc.value
+            err_counts = lc.error if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
+        
+        return counts, err_counts, exp_arr
+    
+    src_counts, src_err, src_exp_arr = _to_counts(src_lc)
+    bkg_counts, bkg_err, _ = _to_counts(bkg_aligned)
+    
+    # ========== 4. 执行减法（计数空间） ==========
     net_counts = src_counts - float(ratio) * bkg_counts - float(offset)
-    net_var = (src_err_counts ** 2) + (float(ratio) ** 2) * (bkg_err_counts ** 2)
-
-    # produce output LightcurveData in same is_rate as source
+    net_var = (src_err ** 2) + (float(ratio) ** 2) * (bkg_err ** 2)
+    
+    # ========== 5. 转换回原始单位 ==========
     if src_lc.is_rate:
-        out_value = net_counts / src_dt
-        out_err = np.sqrt(net_var) / src_dt
+        out_value = net_counts / src_exp_arr
+        out_err = np.sqrt(net_var) / src_exp_arr
     else:
         out_value = net_counts
         out_err = np.sqrt(net_var)
-    # If source provides per-bin exposure, mark bins with zero exposure as gaps (NaN)
-    src_bin_expos = (src_lc.bin_exposure if (hasattr(src_lc, 'bin_exposure') and src_lc.bin_exposure is not None) else None)
-    if src_bin_expos is not None:
-        zero_mask = (np.asarray(src_bin_expos, dtype=float) == 0.0)
+    
+    # ========== 6. 处理零曝光 bin ==========
+    if src_lc.bin_exposure is not None:
+        zero_mask = (np.asarray(src_lc.bin_exposure, dtype=float) == 0.0)
         if np.any(zero_mask):
-            out_value = out_value.astype(float)
-            out_err = out_err.astype(float)
+            out_value = out_value.astype(float).copy()
+            out_err = out_err.astype(float).copy()
             out_value[zero_mask] = np.nan
             out_err[zero_mask] = np.nan
-
-        new = LightcurveData(
-            time=src_lc.time,
-            value=out_value,
-            error=out_err,
-            dt=src_lc.dt,
-            exposure=src_lc.exposure,
-            is_rate=src_lc.is_rate,
-            bin_exposure=src_bin_expos,
-            path=src_lc.path,
-            header=src_lc.header,
-            meta=src_lc.meta,
-            headers_dump=src_lc.headers_dump,
-            region=src_lc.region,
-        )
-
-    return LightcurveDataset(data=new, label=label, background=LightcurveDataset(data=bkg_lc, label=background_label), area_ratio=ratio)
+    
+    # ========== 7. 构造结果 ==========
+    net = LightcurveData(
+        time=src_lc.time, value=out_value, error=out_err,
+        dt=src_lc.dt, exposure=src_lc.exposure, is_rate=src_lc.is_rate,
+        bin_exposure=src_lc.bin_exposure,
+        timezero=src_lc.timezero, timezero_obj=src_lc.timezero_obj,
+        bin_lo=src_lc.bin_lo, bin_hi=src_lc.bin_hi,
+        tstart=src_lc.tstart, tseg=src_lc.tseg,
+        gti_start=src_lc.gti_start, gti_stop=src_lc.gti_stop,
+        quality=src_lc.quality, fracexp=src_lc.fracexp,
+        backscal=src_lc.backscal, areascal=src_lc.areascal,
+        telescop=src_lc.telescop, timesys=src_lc.timesys, mjdref=src_lc.mjdref,
+        path=src_lc.path, header=src_lc.header, meta=src_lc.meta,
+        headers_dump=src_lc.headers_dump, region=src_lc.region,
+        columns=src_lc.columns, ratio=ratio,
+    )
+    
+    return net

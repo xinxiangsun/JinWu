@@ -30,8 +30,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload, ClassVar
-
+from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload, ClassVar, TYPE_CHECKING
+from astropy.time import TimeDelta
 import numpy as np
 from astropy.io import fits
 from .ogip import (
@@ -491,10 +491,19 @@ class PhaData(OgipSpectrumBase):
         from .ops import slice_pha
         return slice_pha(self, emin=emin, emax=emax, ch_lo=ch_lo, ch_hi=ch_hi)
 
-    def rebin(self, factor: int) -> 'PhaData':
-        """道聚合（每 factor 个道合并）。委托到 ops.rebin_pha。"""
+    def rebin(self, *, factor: Optional[int] = None, min_counts: Optional[float] = None) -> 'PhaData':
+        """道聚合：按固定因子或最小计数阈值合并道。委托到 ops.rebin_pha。
+        
+        参数
+        - factor: 固定聚合因子（如 2 表示两两合并）；与 min_counts 互斥
+        - min_counts: 基于最小计数阈值聚合；若既未提供 factor 也未提供 min_counts，
+                      将使用已有的 pha.grouping（若存在）
+        
+        English
+        Rebin PHA by factor or min_counts; delegates to ops.rebin_pha.
+        """
         from .ops import rebin_pha
-        return rebin_pha(self, factor=factor)
+        return rebin_pha(self, factor=factor, min_counts=min_counts)
 
     def grppha(self, *, min_counts: Optional[float] = None, groupfile: Optional[str] = None, rebin: bool = False, outfile: Optional[str] = None, overwrite: bool = False) -> 'PhaData':
         """Convenience wrapper to run grppha-like grouping on this PhaData.
@@ -519,28 +528,100 @@ class PhaData(OgipSpectrumBase):
 
 @dataclass(slots=True)
 class LightcurveData(OgipTimeSeriesBase):
-    """光变曲线数据
+    """光变曲线数据 (OGIP-93-003 兼容)
 
-    字段
-    - time: 时间轴（bin 左缘或中心）
-    - value: RATE 或 COUNTS
-    - error: 不确定度（可选）
-    - dt: 典型时间分辨率（若可推断）
-    - exposure: 曝光时间（头关键字推断，可选）
-    - is_rate: 是否为速率（True 为 RATE，False 为 COUNTS）
-    - header: 头关键字字典
-
-    English
-    - Light curve table with TIME and RATE/COUNTS.
+    **核心字段设计（遵循 OGIP TIMEZERO 标准）**
+    
+    时间处理遵循 OGIP-93-003 规范：
+    - time: FITS TIME 列的原始值（可能是相对时间 0,1,2... 或绝对 MET）
+    - timezero: TIMEZERO 关键字值（时间偏移，单位秒）
+    - 绝对时间 = time + timezero
+    
+    两种常见模式：
+    1. **绝对时间模式**: TIMEZERO=0, TIME=MET（如123456.78）
+    2. **相对时间模式**: TIMEZERO=MET_START, TIME=相对秒数（0,1,2...）
+    
+    时间坐标系统：
+    - time: TIME 列原始值（核心字段）
+    - timezero: TIMEZERO 偏移量（默认0）
+    - timezero_obj: 根据 TELESCOP 自动生成的 Time 对象（用于时间转换）
+    - dt: bin 宽度（秒，标量或数组）
+    - bin_lo, bin_hi: 时间箱边界（便利字段，= time ± dt/2）
+    
+    计数/速率数据：
+    - value: 主要数据列（RATE 或 COUNTS，核心字段）
+    - error: 误差列（核心字段）
+    - is_rate: 标记 value 是速率还是计数
+    - counts, rate: 分离存储（可选，用于同时保存两者）
+    
+    GTI 与质量：
+    - gti_start, gti_stop: GTI 时间数组
+    - quality: 质量标志
+    - fracexp: 分数曝光
+    - backscal, areascal: 刻度因子
+    
+    时间系统元数据：
+    - telescop: 望远镜名称（用于自动生成 timezero_obj）
+    - timesys: 时间系统（'TT', 'UTC'等）
+    - mjdref: MJD 参考（可选，不是核心）
+    
+    其他：
+    - exposure: 总曝光时间
+    - region: 区域信息
+    
+    English: OGIP-93-003 compliant lightcurve with proper TIMEZERO handling.
+    Two modes supported: absolute (TIMEZERO=0, TIME=MET) and relative 
+    (TIMEZERO=MET_START, TIME=0,1,2...). Automatically generates Time object
+    based on TELESCOP for time conversions.
     """
+    
     kind: ClassVar[Literal['lc']] = 'lc'
-    time: np.ndarray   # bin left edges or centers
-    value: np.ndarray  # RATE or COUNTS
-    error: Optional[np.ndarray]
-    dt: Optional[float]
-    exposure: Optional[float]
-    is_rate: bool
+    
+    # ========== 核心必需字段（读取时必须填充，但给默认值以兼容 dataclass 继承）==========
+    time: Optional[np.ndarray] = None       # TIME 列原始值（相对或绝对）
+    value: Optional[np.ndarray] = None      # 主要数据（RATE 或 COUNTS）
+    
+    # ========== 核心时间字段（有默认值）==========
+    timezero: float = 0.0                   # TIMEZERO 偏移量（秒）
+    timezero_obj: Optional[Any] = None      # Time 对象（根据 TELESCOP 生成）
+    dt: Optional[np.ndarray | float] = None # bin 宽度（秒）
+    
+    # ========== 便利时间字段 ==========
+    bin_lo: Optional[np.ndarray] = None     # bin 左缘（time - dt/2）
+    bin_hi: Optional[np.ndarray] = None     # bin 右缘（time + dt/2）
+    tstart: Optional[float] = None          # 观测起始（绝对时间）
+    tseg: Optional[float] = None            # 观测总时长
+    
+    # ========== 核心数据字段 ==========
+    error: Optional[np.ndarray] = None      # 误差
+    is_rate: bool = False                   # value 是速率还是计数
+    
+    # ========== 分离存储（可选，用于同时保存计数和速率）==========
+    counts: Optional[np.ndarray] = None     # 原始计数
+    rate: Optional[np.ndarray] = None       # 计数速率
+    counts_err: Optional[np.ndarray] = None # 计数误差
+    rate_err: Optional[np.ndarray] = None   # 速率误差
+    err_dist: Optional[Literal['poisson', 'gauss']] = None
+    
+    # ========== GTI 与质量 ==========
+    gti_start: Optional[np.ndarray] = None  # GTI 起始（绝对时间）
+    gti_stop: Optional[np.ndarray] = None   # GTI 结束（绝对时间）
+    quality: Optional[np.ndarray] = None    # 质量标志
+    fracexp: Optional[np.ndarray] = None    # 分数曝光
+    backscal: Optional[np.ndarray | float] = None
+    areascal: Optional[np.ndarray | float] = None
+    
+    # ========== 时间系统元数据 ==========
+    telescop: Optional[str] = None          # 望远镜名称（用于时间转换）
+    timesys: Optional[str] = None           # 时间系统
+    mjdref: Optional[float] = None          # MJD 参考（可选）
+    
+    # ========== 其他 ==========
+    exposure: Optional[float] = None
+    bin_exposure: Optional[np.ndarray] = None
+    region: Optional[RegionArea] = None
     columns: Tuple[str, ...] = ()
+    ratio:Optional[float]=None
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
         rpt = super().validate()
@@ -549,70 +630,523 @@ class LightcurveData(OgipTimeSeriesBase):
             rpt.add('ERROR', 'MISSING_COLUMN', "Lightcurve missing TIME column")
         if not any(x in colset for x in ["RATE", "COUNTS"]):
             rpt.add('ERROR', 'MISSING_COLUMN', "Lightcurve missing RATE/COUNTS column")
+        
+        # 验证核心时间字段
+        if self.time is None or len(self.time) == 0:
+            rpt.add('ERROR', 'MISSING_TIME', "time array is empty or None")
+        
+        # 验证核心数据字段
+        if self.value is None or len(self.value) == 0:
+            rpt.add('ERROR', 'MISSING_VALUE', "value array is empty or None")
+        
+        # 验证 time 和 value 长度一致
+        if self.time is not None and self.value is not None:
+            if len(self.time) != len(self.value):
+                rpt.add('ERROR', 'LENGTH_MISMATCH', f"time ({len(self.time)}) and value ({len(self.value)}) length mismatch")
+        
+        # 验证 GTI（若存在）
+        if self.gti_start is not None and self.gti_stop is not None:
+            if len(self.gti_start) != len(self.gti_stop):
+                rpt.add('ERROR', 'GTI_MISMATCH', "gti_start and gti_stop must have same length")
+            if len(self.gti_start) > 0 and not np.all(self.gti_start < self.gti_stop):
+                rpt.add('ERROR', 'GTI_ORDER', "gti_start must be < gti_stop")
+        
+        # 验证时间单调性（警告级别）
+        if self.time is not None and len(self.time) > 1:
+            if not np.all(np.diff(self.time) > 0):
+                rpt.add('WARN', 'TIME_NOT_SORTED', "time array is not strictly increasing")
+        
+        # 验证曝光时间
+        if self.exposure is not None and self.exposure <= 0:
+            rpt.add('WARN', 'BAD_EXPOSURE', f"exposure must be > 0, got {self.exposure}")
+        
         rpt.ok = len(rpt.errors()) == 0
         return rpt
 
+    # ========== 便利属性 ==========
+    
     @property
-    def rate(self) -> Optional[np.ndarray]:
-        if self.is_rate:
-            return self.value
-        if (not self.is_rate) and self.dt and self.dt > 0:
-            return self.value / self.dt
-        return None
-
+    def n(self) -> int:
+        """数据点数"""
+        return len(self.time) if self.time is not None else 0
+    
     @property
-    def counts(self) -> Optional[np.ndarray]:
-        if not self.is_rate:
-            return self.value
-        if self.is_rate and self.dt and self.dt > 0:
-            return self.value * self.dt
+    def absolute_time(self) -> np.ndarray:
+        """绝对时间 = time + timezero（OGIP 标准）"""
+        return self.time + self.timezero
+    
+    @property
+    def gti(self) -> Optional[list[tuple[float, float]]]:
+        """GTI 元组列表 [(start0, stop0), ...]"""
+        if self.gti_start is None or self.gti_stop is None:
+            return None
+        return [(float(s), float(e)) for s, e in zip(self.gti_start, self.gti_stop)]
+    
+    def get_time_object(self, index: Optional[int] = None) -> Optional[Any]:
+        """获取 Time 对象（用于时间转换）
+        
+        参数：
+        - index: 若指定，返回该索引的时间对象；否则返回所有时间的数组
+        
+        返回：
+        - astropy.time.Time 对象或 None
+        """
+        if self.timezero_obj is None:
+            return None
+        
+        
+        absolute_times = self.absolute_time
+        
+        if index is not None:
+            dt = TimeDelta(absolute_times[index], format='sec')
+        else:
+            dt = TimeDelta(absolute_times, format='sec')
+        
+        return self.timezero_obj + dt
+
+    # ========== 便利属性与转换 ==========
+    
+    @property
+    def bin_centers(self) -> Optional[np.ndarray]:
+        """Bin 中心时刻 = (bin_lo + bin_hi) / 2"""
+        if self.bin_lo is None or self.bin_hi is None:
+            return None
+        return 0.5 * (self.bin_lo + self.bin_hi)
+    
+    @property
+    def mean_rate(self) -> Optional[float]:
+        """平均计数速率 (counts/sec)"""
+        if self.rate is None:
+            return None
+        if len(self.rate) == 0:
+            return None
+        return float(np.mean(self.rate))
+    
+    @property
+    def mean_counts(self) -> Optional[float]:
+        """平均计数"""
+        if self.counts is None:
+            return None
+        if len(self.counts) == 0:
+            return None
+        return float(np.mean(self.counts))
+    
+    @property
+    def total_counts(self) -> Optional[float]:
+        """总计数"""
+        if self.counts is None:
+            return None
+        return float(np.sum(self.counts))
+    
+    # ========== 废弃属性（向后兼容）==========
+    
+    @property
+    def _legacy_value(self) -> Optional[np.ndarray]:
+        """Deprecated: access counts or rate directly instead."""
+        import warnings
+        warnings.warn(
+            "LightcurveData.value is deprecated; use counts or rate instead.",
+            DeprecationWarning, stacklevel=2
+        )
+        if self.counts is not None:
+            return self.counts
+        elif self.rate is not None:
+            if self.dt is not None and np.any(self.dt > 0):
+                return self.rate * (self.dt if isinstance(self.dt, np.ndarray) else self.dt)
         return None
-    # Per-bin exposure array (seconds). Optional; when present its length equals
-    # the number of bins and each element is the effective exposure within
-    # that bin (useful for GTI-aware resampling and HEASoft-compatible logic).
-    bin_exposure: Optional[np.ndarray] = None
-    # 若可从区域扩展推断（如 WXT 的 REG00101），记录单个区域描述
-    region: Optional[RegionArea] = None
-
-    def plot(self, **kwargs):
-        """委托到 plot.plot_lightcurve；支持 ax/T0/multiband 等参数。"""
-        from .plot import plot_lightcurve
-        return plot_lightcurve(self, **kwargs)
-
+    
+    @property
+    def _legacy_error(self) -> Optional[np.ndarray]:
+        """Deprecated: use counts_err or rate_err instead."""
+        import warnings
+        warnings.warn(
+            "LightcurveData.error is deprecated; use counts_err or rate_err instead.",
+            DeprecationWarning, stacklevel=2
+        )
+        if self.counts_err is not None:
+            return self.counts_err
+        elif self.rate_err is not None and self.dt is not None:
+            return self.rate_err * self.dt
+        return None
+    
+    @property
+    def _legacy_is_rate(self) -> bool:
+        """Deprecated: check counts/rate fields directly."""
+        import warnings
+        warnings.warn(
+            "LightcurveData.is_rate is deprecated; check counts/rate fields instead.",
+            DeprecationWarning, stacklevel=2
+        )
+        return self.rate is not None and (self.counts is None or self.counts.sum() == 0)
+    # ========== 核心操作方法（GTI 感知）==========
+    
+    def apply_gti(self, inplace: bool = False) -> 'LightcurveData':
+        """按 GTI 过滤 bin，返回新的 LightcurveData。
+        
+        参数
+        - inplace: 若 True 则原地修改；否则返回新对象
+        
+        返回
+        - LightcurveData: 过滤后的光变曲线
+        """
+        if self.gti is None:
+            return self if inplace else self._copy()
+        
+        from stingray.gti import create_gti_mask
+        gti_arr = np.array(self.gti)
+        mask = create_gti_mask(self.bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+        return self.apply_mask(mask, inplace=inplace)
+    
+    def split_by_gti(self, min_points: int = 1) -> list['LightcurveData']:
+        """按 GTI 分割光变曲线为多个独立对象。
+        
+        参数
+        - min_points: 最小数据点数，少于此值的片段会被忽略
+        
+        返回
+        - list[LightcurveData]: GTI 段对应的光变曲线列表
+        """
+        if self.gti is None or len(self.gti) == 0:
+            return [self]
+        
+        from stingray.gti import create_gti_mask
+        result = []
+        
+        for start, stop in self.gti:
+            gti_arr = np.array([[start, stop]])
+            mask = create_gti_mask(self.bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+            
+            if np.sum(mask) < min_points:
+                continue
+            
+            lc_segment = self.apply_mask(mask, inplace=False)
+            # 更新该段的 GTI
+            lc_segment.gti_start = np.array([start])
+            lc_segment.gti_stop = np.array([stop])
+            result.append(lc_segment)
+        
+        return result if result else [self]
+    
+    def apply_mask(self, mask: np.ndarray, inplace: bool = False, 
+                   filtered_attrs: Optional[list[str]] = None) -> 'LightcurveData':
+        """按布尔掩码过滤 bin。
+        
+        参数
+        - mask: 布尔数组，长度必须等于 n
+        - inplace: 若 True 则原地修改；否则返回新对象
+        - filtered_attrs: 要保留的数组属性列表；若 None 则保留全部
+        
+        返回
+        - LightcurveData: 过滤后的光变曲线
+        """
+        import copy
+        
+        # 定义所有可过滤的数组属性
+        all_array_attrs = [
+            'bin_lo', 'bin_hi', 'counts', 'rate', 'counts_err', 'rate_err',
+            'quality', 'fracexp', 'bin_exposure'
+        ]
+        if filtered_attrs is None:
+            filtered_attrs = all_array_attrs
+        
+        if inplace:
+            lc_new = self
+        else:
+            lc_new = self._copy()
+        
+        # 过滤数组属性
+        for attr in all_array_attrs:
+            val = getattr(lc_new, attr, None)
+            if val is None:
+                continue
+            if attr not in filtered_attrs:
+                setattr(lc_new, attr, None)
+            else:
+                try:
+                    filtered_val = np.asanyarray(val)[mask]
+                    setattr(lc_new, attr, filtered_val)
+                except (IndexError, TypeError):
+                    pass
+        
+        # 重新计算 tstart, tseg
+        if lc_new.bin_lo is not None and len(lc_new.bin_lo) > 0:
+            lc_new.tstart = float(lc_new.bin_lo[0])
+            if lc_new.bin_hi is not None:
+                lc_new.tseg = float(lc_new.bin_hi[-1] - lc_new.bin_lo[0])
+        
+        return lc_new
+    
+    def join(self, other: 'LightcurveData', skip_checks: bool = False) -> 'LightcurveData':
+        """合并两条光变曲线为一个对象。
+        
+        参数
+        - other: 另一条 LightcurveData
+        - skip_checks: 若 True 则跳过数据检查
+        
+        返回
+        - LightcurveData: 合并后的光变曲线
+        
+        说明
+        - 若两条 LC 的 mjdref 不同，会发出警告并转换 other 到 self 的 mjdref
+        - 若时间范围重叠，会发出信息提示
+        """
+        import warnings
+        import copy
+        
+        if self.mjdref is not None and other.mjdref is not None and self.mjdref != other.mjdref:
+            warnings.warn(
+                f"MJDref mismatch: self={self.mjdref}, other={other.mjdref}. "
+                f"Converting other to self's mjdref.",
+                UserWarning
+            )
+            other = copy.deepcopy(other)
+            # 简单方案：调整 time 偏移（实际应转换到绝对时间）
+            # 已经在上面的 if 中检查过非 None，这里直接使用
+            assert other.mjdref is not None and self.mjdref is not None
+            time_offset = (other.mjdref - self.mjdref) * 86400.0
+            other.bin_lo = other.bin_lo + time_offset
+            other.bin_hi = other.bin_hi + time_offset
+            if other.gti_start is not None:
+                other.gti_start = other.gti_start + time_offset
+            if other.gti_stop is not None:
+                other.gti_stop = other.gti_stop + time_offset
+            other.mjdref = self.mjdref
+        
+        # 确定顺序
+        if self.tstart is not None and other.tstart is not None and self.tstart < other.tstart:
+            first_lc = self
+            second_lc = other
+        else:
+            first_lc = other
+            second_lc = self
+        
+        # 检查重叠
+        if len(np.intersect1d(self.bin_lo, other.bin_lo)) > 0:
+            warnings.warn(
+                "The two light curves have overlapping time ranges. "
+                "In overlapping regions, counts will be summed.",
+                UserWarning
+            )
+        
+        # 合并数据
+        new_bin_lo = np.concatenate([first_lc.bin_lo, second_lc.bin_lo])
+        new_bin_hi = np.concatenate([first_lc.bin_hi, second_lc.bin_hi])
+        new_counts = np.concatenate([first_lc.counts, second_lc.counts]) if (first_lc.counts is not None and second_lc.counts is not None) else None
+        new_rate = np.concatenate([first_lc.rate, second_lc.rate]) if (first_lc.rate is not None and second_lc.rate is not None) else None
+        new_counts_err = np.concatenate([first_lc.counts_err, second_lc.counts_err]) if (first_lc.counts_err is not None and second_lc.counts_err is not None) else None
+        new_rate_err = np.concatenate([first_lc.rate_err, second_lc.rate_err]) if (first_lc.rate_err is not None and second_lc.rate_err is not None) else None
+        
+        # 合并 GTI
+        if first_lc.gti is not None and second_lc.gti is not None:
+            from stingray.gti import join_gtis
+            new_gti = join_gtis(np.array(first_lc.gti), np.array(second_lc.gti))
+            new_gti_start = new_gti[:, 0]
+            new_gti_stop = new_gti[:, 1]
+        else:
+            new_gti_start = None
+            new_gti_stop = None
+        
+        lc_new = LightcurveData(
+            path=self.path,
+            bin_lo=new_bin_lo, bin_hi=new_bin_hi,
+            counts=new_counts, rate=new_rate,
+            counts_err=new_counts_err, rate_err=new_rate_err,
+            dt=self.dt, tstart=float(new_bin_lo[0]),
+            gti_start=new_gti_start, gti_stop=new_gti_stop,
+            mjdref=self.mjdref, timesys=self.timesys,
+            exposure=self.exposure, header=self.header,
+            meta=self.meta, headers_dump=self.headers_dump, columns=self.columns
+        )
+        lc_new.tseg = float(new_bin_hi[-1] - new_bin_lo[0]) if len(new_bin_hi) > 0 else None
+        return lc_new
+    
+    def truncate(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'LightcurveData':
+        """时间范围裁剪。
+        
+        参数
+        - tmin: 最小时刻；若 None 则不限
+        - tmax: 最大时刻；若 None 则不限
+        
+        返回
+        - LightcurveData: 裁剪后的光变曲线
+        """
+        # 确保 tmin/tmax 不为 None，便于后续比较
+        tmin_val: float = tmin if tmin is not None else (self.bin_lo[0] if len(self.bin_lo) > 0 else 0.0)
+        tmax_val: float = tmax if tmax is not None else (self.bin_hi[-1] if len(self.bin_hi) > 0 else float(np.inf))
+        
+        # 现在 tmin_val 和 tmax_val 都是 float 了
+        mask = (self.bin_lo >= tmin_val) & (self.bin_hi <= tmax_val)
+        lc_truncated = self.apply_mask(mask, inplace=False)
+        
+        # 更新 GTI：仅保留 [tmin_val, tmax_val] 内的 GTI
+        if lc_truncated.gti is not None:
+            gti_filtered = [
+                (max(float(s), tmin_val), min(float(e), tmax_val)) 
+                for s, e in lc_truncated.gti 
+                if min(float(e), tmax_val) > max(float(s), tmin_val)
+            ]
+            if gti_filtered:
+                lc_truncated.gti_start = np.array([s for s, e in gti_filtered])
+                lc_truncated.gti_stop = np.array([e for s, e in gti_filtered])
+            else:
+                lc_truncated.gti_start = None
+                lc_truncated.gti_stop = None
+        
+        return lc_truncated
+    
+    def sort(self, inplace: bool = False) -> 'LightcurveData':
+        """按 bin_lo 排序光变曲线。
+        
+        参数
+        - inplace: 若 True 则原地修改；否则返回新对象
+        
+        返回
+        - LightcurveData: 排序后的光变曲线
+        """
+        sort_idx = np.argsort(self.bin_lo)
+        mask = np.zeros(len(self.bin_lo), dtype=bool)
+        mask[sort_idx] = True
+        return self.apply_mask(mask, inplace=inplace)
+    
+    def _copy(self) -> 'LightcurveData':
+        """返回浅复制（数组仍共享内存）"""
+        import copy
+        return copy.copy(self)
+    
     def slice(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'LightcurveData':
         """按时间范围筛选光变曲线，返回新实例。委托到 ops.slice_lightcurve。"""
         from .ops import slice_lightcurve
         return slice_lightcurve(self, tmin=tmin, tmax=tmax)
+    
 
-    def rebin(self, binsize: float, method: Literal['sum', 'mean'] = 'sum') -> 'LightcurveData':
-        """时间重采样。委托到 ops.rebin_lightcurve。"""
+    def rebin(self, binsize: float, method: Literal['sum', 'mean'] = 'sum', 
+              *, align_ref: Optional[float] = None, empty_bin: Literal['zero', 'nan'] = 'zero') -> 'LightcurveData':
+        """时间重采样(GTI 感知，参考 Stingray 实现）。
+        
+        参数
+        - binsize: 新的时间分辨率（秒）
+        - method: 聚合方法 ('sum' 或 'mean')
+        - align_ref: 可选的对齐参考时间点
+        - empty_bin: 空 bin 处理方式 ('zero' 或 'nan')
+        
+        返回
+        - LightcurveData: 新采样的光变曲线
+        
+        说明
+        - 若定义了 GTI，则对每个 GTI 段分别重采样
+        - 自动更新 counts_err/rate_err 的误差传播
+        """
         from .ops import rebin_lightcurve
-        return rebin_lightcurve(self, binsize=binsize, method=method)
+        return rebin_lightcurve(self, binsize=binsize, method=method, 
+                               align_ref=align_ref, empty_bin=empty_bin)
+    
+    def __sub__(self, other: 'LightcurveData', *, 
+                ratio: Optional[float] = None,
+                use_exposure_weighted_ratio: bool = True) -> 'LightcurveData':
+        """光变曲线减法：self - ratio * other
+        
+        参数
+        ----
+        other : LightcurveData
+            要减去的光变曲线（通常是背景）
+        ratio : float, optional
+            缩放比例。若为 None，自动计算：
+            - use_exposure_weighted_ratio=True: (源面积×源曝光)/(背景面积×背景曝光)
+            - 否则: 源面积/背景面积
+        use_exposure_weighted_ratio : bool, default=True
+            是否使用曝光加权比值
+        
+        返回
+        ----
+        LightcurveData
+            净光变曲线
+        
+        示例
+        ----
+        >>> net = source - background  # 自动计算 ratio
+        >>> net = source.__sub__(background, ratio=1.5)
+        
+        说明
+        ----
+        该方法是 netdata 的语法糖，实际调用 netdata(self, other, ...)。
+        核心逻辑在 netdata 中实现，以便复用于 PHA 等其他数据类型。
+        """
+        from jinwu.core.datasets import netdata
+        # 直接委托给 netdata，它会自动计算 ratio（当 ratio=None）
+        return netdata(self, other, ratio=ratio, use_exposure_weighted_ratio=use_exposure_weighted_ratio)
+    
+    def __add__(self, other: 'LightcurveData') -> 'LightcurveDataset':
+        """两个光变曲线相加，返回 LightcurveDataset 容器
+        
+        示例
+        ----
+        >>> ds = lc1 + lc2  # 返回 LightcurveDataset([lc1, lc2])
+        >>> ds = lc1 + lc2 + lc3  # 链式添加
+        """
+        from jinwu.core.datasets import LightcurveDataset
+        return LightcurveDataset(data=[self, other])
+    
+    def plot(self, **kwargs):
+        """绘制光变曲线，支持 GTI 阴影（如可用）。
+        
+        kwargs 透传给 plot_lightcurve，支持：
+        - ax: matplotlib.axes.Axes 对象
+        - show_gti: 是否绘制 GTI 阴影（默认 True）
+        - ...其他参数（见 plot.plot_lightcurve 文档）
+        """
+        from .plot import plot_lightcurve
+        return plot_lightcurve(self, **kwargs)
 
 
 @dataclass(slots=True)
 class EventData(OgipTimeSeriesBase):
-    """事件列表数据
+    """事件列表数据（支持 TIMEZERO 标准）
+
+    **时间处理设计（与 LightcurveData 一致）**
+    
+    时间处理遵循 OGIP-93-003 规范：
+    - time: 相对时间（相对于第一个事件，单位秒）
+    - timezero: 原始 TIMEZERO + 第一个事件时间（MET 秒）
+    - timezero_obj: Time 对象（根据 TELESCOP 生成，用于时间转换）
+    - 绝对时间 = time + timezero
+    
+    其他时间数据（如 GTI）也转换为相对时间存储。
 
     字段
-    - time: 事件到达时间
+    - time: 事件到达时间（相对时间，秒）
+    - timezero: 时间偏移量（MET 秒）
+    - timezero_obj: Time 对象（用于时间转换）
     - pi/channel: 事件能道（可选）
-    - gti_start/gti_stop: GTI（可选）
+    - gti_start/gti_stop: GTI（相对时间，可选）
     - header: 头关键字字典
 
     English
-    - Event list with optional PI/CHANNEL and GTI.
+    - Event list with TIMEZERO support (relative time storage).
+    - time: relative time (seconds from first event)
+    - timezero_obj: Time object for absolute time conversion
     """
     kind: ClassVar[Literal['evt']] = 'evt'
-    time: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))   # events times (s)
+    
+    # ========== 核心时间字段 ==========
+    time: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))   # 相对时间 (s)
+    timezero: float = 0.0                   # TIMEZERO + 第一个事件时间（MET 秒）
+    timezero_obj: Optional[Any] = None      # Time 对象（根据 TELESCOP 生成）
+    telescop: Optional[str] = None          # 望远镜名称（用于时间转换）
+    
+    # ========== 事件属性 ==========
     pi: Optional[np.ndarray] = None       # PI or CHANNEL if present
     channel: Optional[np.ndarray] = None
     x: Optional[np.ndarray] = None
     y: Optional[np.ndarray] = None
-    gti_start: Optional[np.ndarray] = None
-    gti_stop: Optional[np.ndarray] = None
-    # GTI as list of (start, stop) tuples for convenience
-    gti: Optional[list] = None
+    
+    # ========== GTI ==========
+    gti_start: Optional[np.ndarray] = None  # GTI 起始（相对时间，秒）
+    gti_stop: Optional[np.ndarray] = None   # GTI 结束（相对时间，秒）
+    gti_start_obj: Optional[Any] = None     # GTI 起始 Time 对象数组
+    gti_stop_obj: Optional[Any] = None      # GTI 结束 Time 对象数组
+    gti: Optional[list] = None              # GTI 元组列表 [(start, stop), ...] 相对时间
+    
+    # ========== 其他字段 ==========
     # 原始列字典（列名 -> ndarray），便于上层直接访问原始表格数据
     raw_columns: Optional[Dict[str, np.ndarray]] = None
     # 别名映射：alias -> 原始列名
@@ -621,11 +1155,15 @@ class EventData(OgipTimeSeriesBase):
     energy: Optional[np.ndarray] = None
     # 若文件/同目录存在 EBOUNDS 表，记录 (CHANNEL, E_MIN, E_MAX)
     ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None
-    # 原始头、OGIP 元数据与完整头 dump
-    header: Dict[str, Any] = field(default_factory=dict)
-    meta: Optional[OgipMeta] = None
-    headers_dump: Optional[FitsHeaderDump] = None
+    # 列名元组（继承自基类时已有 path/header/meta/headers_dump，无需重复声明）
     columns: Tuple[str, ...] = ()
+
+    # 内部 XSelectSession，用于跨多次 filter 调用累积筛选条件；
+    # 默认不创建，只有在首次调用 xselect()/filter_* 时才懒加载。
+    _xselect_session: Optional['XSelectSession'] = field(default=None, init=False, repr=False, compare=False)
+
+    if TYPE_CHECKING:  # only for type checkers to avoid circular import at runtime
+        from .xselect import XSelectSession  # noqa: F401
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
         rpt = super().validate()
@@ -636,18 +1174,49 @@ class EventData(OgipTimeSeriesBase):
         return rpt
 
     @property
+    def n(self) -> int:
+        """事件数量"""
+        return len(self.time) if self.time is not None else 0
+    
+    @property
     def duration(self) -> Optional[float]:
         if self.time.size:
             return float(self.time.max() - self.time.min())
         return None
 
     @property
+    def absolute_time(self) -> np.ndarray:
+        """绝对时间 = time + timezero（OGIP 标准）"""
+        return self.time + self.timezero
+    
+    @property
     def gti_exposure(self) -> Optional[float]:
         if self.gti_start is None or self.gti_stop is None:
             return None
         return float(np.sum(self.gti_stop - self.gti_start))
+    
+    def get_time_object(self, index: Optional[int] = None) -> Optional[Any]:
+        """获取 Time 对象（用于时间转换）
+        
+        参数：
+        - index: 若指定，返回该索引的时间对象；否则返回所有时间的数组
+        
+        返回：
+        - astropy.time.Time 对象或 None
+        """
+        if self.timezero_obj is None:
+            return None
+        
+        absolute_times = self.absolute_time
+        
+        if index is not None:
+            dt = TimeDelta(absolute_times[index], format='sec')
+        else:
+            dt = TimeDelta(absolute_times, format='sec')
+        
+        return self.timezero_obj + dt
 
-    def copilotget_energy(self, rmf: Optional[RmfData] = None) -> Optional[np.ndarray]:
+    def get_energy(self, rmf: Optional[RmfData] = None) -> Optional[np.ndarray]:
         """返回事件能量 (keV)。
 
         - 若事件表中已包含 `energy` 字段则直接返回；
@@ -703,8 +1272,10 @@ class EventData(OgipTimeSeriesBase):
                 pass
         # Next, try EBOUNDS found in the same file (stored on EventData.ebounds by reader)
         if getattr(self, 'ebounds', None) is not None:
-            ch, e_lo, e_hi = self.ebounds
-            emid = 0.5 * (np.asarray(e_lo) + np.asarray(e_hi))
+            ebounds_tuple = self.ebounds
+            if ebounds_tuple is not None and len(ebounds_tuple) == 3:
+                ch, e_lo, e_hi = ebounds_tuple
+                emid = 0.5 * (np.asarray(e_lo) + np.asarray(e_hi))
             if getattr(self, 'channel', None) is not None:
                 ch_ev = np.asarray(self.channel)
             elif getattr(self, 'pi', None) is not None:
@@ -768,25 +1339,93 @@ class EventData(OgipTimeSeriesBase):
         return rebin_events_to_lightcurve(self, binsize=binsize, tmin=tmin, tmax=tmax)
 
     # Convenience wrappers delegating to xselect helpers
-    def filter_time(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'EventData':
-        from . import xselect
-        return xselect.filter_time(self, tmin=tmin, tmax=tmax)
+    def xselect(self) -> 'XSelectSession':
+        """创建一个（或复用已有的）XSelectSession 来管理过滤操作。
 
-    def filter_region(self, region) -> 'EventData':
-        from . import xselect
-        return xselect.filter_region(self, region)
+        返回的 session 对象可以用来应用多个过滤条件，这些条件会被记录并统一应用。
 
-    def extract_spectrum(self, out_bins=None, **kwargs) -> PhaData:
+        示例：
+            session = ev.xselect()
+            session.apply_time(tmin=100, tmax=200)
+            session.apply_energy(pi_min=50, pi_max=500)
+            filtered_ev = session.current
+        """
+        from .xselect import XSelectSession
+        if self._xselect_session is None:
+            self._xselect_session = XSelectSession(self)
+        return self._xselect_session
+    
+    def filter_time(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'XSelectSession':
+        """应用时间过滤并返回 XSelectSession 以便继续过滤。
+
+        tmin/tmax 可以是:
+        - float（以秒为单位，直接与 TIME 列比较）；
+        - astropy.time.Time / TimeDelta 或 jinwu.core.time.Time，
+            会自动转换为对应任务 MET 的秒数。
+
+        即使忽略返回值，后续在本 EventData 上调用 extract_*/save()
+        也会自动基于累积后的过滤结果进行操作。
+        """
+        session = self.xselect()
+        session.apply_time(tmin=tmin, tmax=tmax)
+        return session
+
+    def filter_region(self, region) -> 'XSelectSession':
+        """应用区域过滤并返回 XSelectSession 以便继续过滤。"""
+        session = self.xselect()
+        session.apply_region(region)
+        return session
+    
+    def filter_energy(self, pi_min: Optional[int] = None, pi_max: Optional[int] = None) -> 'XSelectSession':
+        """应用能量过滤并返回 XSelectSession 以便继续过滤。"""
+        session = self.xselect()
+        session.apply_energy(pi_min=pi_min, pi_max=pi_max)
+        return session
+    
+    
+    def _current_for_products(self) -> 'EventData':
+        """返回用于提取/保存派生产品的 EventData。
+
+        若已通过 filter_*/xselect() 创建了会话，则返回会话的 current，
+        否则返回自身。这样可以支持：
+
+            evt.filter_time(...)
+            lc = evt.extract_curve(...)
+            evt.save('xx.fits', kind='evt')
+
+        这类写法自动使用所有累积的过滤条件。
+        """
+        sess = getattr(self, '_xselect_session', None)
+        if sess is not None:
+            cur = getattr(sess, 'current', None)
+            if cur is not None:
+                return cur
+        return self
+
+    def extract_spectrum(self, **kwargs) -> PhaData:
+        """提取能谱；若已存在会话，则使用累积过滤后的事件。"""
         from . import xselect
-        return xselect.extract_spectrum(self, out_bins=out_bins, **kwargs)
+        src = self._current_for_products()
+        if src is not self:
+            # 避免在同一对象上再次检查 session，直接在过滤结果上调用
+            return src.extract_spectrum(**kwargs)
+        return xselect.extract_spectrum(self, **kwargs)
 
     def extract_curve(self, binsize: float, **kwargs) -> 'LightcurveData':
+        """提取光变曲线；若已存在会话，则使用累积过滤后的事件。"""
         from . import xselect
+        src = self._current_for_products()
+        if src is not self:
+            return src.extract_curve(binsize=binsize, **kwargs)
         return xselect.extract_curve(self, binsize=binsize, **kwargs)
 
-    def extract_image(self, xbins: int | np.ndarray, ybins: int | np.ndarray, **kwargs):
+    def extract_image(self, **kwargs):
+        """提取图像；若已存在会话，则使用累积过滤后的事件。"""
         from . import xselect
-        return xselect.extract_image(self, xbins=xbins, ybins=ybins, **kwargs)
+        src = self._current_for_products()
+        if src is not self:
+            return src.extract_image(**kwargs)
+        return xselect.extract_image(self, **kwargs)
 
     def save(self, outpath: str | Path, kind: str = 'evt', overwrite: bool = False, **kwargs) -> Path:
         """Save EventData or derived products.
@@ -794,6 +1433,12 @@ class EventData(OgipTimeSeriesBase):
         kind: 'evt' (save events as a table), 'lc' (extract+save lightcurve), 'pha' (extract+save pha), 'img' (extract+save image)
         The kwargs are forwarded to the corresponding xselect writer/extractor.
         """
+        # 若存在会话，则优先在过滤后的 current 上执行保存逻辑，
+        # 这样 evt.filter_xxx(...); evt.save(...) 会使用所有筛选条件。
+        src = self._current_for_products()
+        if src is not self:
+            return src.save(outpath, kind=kind, overwrite=overwrite, **kwargs)
+
         outp = Path(outpath)
         if kind == 'evt':
             # Write events to FITS table while preserving original columns and HDU headers when possible.
@@ -828,20 +1473,23 @@ class EventData(OgipTimeSeriesBase):
                 # Re-open and patch primary + event HDU headers from stored dumps if present
                 with fits.open(outp, mode='update') as hdul:
                     # primary header
-                    if getattr(self, 'headers_dump', None) and getattr(self.headers_dump, 'primary', None):
-                        for k, v in (self.headers_dump.primary or {}).items():
-                            try:
-                                hdul[0].header[k] = v
-                            except Exception:
-                                continue
+                    if getattr(self, 'headers_dump', None) is not None and isinstance(self.headers_dump, FitsHeaderDump):
+                        if getattr(self.headers_dump, 'primary', None) is not None:
+                            for k, v in (self.headers_dump.primary or {}).items():
+                                try:
+                                    prih = cast(Any, hdul[0])
+                                    prih.header[k] = v
+                                except Exception:
+                                    continue
                     # event/table header: use self.header if present
-                    if getattr(self, 'header', None) and len(hdul) > 1:
+                    if getattr(self, 'header', None) is not None and len(hdul) > 1:
+                        tbl = cast(Any, hdul[1])
                         for k, v in (self.header or {}).items():
                             # avoid overwriting structural keywords created by astropy that are required
                             if k in ('TFIELDS', 'TTYPE1', 'TFORM1', 'XTENSION', 'BITPIX', 'NAXIS'):
                                 continue
                             try:
-                                hdul[1].header[k] = v
+                                tbl.header[k] = v
                             except Exception:
                                 continue
                     hdul.flush()
@@ -867,16 +1515,27 @@ class EventData(OgipTimeSeriesBase):
         
 
     def clear_region(self, *, use_original: bool = True) -> 'EventData':
-        """Return EventData with any REGION filtering removed, preserving time/energy filters when possible.
+        """清除 REGION 过滤。
 
-        Behavior:
-        - If `use_original` and `self._original_events` exists, use it as the source;
-        - Else if `self.path` exists, re-read the file with `read_evt(self.path)`.
-        - Re-apply time and energy filters inferred from this object (so REGION is cleared,
-            but TIME/ENERGY constraints are preserved).
-        - If neither original nor path is available, raises ValueError.
+        优先使用内部 XSelectSession（若已存在），以便：
+
+            evt.filter_time(...)
+            evt.filter_region(...)
+            evt.clear_region()
+            lc = evt.extract_curve(...)
+
+        这类写法能在同一个 EventData 上生效。
+
+        若当前没有会话，则退回到旧逻辑：从原始文件重新读取并根据
+        当前对象的 time/energy 推断窗口，返回一个新的 EventData。
         """
-        # Determine source
+        sess = getattr(self, '_xselect_session', None)
+        if sess is not None:
+            sess.clear_region()
+            # 会话存在时，后续 extract/save 会自动使用更新后的 current
+            return self._current_for_products()
+
+        # 兼容：无会话时使用旧实现
         src = None
         if use_original and getattr(self, '_original_events', None) is not None:
             src = getattr(self, '_original_events')
@@ -885,15 +1544,14 @@ class EventData(OgipTimeSeriesBase):
         else:
             raise ValueError('No original events available to clear region')
 
-        # infer time window
         tmin = None
         tmax = None
-        if getattr(self, 'time', None) is not None and getattr(self, 'time', None).size:
-            t = np.asarray(self.time, dtype=float)
+        time_arr = getattr(self, 'time', None)
+        if time_arr is not None and isinstance(time_arr, np.ndarray) and time_arr.size:
+            t = np.asarray(time_arr, dtype=float)
             tmin = float(t.min())
             tmax = float(t.max())
 
-        # infer energy/pichannel window
         pi_min = None
         pi_max = None
         if getattr(self, 'pi', None) is not None:
@@ -907,19 +1565,21 @@ class EventData(OgipTimeSeriesBase):
                 pi_min = int(arr.min())
                 pi_max = int(arr.max())
 
-        # lazy import to avoid circular imports
         from . import xselect as _xsel
         return _xsel.select_events(src, tmin=tmin, tmax=tmax, pi_min=pi_min, pi_max=pi_max)
 
     def clear_time(self, *, use_original: bool = True) -> 'EventData':
-        """Return EventData with TIME filtering removed, preserving region/energy when possible.
+        """清除 TIME 过滤。
 
-        Note: EventData does not track an explicit region; therefore this method
-        will preserve energy filters (PI/CHANNEL) when available but cannot
-        re-apply a region unless the original EventData stored in `_original_events`
-        had region information applied by a session. In that case the original
-        source will be used and the region preserved via `select_events`.
+        若已存在内部会话，则直接调用 session.clear_time() 并返回当前用于
+        派生产品的 EventData；否则退回到旧逻辑：从原始文件重建，仅保留
+        能量窗口。
         """
+        sess = getattr(self, '_xselect_session', None)
+        if sess is not None:
+            sess.clear_time()
+            return self._current_for_products()
+
         src = None
         if use_original and getattr(self, '_original_events', None) is not None:
             src = getattr(self, '_original_events')
@@ -928,7 +1588,6 @@ class EventData(OgipTimeSeriesBase):
         else:
             raise ValueError('No original events available to clear time')
 
-        # infer energy/pichannel window
         pi_min = None
         pi_max = None
         if getattr(self, 'pi', None) is not None:
@@ -943,16 +1602,19 @@ class EventData(OgipTimeSeriesBase):
                 pi_max = int(arr.max())
 
         from . import xselect as _xsel
-        # We cannot infer region here, so pass region=None; select_events will apply only energy
         return _xsel.select_events(src, region=None, pi_min=pi_min, pi_max=pi_max)
 
     def clear_energy(self, *, use_original: bool = True) -> 'EventData':
-        """Return EventData with ENERGY/PI filtering removed, preserving time/region when possible.
+        """清除 ENERGY/PI 过滤。
 
-        Behavior is symmetric to clear_region/clear_time: time window inferred
-        from this object is preserved; region cannot be inferred unless
-        `_original_events` stores it.
+        若已存在内部会话，则调用 session.clear_energy() 并返回当前 EventData；
+        否则退回到旧实现，仅保留时间窗口。
         """
+        sess = getattr(self, '_xselect_session', None)
+        if sess is not None:
+            sess.clear_energy()
+            return self._current_for_products()
+
         src = None
         if use_original and getattr(self, '_original_events', None) is not None:
             src = getattr(self, '_original_events')
@@ -961,11 +1623,11 @@ class EventData(OgipTimeSeriesBase):
         else:
             raise ValueError('No original events available to clear energy')
 
-        # infer time window
         tmin = None
         tmax = None
-        if getattr(self, 'time', None) is not None and getattr(self, 'time', None).size:
-            t = np.asarray(self.time, dtype=float)
+        time_arr = getattr(self, 'time', None)
+        if time_arr is not None and isinstance(time_arr, np.ndarray) and time_arr.size:
+            t = np.asarray(time_arr, dtype=float)
             tmin = float(t.min())
             tmax = float(t.max())
 
@@ -973,8 +1635,22 @@ class EventData(OgipTimeSeriesBase):
         return _xsel.select_events(src, tmin=tmin, tmax=tmax, region=None)
 
     def clear_all(self, *, use_original: bool = True) -> 'EventData':
-        """Return unfiltered full EventData (alias for clear())."""
-        return self.clear(use_original=use_original)
+        """清除所有过滤，返回未筛选的完整 EventData。
+
+        若已存在内部会话，则调用 session.clear_all()，使 current 回到 original，
+        并返回当前用于派生产品的 EventData；否则退回到旧逻辑直接重新读取。
+        """
+        sess = getattr(self, '_xselect_session', None)
+        if sess is not None:
+            sess.clear_all()
+            return self._current_for_products()
+
+        if use_original and getattr(self, '_original_events', None) is not None:
+            return getattr(self, '_original_events')
+        elif getattr(self, 'path', None) is not None:
+            return read_evt(self.path)
+        else:
+            raise ValueError('No original events available to clear all')
 
 
 # Unified data union
@@ -1400,59 +2076,347 @@ class OgipLightcurveReader:
         self._data: Optional[LightcurveData] = None
 
     def read(self) -> LightcurveData:
-        """读取光变曲线并返回 `LightcurveData`。
-
-        English: Read light curve and return `LightcurveData`.
+        """读取光变曲线并返回 `LightcurveData`（完整支持 TIMEZERO）。
+        
+        TIMEZERO 处理规则（OGIP-93-003 标准）：
+        - TIMEZERO=0, TIME=MET: 绝对时间模式（直接使用 TIME）
+        - TIMEZERO=MET_START, TIME=0,1,2...: 相对时间模式（绝对时间 = TIME + TIMEZERO）
+        
+        自动根据 TELESCOP 生成 Time 对象用于时间转换。
+        
+        English: Read light curve with full TIMEZERO support per OGIP-93-003.
         """
         with fits.open(self.path) as h:
-            # Try common names: 'RATE' ext, or first table with TIME
+            # ===== 第 1 步：找到包含 TIME 列的 HDU =====
             hdu = None
             for ext in h:
                 ext_any = cast(Any, ext)
                 if getattr(ext_any, "data", None) is None:
                     continue
                 names = getattr(ext_any.data, "columns", None)
-                if names is not None and ("TIME" in names.names):
+                if names is not None and ("TIME" in [n.upper() for n in names.names]):
                     hdu = ext_any
                     break
+            
             if hdu is None:
                 raise ValueError("No suitable lightcurve HDU with TIME column found")
+            
             d = cast(Any, hdu.data)
-            time = np.asarray(d["TIME"], float)
-            val = err = None
-            is_rate = False
-            if "RATE" in d.columns.names:
-                val = np.asarray(d["RATE"], float)
-                err = np.asarray(d["ERROR"], float) if "ERROR" in d.columns.names else None
-                is_rate = True
-            elif "COUNTS" in d.columns.names:
-                val = np.asarray(d["COUNTS"], float)
-                err = np.asarray(d["ERROR"], float) if "ERROR" in d.columns.names else None
-                is_rate = False
-            else:
-                raise ValueError("Lightcurve HDU lacks RATE/COUNTS column")
+            col_names_upper = [n.upper() for n in d.columns.names]
             header = dict(cast(Any, hdu.header))
+            
+            # ===== 第 2 步：读取 TIME 列（原始值，可能是相对或绝对）=====
+            time_raw = np.asarray(d["TIME"], dtype=float)
+            
+            # ===== 第 3 步：读取 TIMEZERO（默认 0）=====
+            timezero_raw = 0.0
+            if "TIMEZERO" in header:
+                try:
+                    timezero_raw = float(header["TIMEZERO"])
+                except (ValueError, TypeError):
+                    timezero_raw = 0.0
+            
+            # ===== 第 3.5 步：转换时间为相对时间 =====
+            # time 改为相对于第一个值的相对时间
+            # timezero 改为 timezero_raw + time_raw[0]（包含第一个原始值）
+            time_offset = float(time_raw[0]) if len(time_raw) > 0 else 0.0
+            time = time_raw - time_offset
+            timezero = timezero_raw + time_offset
+            
+            # ===== 第 4 步：根据 TELESCOP 生成 Time 对象 =====
+            telescop = None
+            timezero_obj = None
+            
+            # 尝试从多个位置读取 TELESCOP
+            for hdr in [header, dict(h[0].header) if len(h) > 0 else {}]:
+                if "TELESCOP" in hdr:
+                    telescop = str(hdr["TELESCOP"]).strip().upper()
+                    break
+            
+            # 根据 TELESCOP 创建 Time 对象
+            # 使用更新后的 timezero（= timezero_raw + time_raw[0]）
+            if telescop is not None and timezero != 0.0:
+                try:
+                    from .time import Time  # 使用 jinwu.core.time
+                    
+                    # 根据不同任务选择对应的 MET 格式
+                    # 使用 astropy 已注册的 MET 名称（去掉 _met 后缀）
+                    format_map = {
+                        'FERMI': 'fermi',
+                        'EP': 'ep',
+                        'LEIA': 'leia',
+                        'GECAM': 'gecam',
+                        'HXMT': 'hxmt',
+                        'SWIFT': 'swift',
+                        'GRID': 'grid',
+                        'MAXI': 'maxi',
+                        'SUZAKU': 'suzaku',
+                        'XMM': 'newton',
+                        'NEWTON': 'newton',
+                        'XRISM': 'xrism',
+                    }
+                    
+                    met_format = None
+                    for key, fmt in format_map.items():
+                        if key in telescop:
+                            met_format = fmt
+                            break
+                    
+                    # 创建 TIMEZERO 对应的 Time 对象
+                    if met_format is not None:
+                        timezero_obj = Time(timezero, format=met_format)
+                    else:
+                        # 未知任务，尝试使用 UTC
+                        try:
+                            timezero_obj = Time(timezero, format='unix', scale='utc')
+                        except Exception:
+                            pass
+                except ImportError:
+                    # 若 jinwu.core.time 不可用，忽略
+                    pass
+            
+            # ===== 第 5 步：推断 dt (bin 宽度) =====
+            dt = None
+            if "TIMEDEL" in header:
+                try:
+                    dt = float(header["TIMEDEL"])
+                except (ValueError, TypeError):
+                    pass
+            if dt is None and time.size >= 2:
+                dt = float(np.median(np.diff(time)))
+            if dt is None:
+                dt = 1.0  # 默认回退
+            
+            # ===== 第 6 步：计算 bin_lo/bin_hi（便利字段）=====
+            # 根据 HEASoft 约定：TIME 是 bin 左缘
+            bin_lo = time.copy()
+            bin_hi = time + dt
+            
+            # ===== 第 7 步：读取 RATE/COUNTS =====
+            rate = None
+            counts = None
+            is_rate = False
+            value = None  # 主要数据列
+            
+            if "RATE" in col_names_upper:
+                rate = np.asarray(d["RATE"], dtype=float)
+                value = rate
+                is_rate = True
+                # 若无 COUNTS，从 RATE 推算
+                if "COUNTS" not in col_names_upper and dt > 0:
+                    counts = rate * dt
+            
+            if "COUNTS" in col_names_upper:
+                counts = np.asarray(d["COUNTS"], dtype=float)
+                # 若 value 未设置（无 RATE），使用 COUNTS
+                if value is None:
+                    value = counts
+                    is_rate = False
+                # 若无 RATE，从 COUNTS 推算
+                if rate is None and dt > 0:
+                    rate = counts / dt
+            
+            if value is None:
+                raise ValueError("Lightcurve HDU lacks RATE/COUNTS column")
+            
+            # ===== 第 8 步：读取误差列 =====
+            error = None
+            rate_err = None
+            counts_err = None
+            
+            if "ERROR" in col_names_upper:
+                error = np.asarray(d["ERROR"], dtype=float)
+                # 根据 is_rate 分配误差
+                if is_rate:
+                    rate_err = error
+                    if counts is not None and dt > 0:
+                        counts_err = error * dt
+                else:
+                    counts_err = error
+                    if rate is not None and dt > 0:
+                        rate_err = error / dt
+            
+            # ===== 第 9 步：读取可选列 =====
+            fracexp = None
+            quality = None
+            backscal_col = None
+            areascal_col = None
+            
+            if "FRACEXP" in col_names_upper:
+                fracexp = np.asarray(d["FRACEXP"], dtype=float)
+            
+            if "QUALITY" in col_names_upper:
+                quality = np.asarray(d["QUALITY"], dtype=int)
+            
+            if "BACKSCAL" in col_names_upper:
+                backscal_col = d["BACKSCAL"]
+            elif "BACK_SCAL" in col_names_upper:
+                backscal_col = d["BACK_SCAL"]
+            
+            if "AREASCAL" in col_names_upper:
+                areascal_col = d["AREASCAL"]
+            elif "AREA_SCAL" in col_names_upper:
+                areascal_col = d["AREA_SCAL"]
+            
+            # ===== 第 10 步：提取 GTI（注意：GTI 时间应该是绝对时间）=====
+            gti_start = None
+            gti_stop = None
+            try:
+                gti_list = self._extract_gti(h)
+                if gti_list is not None:
+                    gti_start = np.array([s for s, e in gti_list], dtype=float)
+                    gti_stop = np.array([e for s, e in gti_list], dtype=float)
+            except Exception:
+                pass
+            
+            # ===== 第 11 步：计算时间范围 =====
+            # time 现在是相对时间，timezero 是第一个点的绝对时间
+            # 绝对时间 = time + timezero（都是从零开始的相对时间）
+            tstart = timezero  # 第一个点的绝对时间
+            if len(time) > 0:
+                tstop = timezero + time[-1] + dt
+                tseg = float(tstop - tstart)
+            else:
+                tstop = tstart
+                tseg = None
+            
+            # ===== 第 12 步：读取元数据 =====
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
-            # Infer dt if possible
-            dt = float(np.median(np.diff(time))) if time.size >= 2 else None
-            exposure_val = header.get("EXPOSURE", header.get("EXPTIME", np.nan))
-            exposure = float(exposure_val) if np.isfinite(exposure_val) else None
-            # 自动推断区域信息：若存在 REG00101 扩展则解析，无论 INSTRUME
+            
+            # ===== 第 13 步：计算曝光时间 =====
+            exposure = None
+            if "EXPOSURE" in header:
+                try:
+                    exposure = float(header["EXPOSURE"])
+                except (ValueError, TypeError):
+                    pass
+            if exposure is None and "EXPTIME" in header:
+                try:
+                    exposure = float(header["EXPTIME"])
+                except (ValueError, TypeError):
+                    pass
+            
+            bin_exposure = None
+            if fracexp is not None and exposure is not None:
+                bin_exposure = fracexp * exposure
+            elif exposure is not None and len(time) > 0:
+                bin_exposure = np.full(len(time), exposure / len(time))
+            
+            # ===== 第 14 步：推断误差分布 =====
+            err_dist = None
+            if counts is not None:
+                err_dist = "poisson"
+            elif rate is not None:
+                err_dist = "gauss"
+            
+            # ===== 第 15 步：读取区域信息 =====
             region = None
             try:
                 region = _load_regions(h)
             except Exception:
-                # 保守失败，不中断读取
-                region = None
-
-        self._data = LightcurveData(
-            path=self.path,
-            time=time, value=val, error=err, dt=dt, exposure=exposure,
-            is_rate=is_rate, bin_exposure=None, header=header, meta=meta, headers_dump=headers_dump,
-            region=region,
-        )
+                pass
+            
+            # ===== 第 16 步：读取 TIMESYS =====
+            timesys = None
+            if "TIMESYS" in header:
+                timesys = str(header["TIMESYS"])
+            elif meta and meta.timesys:
+                timesys = meta.timesys
+            
+            # ===== 第 17 步：读取 MJDREF（可选）=====
+            mjdref = None
+            if meta and meta.mjdref:
+                mjdref = meta.mjdref
+            
+            # ===== 第 18 步：构造 LightcurveData 对象 =====
+            self._data = LightcurveData(
+                path=self.path,
+                # 核心时间字段（OGIP 标准）
+                time=time,
+                timezero=timezero,
+                timezero_obj=timezero_obj,
+                dt=dt,
+                # 便利时间字段
+                bin_lo=bin_lo,
+                bin_hi=bin_hi,
+                tstart=tstart,
+                tseg=tseg,
+                # 核心数据字段
+                value=value,
+                error=error,
+                is_rate=is_rate,
+                # 分离存储（可选）
+                counts=counts,
+                rate=rate,
+                counts_err=counts_err,
+                rate_err=rate_err,
+                err_dist=err_dist,
+                # GTI
+                gti_start=gti_start,
+                gti_stop=gti_stop,
+                # 质量与曝光
+                quality=quality,
+                fracexp=fracexp,
+                exposure=exposure,
+                bin_exposure=bin_exposure,
+                backscal=backscal_col,
+                areascal=areascal_col,
+                # 时间系统元数据
+                telescop=telescop,
+                timesys=timesys,
+                mjdref=mjdref,
+                # 其他
+                region=region,
+                header=header,
+                meta=meta,
+                headers_dump=headers_dump,
+                columns=tuple(d.columns.names),
+            )
+        
         return self._data
+    
+    def _extract_gti(self, hdul: fits.HDUList) -> Optional[list[tuple[float, float]]]:
+        """从 FITS HDU 列表中提取 GTI，返回 [(start0, stop0), ...] 列表。
+        
+        此方法复用 OgipTimeSeriesBase.extract_gti 的逻辑。
+        """
+        if hdul is None:
+            return None
+        
+        # 查找 GTI 扩展
+        for hdu in hdul:
+            hdr = getattr(hdu, 'header', {})
+            name = (hdr.get('EXTNAME') or '').upper() if hdr else ''
+            if name == 'GTI' or getattr(hdu, 'name', '').upper() == 'GTI':
+                data = getattr(hdu, 'data', None)
+                if data is None:
+                    continue
+                
+                cols = getattr(data, 'columns', None)
+                colnames = [n.upper() for n in (cols.names if cols is not None else [])]
+                
+                # 寻找 START/STOP 列
+                start_col = None
+                stop_col = None
+                for n in ['START', 'TSTART']:
+                    if n in colnames:
+                        start_col = n
+                        break
+                for n in ['STOP', 'TSTOP']:
+                    if n in colnames:
+                        stop_col = n
+                        break
+                
+                if start_col and stop_col:
+                    arr_start = data[start_col]
+                    arr_stop = data[stop_col]
+                    try:
+                        return [(float(s), float(e)) for s, e in zip(arr_start, arr_stop)]
+                    except (TypeError, ValueError):
+                        return None
+        
+        return None
 
     def validate(self) -> ValidationReport:
         if self._data is None:
@@ -1632,6 +2596,8 @@ class OgipEventReader:
 
     English
     Reader for OGIP-like event lists (EVENTS) with optional GTI.
+    Converts TIME to relative time (from first event) and stores
+    timezero_obj as a Time object for absolute time conversion.
     """
     def __init__(self, path: str | Path):
         """参数
@@ -1646,13 +2612,18 @@ class OgipEventReader:
         self._data: Optional[EventData] = None
 
     def read(self) -> EventData:
-        """读取事件表并返回 `EventData`。
+        """读取事件表并返回 `EventData`（完整支持 TIMEZERO）。
+        
+        TIMEZERO 处理规则（与 LightcurveData 一致）：
+        - time: 转换为相对时间（相对于第一个事件，单位秒）
+        - timezero: 原始 TIMEZERO + 第一个事件时间（MET 秒）
+        - timezero_obj: 根据 TELESCOP 生成的 Time 对象
+        - GTI: 也转换为相对时间
 
-        English: Read EVENTS table and return `EventData`.
+        English: Read EVENTS table with TIMEZERO support (relative time storage).
         """
         with fits.open(self.path) as h:
-            # EVENTS
-            # Find first binary table HDU with TIME column
+            # ===== 第 1 步：找到包含 TIME 列的 HDU =====
             hevt = None
             for ext in h:
                 ext_any = cast(Any, ext)
@@ -1664,6 +2635,7 @@ class OgipEventReader:
                     break
             if hevt is None:
                 raise ValueError("No EVENTS-like HDU with TIME column found")
+            
             de = cast(Any, hevt.data)
             # collect all column names and raw columns as numpy arrays
             colnames = list(getattr(de, 'columns').names) if getattr(de, 'columns', None) is not None else []
@@ -1672,52 +2644,129 @@ class OgipEventReader:
                 try:
                     raw_columns[cn] = np.asarray(de[cn])
                 except Exception:
-                    # some columns may be ragged; coerce to ndarray of objects
                     try:
                         raw_columns[cn] = np.asarray([r[cn] for r in de])
                     except Exception:
                         raw_columns[cn] = np.asarray([])
 
-            time = np.asarray(raw_columns.get('TIME') if 'TIME' in raw_columns else de['TIME'], float)
+            # ===== 第 2 步：读取 TIME 列（原始值）=====
+            time_raw = np.asarray(raw_columns.get('TIME') if 'TIME' in raw_columns else de['TIME'], float)
+            
+            # ===== 第 3 步：读取 TIMEZERO（默认 0）=====
+            header = dict(cast(Any, hevt.header))
+            timezero_raw = 0.0
+            if "TIMEZERO" in header:
+                try:
+                    timezero_raw = float(header["TIMEZERO"])
+                except (ValueError, TypeError):
+                    timezero_raw = 0.0
+            
+            # ===== 第 4 步：转换为相对时间 =====
+            # time 改为相对于第一个值的相对时间
+            # timezero 改为 timezero_raw + time_raw[0]
+            time_offset = float(time_raw[0]) if len(time_raw) > 0 else 0.0
+            time = time_raw - time_offset
+            timezero = timezero_raw + time_offset
+            
+            # ===== 第 5 步：根据 TELESCOP 生成 Time 对象 =====
+            telescop = None
+            timezero_obj = None
+            
+            # 尝试从多个位置读取 TELESCOP
+            for hdr in [header, dict(h[0].header) if len(h) > 0 else {}]:
+                if "TELESCOP" in hdr:
+                    telescop = str(hdr["TELESCOP"]).strip().upper()
+                    break
+            
+            # 根据 TELESCOP 创建 Time 对象
+            if telescop is not None and timezero != 0.0:
+                try:
+                    from .time import Time
+                    
+                    format_map = {
+                        'FERMI': 'fermi',
+                        'EP': 'ep',
+                        'LEIA': 'leia',
+                        'GECAM': 'gecam',
+                        'HXMT': 'hxmt',
+                        'SWIFT': 'swift',
+                        'GRID': 'grid',
+                        'MAXI': 'maxi',
+                        'SUZAKU': 'suzaku',
+                        'XMM': 'newton',
+                        'NEWTON': 'newton',
+                        'XRISM': 'xrism',
+                    }
+                    
+                    met_format = None
+                    for key, fmt in format_map.items():
+                        if key in telescop:
+                            met_format = fmt
+                            break
+                    
+                    if met_format is not None:
+                        timezero_obj = Time(timezero, format=met_format)
+                    else:
+                        try:
+                            timezero_obj = Time(timezero, format='unix', scale='utc')
+                        except Exception:
+                            pass
+                except ImportError:
+                    pass
+            
+            # ===== 第 6 步：读取其他列 =====
             pi = np.asarray(raw_columns['PI'], int) if 'PI' in raw_columns else None
             channel = np.asarray(raw_columns['CHANNEL'], int) if 'CHANNEL' in raw_columns else None
-            header = dict(cast(Any, hevt.header))
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
 
-            # Try to read EBOUNDS extension in the same file (if present)
+            # ===== 第 7 步：读取 EBOUNDS =====
             ebounds = None
             try:
                 if 'EBOUNDS' in h:
-                    de = cast(Any, h['EBOUNDS']).data
+                    de_eb = cast(Any, h['EBOUNDS']).data
                     ebounds = (
-                        np.asarray(de['CHANNEL'], int),
-                        np.asarray(de['E_MIN'], float),
-                        np.asarray(de['E_MAX'], float),
+                        np.asarray(de_eb['CHANNEL'], int),
+                        np.asarray(de_eb['E_MIN'], float),
+                        np.asarray(de_eb['E_MAX'], float),
                     )
             except Exception:
                 ebounds = None
 
-            # GTI: prefer using OgipTimeSeriesBase.extract_gti helper
+            # ===== 第 8 步：读取 GTI 并转换为相对时间 + Time 对象 =====
             gti_start = gti_stop = None
+            gti_start_obj = gti_stop_obj = None
             gti_list = None
             try:
-                from .ogip import OgipTimeSeriesBase
-                # extract_gti is defined as an instance method but does not use `self`;
-                # call it with `None` as the implicit self so the hdul is received correctly.
-                gti_list = OgipTimeSeriesBase.extract_gti(None, h)
+                for hdu in h:
+                    if getattr(hdu, 'name', '').upper() == 'GTI':
+                        gti_data = getattr(hdu, 'data', None)
+                        if gti_data is not None and 'START' in gti_data.columns.names and 'STOP' in gti_data.columns.names:
+                            # 原始 GTI（MET 时间）
+                            gti_start_raw = np.asarray(gti_data['START'], float)
+                            gti_stop_raw = np.asarray(gti_data['STOP'], float)
+                            # 转换为相对时间（减去 time_offset）
+                            gti_start = gti_start_raw - time_offset
+                            gti_stop = gti_stop_raw - time_offset
+                            gti_list = [(float(s), float(e)) for s, e in zip(gti_start, gti_stop)]
+                            
+                            # 生成 GTI 的 Time 对象（如果 timezero_obj 可用）
+                            if timezero_obj is not None:
+                                try:
+                                    # GTI 绝对时间 = gti_start + timezero（相对时间 + timezero = MET）
+                                    # gti_start_obj = timezero_obj + TimeDelta(gti_start + timezero - timezero) 
+                                    #               = timezero_obj + TimeDelta(gti_start)
+                                    gti_start_obj = timezero_obj + TimeDelta(gti_start, format='sec')
+                                    gti_stop_obj = timezero_obj + TimeDelta(gti_stop, format='sec')
+                                except Exception:
+                                    gti_start_obj = gti_stop_obj = None
+                            break
             except Exception:
+                gti_start = gti_stop = None
+                gti_start_obj = gti_stop_obj = None
                 gti_list = None
-            if gti_list:
-                try:
-                    gti_arr = np.asarray(gti_list, float)
-                    if gti_arr.ndim == 2 and gti_arr.shape[1] == 2:
-                        gti_start = gti_arr[:, 0]
-                        gti_stop = gti_arr[:, 1]
-                except Exception:
-                    gti_start = gti_stop = None
-            # Build alias map for common coordinate and energy column names
-            # case-insensitive lookup
+            
+            # ===== 第 9 步：构建列别名映射 =====
             u2orig = {cn.upper(): cn for cn in colnames}
 
             def _find(*cands: str) -> Optional[str]:
@@ -1730,17 +2779,13 @@ class OgipEventReader:
                 return None
 
             colmap: Dict[str, Optional[str]] = {}
-            # x/y candidates
             colmap['x'] = _find('X', 'XRAW', 'RAWX', 'DETX', 'DET_X', 'SKX', 'XDET')
             colmap['y'] = _find('Y', 'YRAW', 'RAWY', 'DETY', 'DET_Y', 'SKY', 'YDET')
-            # sky coords
             colmap['ra'] = _find('RA', 'RA_OBJ', 'RAX', 'RA_DEG')
             colmap['dec'] = _find('DEC', 'DEC_OBJ', 'DECX', 'DEC_DEG')
-            # energy / pha
             colmap['energy'] = _find('ENERGY', 'E', 'ENERG', 'PHOTON_ENERGY')
             colmap['pha'] = _find('PHA', 'PI')
 
-            # fill convenient arrays if available (guard against None keys)
             key_x = colmap.get('x')
             key_y = colmap.get('y')
             key_energy = colmap.get('energy')
@@ -1748,12 +2793,18 @@ class OgipEventReader:
             yarr = np.asarray(raw_columns[key_y]) if (key_y is not None and key_y in raw_columns) else None
             energy = np.asarray(raw_columns[key_energy]) if (key_energy is not None and key_energy in raw_columns) else None
 
-        # ebounds was set inside the fits.open(...) block when available
+        # ===== 第 10 步：构建 EventData =====
         self._data = EventData(
             path=self.path,
-            time=time, pi=pi, channel=channel,
+            time=time,
+            timezero=timezero,
+            timezero_obj=timezero_obj,
+            telescop=telescop,
+            pi=pi, channel=channel,
             x=xarr, y=yarr,
-            gti_start=gti_start, gti_stop=gti_stop, gti=(gti_list if 'gti_list' in locals() else None),
+            gti_start=gti_start, gti_stop=gti_stop,
+            gti_start_obj=gti_start_obj, gti_stop_obj=gti_stop_obj,
+            gti=gti_list,
             raw_columns=raw_columns, colmap=colmap, energy=energy,
             ebounds=ebounds,
             header=header, meta=meta, headers_dump=headers_dump,

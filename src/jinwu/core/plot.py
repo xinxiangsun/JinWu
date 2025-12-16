@@ -246,6 +246,7 @@ def plot_lightcurve(
     src: Union[Any, PathLike, fits.HDUList],
     *,
     ax: Optional[Axes] = None,
+    srcname: Optional[str] = None,
     T0: Optional[float] = None,
     ykind: Literal['auto', 'rate', 'counts', 'flux'] = 'auto',  # auto: 根据 is_rate 自动选择；flux 需要外部提供 flux_array 或从 spectrum 反演
     multiband: Union[bool, str] = "auto",  # auto: 若 value 为 (N,M) 则分面
@@ -258,10 +259,22 @@ def plot_lightcurve(
 ) -> Union[Axes, List[Axes]]:
     """绘制光变曲线（单能段或多能段）。
 
-    - src 可为 LightcurveData 或 LC 文件路径（或 HDUList）。
-    - 若 value 维度为 (N,M)，则 M>1 视为多能段；multiband=True/"auto" 时按行分面绘制。
-    - ykind='flux' 时需通过 flux_array 提供 flux 值；TODO: 后续通过基类扩展支持自动推导。
-    - 仅负责绘图，时间过滤/能段合成等请在外部完成。
+    参数
+    - src: 可为 LightcurveData 或 LC 文件路径（或 HDUList）。
+    - srcname: 源名称（源昵称），若提供则在标题/标签中显示
+    - ykind: "rate" 或 "counts" 或 "flux"；auto 时根据 is_rate 自动选择
+    - multiband: True/"auto" 时若 value 为 (N,M) 则按行分面绘制
+    - color: 线条颜色
+    - label: 数据标签
+    - title: 图表标题（若为 None 则自动生成）
+    - grid: 是否显示网格线
+    - out: 若提供路径，则保存图片
+    - flux_array: 若 ykind='flux' 需要手动提供 flux 数组
+
+    说明
+    - 对于从 join() 得到的多条 LC，横轴使用 "Time since <TIMEZERO_0>" 格式
+    - 自动标注仪器名称（从 TELESCOP 字段）
+    - 若多条 LC 有不同的 timezero，会在图上标注
     """
     lc: Optional[Any] = None
     hdul: Optional[fits.HDUList] = None
@@ -279,24 +292,157 @@ def plot_lightcurve(
     else:
         raise TypeError("plot_lightcurve 需要 LightcurveData、路径或 HDUList 作为输入")
 
-    def _draw(ax_: Axes, t: np.ndarray, y: np.ndarray, yerr: Optional[np.ndarray], lab: Optional[str], timezero: Optional[float], ylab: str):
+    def _draw(
+        ax_: Axes,
+        t: np.ndarray,
+        y: np.ndarray,
+        yerr: Optional[np.ndarray],
+        lab: Optional[str],
+        timezero: Optional[float],
+        ylab: str,
+        timezero_obj: Optional[Any] = None,
+        instrume: Optional[str] = None,
+        binsize: Optional[float] = None,
+        lc_kind: Optional[str] = None,
+    ):
+        """绘制光变曲线数据点和误差棒
+        
+        参数
+        - t: 时间数组（相对于 timezero 的秒数）
+        - y: 计数或速率数组
+        - yerr: 误差数组（可选）
+        - lab: 数据标签
+        - timezero: TIMEZERO 值（第一个点的绝对时间）
+        - ylab: Y 轴标签
+        - timezero_obj: Time 对象（用于显示 UTC 时间）
+        - instrume: 仪器/望远镜名称（用于标注）
+        - binsize: bin 宽度（秒），若提供则在标签中标注
+        - lc_kind: 光变曲线类型（'src'/'bkg'/'net'），用于标注
+        """
         if yerr is not None:
             ax_.errorbar(t, y, yerr=yerr, fmt="-", lw=1.0, color=color, label=lab)
         else:
             ax_.plot(t, y, "-", lw=1.0, color=color, label=lab)
-        if timezero is not None:
-            ax_.set_xlabel(f"Time (s)  TIMEZERO={timezero:.3f}s")
+        
+        # 构造 X 轴标签：包含 TIMEZERO 对应的 UTC 信息
+        xlabel_parts = ["Time since"]
+        if timezero_obj is not None:
+            try:
+                # 获取 UTC 时间字符串
+                utc_str = timezero_obj.isot if hasattr(timezero_obj, 'isot') else str(timezero_obj)
+                xlabel_parts.append(f"{utc_str} (s)")
+            except Exception:
+                if timezero is not None:
+                    xlabel_parts.append(f"{timezero:.3f} (s)")
+                else:
+                    xlabel_parts.append("start (s)")
         else:
-            ax_.set_xlabel("Time (s)")
+            if timezero is not None:
+                xlabel_parts.append(f"{timezero:.3f} (s)")
+            else:
+                xlabel_parts.append("start (s)")
+        
+        # 如果有仪器名称 / bin 宽度 / 数据类型，在 X 轴标签末尾补充
+        extra_parts = []
+        if instrume is not None:
+            extra_parts.append(str(instrume))
+        if binsize is not None:
+            try:
+                extra_parts.append(f"Δt={float(binsize):.3f} s")
+            except Exception:
+                pass
+        if lc_kind is not None:
+            extra_parts.append(lc_kind)
+
+        xlabel = " ".join(xlabel_parts)
+        if extra_parts:
+            xlabel += "  [" + " | ".join(extra_parts) + "]"
+        
+        ax_.set_xlabel(xlabel)
         ax_.set_ylabel(ylab)
         if grid:
             ax_.grid(alpha=0.3, ls="--")
 
     # 情况 A：LightcurveData
     if lc is not None:
+        # 时间轴（必须存在）
         time = np.asarray(lc.time, float)
-        val = np.asarray(lc.value, float)
-        err = None if lc.error is None else np.asarray(lc.error, float)
+
+        # 主数据列：优先 value，缺失时回退到 counts/rate
+        val_raw = getattr(lc, "value", None)
+        if val_raw is None:
+            if getattr(lc, "counts", None) is not None:
+                val_raw = lc.counts
+            elif getattr(lc, "rate", None) is not None:
+                val_raw = lc.rate
+        if val_raw is None:
+            raise ValueError("LightcurveData 缺少 value/counts/rate，无法绘图")
+        try:
+            val_arr = np.asarray(val_raw, float)
+        except Exception as exc:
+            raise ValueError("无法将光变曲线主数据转换为 numpy 数组") from exc
+
+        # 误差列：优先 error，缺失时回退到 counts_err/rate_err
+        err_raw = getattr(lc, "error", None)
+        if err_raw is None:
+            if getattr(lc, "counts_err", None) is not None:
+                err_raw = lc.counts_err
+            elif getattr(lc, "rate_err", None) is not None:
+                err_raw = lc.rate_err
+        err = None if err_raw is None else np.asarray(err_raw, float)
+
+        # 提取仪器/望远镜名称和 timezero_obj
+        instrume = None
+        # 优先使用 meta.instrume；否则退回 TELESCOP
+        if getattr(lc, 'meta', None) is not None and getattr(lc.meta, 'instrume', None) is not None:  # type: ignore[union-attr]
+            instrume = str(lc.meta.instrume)  # type: ignore[union-attr]
+        elif hasattr(lc, 'telescop') and lc.telescop is not None:
+            instrume = str(lc.telescop)
+
+        timezero_obj_lc = None
+        if hasattr(lc, 'timezero_obj') and lc.timezero_obj is not None:
+            timezero_obj_lc = lc.timezero_obj
+
+        # 推断 bin 宽度（秒）
+        binsize_val: Optional[float] = None
+        try:
+            if getattr(lc, 'dt', None) is not None:
+                dt = lc.dt  # type: ignore[assignment]
+                if isinstance(dt, (int, float)):
+                    binsize_val = float(dt)
+                else:
+                    arr_dt = np.asarray(dt, float)
+                    if arr_dt.size:
+                        binsize_val = float(np.median(arr_dt))
+            elif getattr(lc, 'bin_hi', None) is not None and getattr(lc, 'bin_lo', None) is not None:
+                arr_hi = np.asarray(lc.bin_hi, float)
+                arr_lo = np.asarray(lc.bin_lo, float)
+                if arr_hi.size and arr_lo.size and arr_hi.size == arr_lo.size:
+                    binsize_val = float(np.median(arr_hi - arr_lo))
+        except Exception:
+            binsize_val = None
+
+        # 推断 LC 类型：src / bkg / net
+        lc_kind: Optional[str] = None
+        hdr = getattr(lc, 'header', None)
+        if isinstance(hdr, dict):
+            for key in ('HDUCLAS2', 'LCTYPE', 'DATATYPE'):
+                hdr_val = hdr.get(key)
+                if isinstance(hdr_val, str):
+                    v_up = hdr_val.strip().upper()
+                    if v_up in ('SRC', 'SOURCE'):
+                        lc_kind = 'src'
+                    elif v_up in ('BKG', 'BKGD', 'BACK', 'BACKGROUND'):
+                        lc_kind = 'bkg'
+                    elif v_up in ('NET', 'NETLC'):
+                        lc_kind = 'net'
+                    if lc_kind is not None:
+                        break
+
+        # 若用户未提供 legend label，则用 lc_kind 作为默认标签
+        label_eff = label
+        if label_eff is None and lc_kind is not None:
+            label_eff = lc_kind
 
         # 根据 is_rate / ykind 选择绘制 counts 还是 rate；必要时用 dt/bin_exposure 进行转换
         def _width_array_like(v: np.ndarray) -> Optional[np.ndarray]:
@@ -352,45 +498,51 @@ def plot_lightcurve(
                 eff_kind = 'rate'
                 ylab = "Rate (counts s$^{-1}$)"
                 if lc.is_rate:
-                    y = val
+                    y = val_arr
                     yerr = err
                 else:
-                    y, yerr, ok = _to_rate(val, err)
+                    y, yerr, ok = _to_rate(val_arr, err)
                     if not ok:
-                        y, yerr = val, err
+                        y, yerr = val_arr, err
                         ylab = "Counts"
         elif eff_kind == 'rate':
             if lc.is_rate:
-                y = val
+                y = val_arr
                 yerr = err
             else:
-                y, yerr, ok = _to_rate(val, err)
+                y, yerr, ok = _to_rate(val_arr, err)
                 if not ok:
                     # 无法转换则退回 counts 并更新标签
-                    y, yerr = val, err
+                    y, yerr = val_arr, err
                     ylab = "Counts"
             # 如果转换导致标签变化，保持 ylab 与实际一致
         else:  # eff_kind == 'counts'
             if not lc.is_rate:
-                y = val
+                y = val_arr
                 yerr = err
             else:
-                y, yerr, ok = _to_counts(val, err)
+                y, yerr, ok = _to_counts(val_arr, err)
                 if not ok:
                     # 无法转换则退回 rate 并更新标签
-                    y, yerr = val, err
+                    y, yerr = val_arr, err
                     ylab = "Rate (counts s$^{-1}$)"
 
         # 使用原始 TIME，不再减去 TRIGTIME/T0；仅在标签中标注 TIMEZERO
         t = time
         tz = None
-        # 优先 meta.timezero
-        if hasattr(lc, 'meta') and getattr(lc.meta, 'timezero', None) is not None:
+        # 优先从 lc.timezero 字段
+        if hasattr(lc, 'timezero') and lc.timezero is not None:
+            try:
+                tz = float(lc.timezero)
+            except (ValueError, TypeError):
+                tz = None
+        # 其次 meta.timezero
+        if tz is None and hasattr(lc, 'meta') and getattr(lc.meta, 'timezero', None) is not None:
             try:
                 tz = float(lc.meta.timezero)  # type: ignore[arg-type]
             except Exception:
                 tz = None
-        # 其次 header.TIMEZERO
+        # 再次 header.TIMEZERO
         if tz is None and hasattr(lc, 'header'):
             hv = lc.header.get('TIMEZERO')
             try:
@@ -399,18 +551,33 @@ def plot_lightcurve(
                 tz = None
 
         # 多能段还是单能段
-        if val.ndim == 2 and val.shape[1] > 1 and (multiband is True or multiband == "auto"):
-            nb = val.shape[1]
+        if val_arr.ndim == 2 and val_arr.shape[1] > 1 and (multiband is True or multiband == "auto"):
+            nb = val_arr.shape[1]
             fig, axes = plt.subplots(nb, 1, sharex=True, figsize=(8.0, 1.9 * nb), constrained_layout=True)
             if nb == 1:
                 axes = [axes]
             for i in range(nb):
                 yerr_i = yerr[:, i] if (yerr is not None and yerr.ndim == 2 and yerr.shape[1] == nb) else None
-                _draw(axes[i], t, y[:, i], yerr_i, (label or f"Band {i+1}"), tz, ylab)
+                _draw(
+                    axes[i],
+                    t,
+                    y[:, i],
+                    yerr_i,
+                    (label_eff or f"Band {i+1}"),
+                    tz,
+                    ylab,
+                    timezero_obj=timezero_obj_lc,
+                    instrume=instrume,
+                    binsize=binsize_val,
+                    lc_kind=lc_kind,
+                )
                 axes[i].legend(loc="upper right", fontsize=9)
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
-                title = base or "Lightcurve"
+                if srcname:
+                    title = f"{srcname} ({base})" if base else srcname
+                else:
+                    title = base or "Lightcurve"
             axes[0].set_title(title)
             axes_to_return: Union[List[Axes], Axes]
             axes_to_return = list(axes)
@@ -418,12 +585,27 @@ def plot_lightcurve(
             ax = _ensure_axes(ax)
             y1d = y.reshape(-1) if y.ndim > 1 else y
             yerr1d = yerr.reshape(-1) if (yerr is not None and yerr.ndim > 1) else yerr
-            _draw(ax, t, y1d, yerr1d, label, tz, ylab)
+            _draw(
+                ax,
+                t,
+                y1d,
+                yerr1d,
+                label_eff,
+                tz,
+                ylab,
+                timezero_obj=timezero_obj_lc,
+                instrume=instrume,
+                binsize=binsize_val,
+                lc_kind=lc_kind,
+            )
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
-                title = base or "Lightcurve"
+                if srcname:
+                    title = f"{srcname} ({base})" if base else srcname
+                else:
+                    title = base or "Lightcurve"
             ax.set_title(title)
-            if label:
+            if label_eff:
                 ax.legend(loc="best")
             axes_to_return = ax
 
@@ -466,7 +648,7 @@ def plot_lightcurve(
             val = np.asarray(d["TOT_RATE"], float)
             err = np.asarray(d["TOT_ERROR"], float) if "TOT_ERROR" in cols else None
             ax = _ensure_axes(ax)
-            _draw(ax, t, val, err, label, tz, "Rate (counts s$^{-1}$)")
+            _draw(ax, t, val, err, label, tz, "Rate (counts s$^{-1}$)", timezero_obj=None, instrume=None, binsize=None, lc_kind=None)
             axes_to_return = ax
         else:
             rate = d["RATE"] if "RATE" in cols else d["COUNTS"]
@@ -480,11 +662,11 @@ def plot_lightcurve(
                     axes = [axes]
                 for i in range(nb):
                     yerr_i = err[:, i] if (err is not None and err.ndim == 2 and err.shape[1] == nb) else None
-                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz, ylab)
+                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz, ylab, timezero_obj=None, instrume=None, binsize=None, lc_kind=None)
                 axes_to_return = list(axes)
             else:
                 ax = _ensure_axes(ax)
-                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label, tz, ylab)
+                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label, tz, ylab, timezero_obj=None, instrume=None, binsize=None, lc_kind=None)
                 axes_to_return = ax
 
         if title is None:
