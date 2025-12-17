@@ -29,7 +29,7 @@ PLOTLY_AVAILABLE = True
 
 import requests
 REQUESTS_AVAILABLE = True
-
+ALADIN_AVAILABLE = True
 
 warnings.filterwarnings('ignore')
 

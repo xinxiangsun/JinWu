@@ -38,7 +38,6 @@ pip install .
 
 ### Fermi GBM Response Generator
 
-
 > git clone [https://github.com/xinxiangsun/responsum.git](https://github.com/xinxiangsun/responsum.git)
 
 > pip install ./responsum
@@ -79,3 +78,10 @@ under certain conditions; type `show c` for details.
 ```
 # SPDX-License-Identifier: GPL-3.0-or-later
 ```
+
+
+## Acknowledgments
+
+This project incorporates code modified from [heapy](https://github.com/jyangch/heapy) (https://github.com/jyangch/heapy)
+
+by Jun Yang, licensed under GPLv3.
