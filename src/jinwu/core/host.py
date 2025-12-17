@@ -364,53 +364,71 @@ class HostGalaxyFinder:
     
     @staticmethod
     def _classify_ps1_source(row) -> Tuple[str, int, List[str]]:
-        """PanSTARRS源分类（星系vs恒星）"""
-        source_type = 'Unknown'
-        confidence = 0
-        features = []
-        
-        qual = int(row['Qual']) if 'Qual' in row.dtype.names else 0
-        f_objid = int(row['f_objID']) if 'f_objID' in row.dtype.names else 0
-        
-        is_extended_qual = (qual & 1) or (qual & 2)
-        is_extended_ps = (f_objid & 8388608)
-        is_extended_ext = (f_objid & 16777216)
-        is_good_quality = (qual & 4) or (qual & 8)
-        is_good_meas = (f_objid & 33554432)
-        
-        extended_bands = []
-        for band in ['g', 'r', 'i', 'z', 'y']:
-            if f'{band}Flags' in row.dtype.names:
-                flags = int(row[f'{band}Flags'])
-                if (flags & 8192) or (flags & 16777216):
-                    extended_bands.append(band)
-        
-        if is_extended_ps:
-            features.append("✓ PS数据中为延展源 (f_objID bit 23)")
-        if is_extended_ext:
-            features.append("✓ 外部数据中为延展源 (f_objID bit 24)")
-        if is_extended_qual:
-            features.append("✓ Qual质量标志显示延展源 (Qual bit 0-1)")
-        if len(extended_bands) >= 1:
-            features.append(f"✓ {len(extended_bands)}个波段显示延展特征 ({', '.join(extended_bands)})")
-        
-        if is_extended_ps:
-            source_type = 'Galaxy'
-            confidence = 100
-        elif is_extended_qual or is_extended_ext:
-            source_type = 'Galaxy'
-            confidence = 90
-        elif len(extended_bands) >= 1:
-            source_type = 'Galaxy'
-            confidence = 70 + len(extended_bands) * 10
-        elif is_good_quality or is_good_meas:
-            source_type = 'Star'
-            confidence = 50
-        else:
-            source_type = 'Star'
-            confidence = 30
-        
-        return source_type, confidence, features
+        """PanSTARRS源分类（星系 vs 恒星）
+
+        按照 notebook 中的精简判定逻辑：
+        - 只用 f_objID bit24（PS 延展）或 Qual bit0（PS 延展）任一为真 → Galaxy
+        - QSO 标志（ICRF/likely/possible）也视为 Galaxy
+        - 其余默认 Star（若高本动则在特征中注明）
+
+        返回:
+        - source_type: 'Galaxy' | 'Star'
+        - confidence: 0-100 的经验置信度（用于排序/展示）
+        - features: 判定依据文本列表
+        """
+
+        features: List[str] = []
+
+        dtype_names = getattr(getattr(row, 'dtype', None), 'names', None) or ()
+        qual = int(row['Qual']) if 'Qual' in dtype_names else 0
+        f_objid = int(row['f_objID']) if 'f_objID' in dtype_names else 0
+
+        # ========== Qual 字段标志位 ==========
+        QUAL_FLAG_EXTENDED_PS = 1  # bit0
+
+        # ========== f_objID 标志位（与 notebook 保持一致） ==========
+        PS1_FLAG_ICRF_QSAR = 8
+        PS1_FLAG_LIKELY_QSO = 16
+        PS1_FLAG_POSSIBLE_QSO = 32
+        PS1_FLAG_LARGE_PM = 4096
+        PS1_FLAG_EXTENDED_PS = 16777216  # bit24
+
+        qual_extended_ps = (qual & QUAL_FLAG_EXTENDED_PS) != 0
+        is_extended_ps = (f_objid & PS1_FLAG_EXTENDED_PS) != 0
+
+        is_qso_icrf = (f_objid & PS1_FLAG_ICRF_QSAR) != 0
+        is_likely_qso = (f_objid & PS1_FLAG_LIKELY_QSO) != 0
+        is_possible_qso = (f_objid & PS1_FLAG_POSSIBLE_QSO) != 0
+        is_large_pm = (f_objid & PS1_FLAG_LARGE_PM) != 0
+
+        # 1) 延展源：f_objID bit24 或 Qual bit0 任一满足
+        if is_extended_ps or qual_extended_ps:
+            if is_extended_ps and qual_extended_ps:
+                features.append('Galaxy: PS延展(f_objID bit24 + Qual bit0)')
+                return 'Galaxy', 100, features
+            if is_extended_ps:
+                features.append('Galaxy: PS延展(f_objID bit24)')
+                return 'Galaxy', 90, features
+            features.append('Galaxy: PS延展(Qual bit0)')
+            return 'Galaxy', 90, features
+
+        # 2) QSO 标志：也视为 Galaxy
+        if is_qso_icrf or is_likely_qso or is_possible_qso:
+            if is_qso_icrf:
+                features.append('Galaxy: QSO标志(ICRF,bit3)')
+            elif is_likely_qso:
+                features.append('Galaxy: QSO标志(bit4,高置信)')
+            else:
+                features.append('Galaxy: QSO标志(bit5,低置信)')
+            return 'Galaxy', 80, features
+
+        # 3) 其余：Star
+        if is_large_pm:
+            features.append('Star: 高本动(bit12)')
+            return 'Star', 50, features
+
+        features.append('Star: 无延展/QSO标志')
+        return 'Star', 30, features
     
     @staticmethod
     def _classify_gaia_source(src, gaia_table) -> Tuple[str, int, List[str]]:
