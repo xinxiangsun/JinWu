@@ -11,7 +11,7 @@ more concrete analysis needs arise.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Literal, Union
+from typing import List, Optional, Literal, Union, cast
 
 import numpy as np
 
@@ -41,11 +41,44 @@ def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData
     directly without extra casting while still keeping runtime safety.
     """
 
+    # Fast-path: normal case (no module reload / single class identity)
     if isinstance(obj, LightcurveData):
         return obj
+
+    # Notebook workflows often use importlib.reload(jinwu.core.file) which creates a
+    # *new* LightcurveData class object. Instances created after reload will fail
+    # the isinstance check above, even though they are semantically LightcurveData.
+    try:
+        from jinwu.core import file as _jwfile
+
+        if isinstance(obj, _jwfile.LightcurveData):
+            return cast(LightcurveData, obj)
+    except Exception:
+        # If import fails, fall back to duck-typing below.
+        pass
+
     kind = getattr(obj, "kind", None)
+
+    # Duck-typing fallback: accept any object that looks like a lightcurve.
+    # This keeps runtime behavior stable across reloads and avoids surprising
+    # failures in interactive notebooks.
+    if kind == "lc":
+        required_attrs = (
+            "time",
+            "value",
+            "error",
+            "dt",
+            "timezero",
+            "bin_exposure",
+            "exposure",
+            "region",
+            "is_rate",
+        )
+        if all(hasattr(obj, attr) for attr in required_attrs):
+            return cast(LightcurveData, obj)
+
     raise TypeError(
-        f"{arg_name} must be a LightcurveData (kind='lc'), got {type(obj).__name__} with kind={kind!r}."
+        f"{arg_name} must be a LightcurveData (kind='lc'), got {type(obj).__name__} from {type(obj).__module__} with kind={kind!r}."
     )
 
 @dataclass(slots=True)
@@ -284,7 +317,7 @@ def netdata(
         if src_lc.dt is None:
             raise ValueError("Cannot align: source.dt is None")
         bkg_aligned = rebin_lightcurve(
-            bkg_lc, binsize=src_lc.dt, method='sum',
+            bkg_lc, binsize=src_lc.dt, method='auto',
             align_ref=src_lc.timezero if src_lc.timezero else None
         )
     

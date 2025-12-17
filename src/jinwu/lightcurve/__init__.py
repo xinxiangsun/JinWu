@@ -1,22 +1,50 @@
-"""
-autohea.lightcurve
-===================
+"""Light-curve evaluation and trigger decision utilities.
 
-Lightcurve evaluation and trigger decision utilities.
+This module provides tools for light-curve analysis including:
+- SNR evaluation using Li & Ma statistics
+- Bayesian blocks and peak detection
+- Trigger decision logic (sliding, head, cumulative)
+- Light-curve synthesis and fake data generation
 
-This package exposes two small, focused modules:
-- duration: SNR evaluation against a time window using Li & Ma, with
-	Bayesian-blocks-based T0 detection and optional MC.
-- trigger: Minimal, deterministic trigger checks (sliding/head/cumulative),
-	ready for future MC extension.
+Main Classes:
+    - LightcurveSNREvaluator: Compute SNR against time windows
+    - TriggerDecider: Determine trigger decisions
+    - LightcurveFaker: Generate synthetic light curves
 
-Typical usage
--------------
-		from autohea.lightcurve import LightcurveSNREvaluator, li_ma_snr
-		from autohea.lightcurve import TriggerDecider, BackgroundSimple
+Functions:
+    - li_ma_snr: Compute Li & Ma SNR statistic
+
+Example:
+    >>> from jinwu.lightcurve import LightcurveSNREvaluator, li_ma_snr
+    >>> evaluator = LightcurveSNREvaluator(lightcurve, background_prior)
+    >>> snr = li_ma_snr(n_on=100, n_off=50, alpha=1.0)
 """
 
 from __future__ import annotations
+
+from .duration import (
+    li_ma_snr,
+    LightcurveSNREvaluator,
+)
+
+from .trigger import (
+    BackgroundSimple,
+    TriggerDecider,
+)
+
+try:
+    from .lcfake import LightcurveFaker
+except ImportError:
+    LightcurveFaker = None
+
+__all__ = [
+    'li_ma_snr',
+    'LightcurveSNREvaluator',
+    'BackgroundSimple',
+    'TriggerDecider',
+    'LightcurveFaker',
+]
+
 
 # Public API re-exports
 from .duration import LightcurveSNREvaluator, li_ma_snr

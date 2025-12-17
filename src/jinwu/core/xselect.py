@@ -978,20 +978,41 @@ def extract_curve(ev_or_path: EventData | str | Path, *, binsize: float, tmin: O
             value=empty,
             error=None,
             dt=binsize,
-            exposure=0.0,
-            bin_exposure=None,
-            is_rate=False,
-            # 与 LightcurveData 设计兼容的附加字段
-            counts=empty,
-            counts_err=None,
+            # 时间字段
+            timezero=getattr(ev, 'timezero', 0.0),
+            timezero_obj=getattr(ev, 'timezero_obj', None),
             bin_lo=empty,
             bin_hi=empty,
+            tstart=None,
+            tseg=None,
+            # 数据字段
+            is_rate=False,
+            counts=empty,
+            rate=None,
+            counts_err=None,
+            rate_err=None,
+            err_dist='poisson',
+            # GTI 与质量
             gti_start=ev.gti_start,
             gti_stop=ev.gti_stop,
-            columns=("TIME", "COUNTS"),
+            quality=None,
+            fracexp=None,
+            backscal=None,
+            areascal=None,
+            # 曝光
+            exposure=0.0,
+            bin_exposure=None,
+            # 时间系统元数据
+            telescop=getattr(ev.meta, 'telescop', None) if ev.meta else None,
+            timesys=getattr(ev.meta, 'timesys', None) if ev.meta else None,
+            mjdref=getattr(ev.meta, 'mjdref', None) if ev.meta else None,
+            # 其他
+            region=None,
             header=ev.header,
             meta=ev.meta,
             headers_dump=ev.headers_dump,
+            columns=("TIME", "COUNTS"),
+            ratio=None,
         )
 
     tmin_eff = float(t.min())
@@ -1028,29 +1049,48 @@ def extract_curve(ev_or_path: EventData | str | Path, *, binsize: float, tmin: O
 
     from .file import LightcurveData
     # 为了与当前 LightcurveData 设计兼容，这里同时填充 counts/counts_err、bin_lo/bin_hi、GTI 等字段
+    # 从 EventData 继承时间参考和元数据
     return LightcurveData(
         path=ev.path,
         time=edges[:-1],
         value=counts,
         error=np.sqrt(counts),
         dt=binsize,
-        exposure=float(np.sum(expo)),
-        bin_exposure=expo,
-        is_rate=False,
-        counts=counts,
-        counts_err=np.sqrt(counts),
-        rate=None,
-        rate_err=None,
+        # 时间字段
+        timezero=getattr(ev, 'timezero', 0.0),
+        timezero_obj=getattr(ev, 'timezero_obj', None),
         bin_lo=edges[:-1],
         bin_hi=edges[1:],
         tstart=float(edges[0]) if edges.size > 0 else None,
         tseg=float(edges[-1] - edges[0]) if edges.size > 0 else None,
+        # 数据字段
+        is_rate=False,
+        counts=counts,
+        rate=None,
+        counts_err=np.sqrt(counts),
+        rate_err=None,
+        err_dist='poisson',
+        # GTI 与质量
         gti_start=ev.gti_start,
         gti_stop=ev.gti_stop,
-        columns=("TIME", "COUNTS"),
+        quality=None,
+        fracexp=None,
+        backscal=None,
+        areascal=None,
+        # 曝光
+        exposure=float(np.sum(expo)),
+        bin_exposure=expo,
+        # 时间系统元数据
+        telescop=getattr(ev.meta, 'telescop', None) if ev.meta else None,
+        timesys=getattr(ev.meta, 'timesys', None) if ev.meta else None,
+        mjdref=getattr(ev.meta, 'mjdref', None) if ev.meta else None,
+        # 其他
+        region=None,
         header=ev.header,
         meta=ev.meta,
         headers_dump=ev.headers_dump,
+        columns=("TIME", "COUNTS"),
+        ratio=None,
     )
 
 

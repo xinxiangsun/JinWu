@@ -1,9 +1,17 @@
-'''
-Date: 2025-04-23 11:31:03
-LastEditors: Xinxiang Sun sunxinxiang24@mails.ucas.ac.cn
-LastEditTime: 2025-04-23 11:32:33
-FilePath: /research/autohea/autohea/missions/fermi/gbm/__init__.py
-'''
+"""Fermi/GBM (Gamma-ray Burst Monitor) support.
+
+This module provides utilities for working with GBM observations and data.
+
+Classes:
+    - GBMObservation: High-level GBM observation interface
+
+Example:
+    >>> from jinwu.fermi.gbm import GBMObservation
+    >>> obs = GBMObservation('trigger_name')
+"""
+
+from __future__ import annotations
+
 from .GBMObservation import GBMObservation
 
 __all__ = ['GBMObservation']

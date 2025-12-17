@@ -56,17 +56,17 @@ __all__ = [
 
 
 # ==================== Lightcurve Operations ====================
-
+from .time import Time, TimeDelta
 def slice_lightcurve(
     lc: 'LightcurveData',
-    tmin: Optional[float] = None,
-    tmax: Optional[float] = None,
+    tmin: Optional[float | Time | TimeDelta] = None,
+    tmax: Optional[float | Time | TimeDelta] = None,
 ) -> 'LightcurveData':
     """按时间范围筛选光变曲线，返回新实例。
 
     参数
     - lc: 输入光变曲线数据
-    - tmin/tmax: 时间下/上界（闭区间）；None 表示不限
+    - tmin/tmax: 时间下/上界（闭区间）；可为相对秒 (float) 或 astropy/jinwu 的 Time/TimeDelta；None 表示不限
 
     返回
     - 新的 LightcurveData 实例
@@ -74,35 +74,117 @@ def slice_lightcurve(
     English
     Filter lightcurve by time range [tmin, tmax]; returns new instance.
     """
-    mask = np.ones(lc.time.size, dtype=bool)
-    if tmin is not None:
-        mask &= (lc.time >= float(tmin))
-    if tmax is not None:
-        mask &= (lc.time <= float(tmax))
+    if lc.time is None:
+        raise ValueError("Lightcurve time array is None; cannot slice.")
+
+    # 统一将时间轴转换为相对秒，便于混合类型比较。
+    anchor_timezero_obj = getattr(lc, 'timezero_obj', None)
+    time_data = lc.time
+    if isinstance(time_data, Time):
+        if anchor_timezero_obj is None:
+            if time_data.size == 0:
+                raise ValueError("Cannot infer anchor for Time axis because it is empty and timezero_obj is missing.")
+            anchor_timezero_obj = time_data[0]
+        time_seconds = (time_data - anchor_timezero_obj).to_value('sec')
+    elif isinstance(time_data, TimeDelta):
+        time_seconds = time_data.to_value('sec')
+    else:
+        time_seconds = np.asarray(time_data, dtype=float)
+
+    def _bound_to_seconds(bound: Optional[float | Time | TimeDelta]) -> Optional[float]:
+        if bound is None:
+            return None
+        if isinstance(bound, Time):
+            if anchor_timezero_obj is None:
+                raise ValueError("tmin/tmax given as Time requires lc.timezero_obj or a Time axis anchor.")
+            return float((bound - anchor_timezero_obj).to_value('sec'))
+        if isinstance(bound, TimeDelta):
+            return float(bound.to_value('sec'))
+        return float(bound)
+
+    tmin_sec = _bound_to_seconds(tmin)
+    tmax_sec = _bound_to_seconds(tmax)
+
+    mask = np.ones(time_seconds.size, dtype=bool)
+    if tmin_sec is not None:
+        mask &= (time_seconds >= tmin_sec)
+    if tmax_sec is not None:
+        mask &= (time_seconds <= tmax_sec)
+
+    sliced_seconds = time_seconds[mask]
+
+    # 重新计算 timezero 和 timezero_obj（让切片后的时间从 0 开始）
+    if sliced_seconds.size > 0:
+        t0 = float(sliced_seconds[0])
+        new_time_sec = sliced_seconds - t0
+        if isinstance(time_data, (Time, TimeDelta)):
+            new_time = TimeDelta(new_time_sec, format='sec')
+        else:
+            new_time = new_time_sec
+        new_timezero = getattr(lc, 'timezero', 0.0) + t0
+        if anchor_timezero_obj is not None:
+            new_timezero_obj = anchor_timezero_obj + TimeDelta(t0, format='sec')
+        else:
+            new_timezero_obj = getattr(lc, 'timezero_obj', None)
+    else:
+        if isinstance(time_data, (Time, TimeDelta)):
+            new_time = time_data[mask]
+        else:
+            new_time = time_seconds[mask]
+        new_timezero = getattr(lc, 'timezero', 0.0)
+        new_timezero_obj = getattr(lc, 'timezero_obj', None)
     
     return LightcurveData(
         path=lc.path,
-        time=lc.time[mask],
+        time=new_time,
         value=lc.value[mask] if lc.value.ndim == 1 else lc.value[mask, :],
         error=(
             lc.error[mask] if (lc.error is not None and lc.error.ndim == 1)
             else (lc.error[mask, :] if lc.error is not None else None)
         ),
         dt=lc.dt,
-        exposure=lc.exposure,
-        bin_exposure=(lc.bin_exposure[mask] if (hasattr(lc, 'bin_exposure') and lc.bin_exposure is not None) else None),
+        # 时间字段
+        timezero=new_timezero,
+        timezero_obj=new_timezero_obj,
+        bin_lo=(lc.bin_lo[mask] if getattr(lc, 'bin_lo', None) is not None else None),
+        bin_hi=(lc.bin_hi[mask] if getattr(lc, 'bin_hi', None) is not None else None),
+        tstart=getattr(lc, 'tstart', None),
+        tseg=getattr(lc, 'tseg', None),
+        # 数据字段
         is_rate=lc.is_rate,
+        counts=(lc.counts[mask] if getattr(lc, 'counts', None) is not None else None),
+        rate=(lc.rate[mask] if getattr(lc, 'rate', None) is not None else None),
+        counts_err=(lc.counts_err[mask] if getattr(lc, 'counts_err', None) is not None else None),
+        rate_err=(lc.rate_err[mask] if getattr(lc, 'rate_err', None) is not None else None),
+        err_dist=getattr(lc, 'err_dist', None),
+        # GTI 与质量
+        gti_start=getattr(lc, 'gti_start', None),
+        gti_stop=getattr(lc, 'gti_stop', None),
+        quality=(lc.quality[mask] if getattr(lc, 'quality', None) is not None else None),
+        fracexp=(lc.fracexp[mask] if getattr(lc, 'fracexp', None) is not None else None),
+        backscal=getattr(lc, 'backscal', None),
+        areascal=getattr(lc, 'areascal', None),
+        # 曝光
+        exposure=lc.exposure,
+        bin_exposure=(lc.bin_exposure[mask] if getattr(lc, 'bin_exposure', None) is not None else None),
+        # 时间系统元数据
+        telescop=getattr(lc, 'telescop', None),
+        timesys=getattr(lc, 'timesys', None),
+        mjdref=getattr(lc, 'mjdref', None),
+        # 其他
         header=lc.header,
         meta=lc.meta,
         headers_dump=lc.headers_dump,
         region=lc.region,
+        columns=getattr(lc, 'columns', ()),
+        ratio=getattr(lc, 'ratio', None),
     )
 
 
 def rebin_lightcurve(
     lc: 'LightcurveData',
     binsize: float,
-    method: Literal['sum', 'mean'] = 'sum',
+    method: Literal['auto', 'sum', 'mean'] = 'auto',
     *,
     align_ref: Optional[float] = None,
     empty_bin: Literal['zero', 'nan'] = 'zero',
@@ -117,10 +199,11 @@ def rebin_lightcurve(
         输入光变曲线数据
     binsize : float
         新的时间分辨率（秒），即每个 bin 的宽度
-    method : 'sum' | 'mean', default='sum'
+    method : 'auto' | 'sum' | 'mean', default='auto'
         聚合方法：
-        - 'sum': 对计数求和（适用于 counts）
-        - 'mean': 对速率求平均（适用于 rate）
+        - 'auto': 保持原始纵轴形式（rate->mean, counts->sum）
+        - 'sum': 对计数求和（输出为 counts）
+        - 'mean': 对速率求平均（输出为 rate；GTI 缺口时按有效曝光归一化）
     
     返回 (Returns)
     -------------
@@ -146,6 +229,9 @@ def rebin_lightcurve(
     -------
     Rebin lightcurve to new time resolution by grouping and aggregating data points.
     """
+    if method == 'auto':
+        method = 'mean' if lc.is_rate else 'sum'
+
     if lc.value.ndim > 1:
         raise NotImplementedError("Rebin for multi-band LC not yet supported; slice bands first.")
 
@@ -297,25 +383,25 @@ def rebin_lightcurve(
             else:
                 new_exposure[j] += overlap
 
-    # Build outputs depending on requested aggregation
-    if method == 'sum':
-        out_counts = new_counts
-        out_err_counts = np.sqrt(new_var)
-        out_is_rate = False
-        out_dt = binsize
-    else:  # mean -> return rates
-        out_counts = new_counts
-        out_err_counts = np.sqrt(new_var)
-        out_is_rate = True
-        out_dt = binsize
+    # Build outputs
+    out_counts = new_counts
+    out_err_counts = np.sqrt(new_var)
+    out_dt = binsize
 
     # Convert back to desired value space (counts or rate) and handle empty bins
     if method == 'sum':
+        out_is_rate = False
         out_value = out_counts.copy()
         out_err = out_err_counts.copy()
     else:
-        out_value = out_counts / binsize
-        out_err = out_err_counts / binsize
+        out_is_rate = True
+        # XRONOS/lcurve-style: rate = counts / effective exposure.
+        # If we have per-bin exposures, use accumulated effective exposure;
+        # otherwise fall back to binsize.
+        denom = new_exposure if orig_bin_expos is not None else np.full_like(out_counts, binsize, dtype=float)
+        denom_safe = np.where(denom > 0.0, denom, np.nan)
+        out_value = out_counts / denom_safe
+        out_err = out_err_counts / denom_safe
     # Decide gap/empty-bin based on exposure when possible (GTI-aware). If
     # original LC provided per-bin exposures, use accumulated new_exposure;
     # otherwise fall back to zero counts.
@@ -340,10 +426,12 @@ def rebin_lightcurve(
         error=out_err,
         dt=out_dt,
         # 时间与参考点
-        timezero=getattr(lc, 'timezero', 0.0),
+        timezero=getattr(lc, 'timezero', -1),
         timezero_obj=getattr(lc, 'timezero_obj', None),
         bin_lo=edges[:-1],
         bin_hi=edges[1:],
+        tstart=getattr(lc, 'tstart', None),
+        tseg=getattr(lc, 'tseg', None),
         # 曝光
         exposure=(float(np.sum(ret_bin_exposure)) if ret_bin_exposure is not None else lc.exposure),
         bin_exposure=(ret_bin_exposure if ret_bin_exposure is not None else None),
@@ -368,6 +456,8 @@ def rebin_lightcurve(
         meta=lc.meta,
         headers_dump=lc.headers_dump,
         region=lc.region,
+        columns=getattr(lc, 'columns', ()),
+        ratio=getattr(lc, 'ratio', None),
     )
 
 

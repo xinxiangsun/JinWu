@@ -1,8 +1,27 @@
-'''
-Date: 2025-03-24 18:07:27
-LastEditors: Xinxiang Sun sunxinxiang24@mails.ucas.ac.cn
-LastEditTime: 2025-05-02 14:25:52
-FilePath: /research/autohea/autohea/response/__init__.py
-'''
+"""Response matrix and effective area utilities.
+
+This module provides:
+- contgbmrsp: Continuous (unbinned) GBM response function
+
+Submodules:
+    - gbm: GBM-specific response handling
+    - basic: Basic response utilities
+
+Example:
+    >>> from jinwu.response import contgbmrsp
+"""
+
+from __future__ import annotations
 
 from .gbm import contgbmrsp
+
+try:
+    from . import basic
+except ImportError:
+    pass
+
+__all__ = [
+    'contgbmrsp',
+    'basic',
+]
+

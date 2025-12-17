@@ -1,17 +1,50 @@
-"""轻量级 ftools Python 复刻集合（jinwu 专属）
+"""Lightweight Pure-Python HEASOFT ftools equivalents.
 
-该包提供几个常用的 HEASOFT/ftools 等价函数的纯 Python 实现，目的是把
-`external_sources` 中的工具逻辑以可调用的 Python 接口放到 jinwu 内部，便于
-在不依赖 Fortran/C 二进制的情况下使用基本功能（提取、分组、重分箱）。
+This package provides minimal Pure-Python implementations of common HEASOFT ftools
+functionality, designed to work within JinWu without external Fortran/C dependencies.
 
-目前包含模块：`fextract`、`ftgrouppha`、`ftrbnpha`。
+Modules:
+    - fextract: Extract events into PHA spectra (fextract equivalent)
+    - ftgrouppha: Group PHA by minimum counts (ftgrouppha equivalent)
+    - ftrbnpha: Rebin PHA to desired channel count (ftrbnpha equivalent)
+    - ftrbnrmf: Rebin ARF/RMF to new energy bins (ftrbnrmf equivalent)
+    - ftselect: Simple expression filtering for event tables
+    - region: DS9 region parsing and point-in-region filtering
+    - grppha: Minimal grppha-like grouping
+    - teldef: Teldef parsing and coordinate transformations
+    - rmf_mapping: RMF to energy mapping
+
+Example:
+    >>> from jinwu.ftools import fextract, ftgrouppha
+    >>> pha = fextract.extract(events_file, pha_file)
+    >>> grouped_pha = ftgrouppha.group_min_counts(pha, min_counts=10)
 """
+
+from __future__ import annotations
 
 from . import fextract
 from . import ftgrouppha
 from . import ftrbnpha
 from . import ftrbnrmf
+from . import ftselect
+from . import region
+from . import grppha
+from . import teldef
+from . import rmf_mapping
+from . import teldef_helpers
+from . import xselect_mdb
 
 __all__ = [
-    'fextract', 'ftgrouppha', 'ftrbnpha', 'ftrbnrmf'
+    'fextract',
+    'ftgrouppha',
+    'ftrbnpha',
+    'ftrbnrmf',
+    'ftselect',
+    'region',
+    'grppha',
+    'teldef',
+    'rmf_mapping',
+    'teldef_helpers',
+    'xselect_mdb',
 ]
+

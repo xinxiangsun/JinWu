@@ -328,9 +328,15 @@ def plot_lightcurve(
         xlabel_parts = ["Time since"]
         if timezero_obj is not None:
             try:
-                # 获取 UTC 时间字符串
-                utc_str = timezero_obj.isot if hasattr(timezero_obj, 'isot') else str(timezero_obj)
-                xlabel_parts.append(f"{utc_str} (s)")
+                # 获取 UTC 时间字符串（优先使用 astropy Time 的 timezero_obj.utc.isot）
+                utc_str = None
+                if hasattr(timezero_obj, 'utc') and hasattr(getattr(timezero_obj, 'utc'), 'isot'):
+                    utc_str = timezero_obj.utc.isot
+                elif hasattr(timezero_obj, 'isot'):
+                    utc_str = timezero_obj.isot
+                else:
+                    utc_str = str(timezero_obj)
+                xlabel_parts.append(f"{utc_str} (UTC) (s)")
             except Exception:
                 if timezero is not None:
                     xlabel_parts.append(f"{timezero:.3f} (s)")
@@ -399,9 +405,13 @@ def plot_lightcurve(
         elif hasattr(lc, 'telescop') and lc.telescop is not None:
             instrume = str(lc.telescop)
 
-        timezero_obj_lc = None
-        if hasattr(lc, 'timezero_obj') and lc.timezero_obj is not None:
-            timezero_obj_lc = lc.timezero_obj
+        # 检查必需的时间参考对象
+        if not hasattr(lc, 'timezero_obj') or lc.timezero_obj is None:
+            raise ValueError(
+                "LightcurveData 缺少 timezero_obj 字段。"
+                "绘图需要时间参考对象以正确显示 UTC 时间标签。"
+            )
+        timezero_obj_lc = lc.timezero_obj
 
         # 推断 bin 宽度（秒）
         binsize_val: Optional[float] = None
@@ -549,6 +559,13 @@ def plot_lightcurve(
                 tz = float(hv) if hv is not None else None
             except Exception:
                 tz = None
+        
+        # 检查 timezero 是否成功获取
+        if tz is None:
+            raise ValueError(
+                "LightcurveData 缺少 timezero 字段。"
+                "绘图需要 TIMEZERO 偏移量以正确标注时间轴。"
+            )
 
         # 多能段还是单能段
         if val_arr.ndim == 2 and val_arr.shape[1] > 1 and (multiband is True or multiband == "auto"):
@@ -575,7 +592,7 @@ def plot_lightcurve(
             if title is None:
                 base = Path(getattr(lc, "path", "")).name
                 if srcname:
-                    title = f"{srcname} ({base})" if base else srcname
+                    title = f"{srcname} Lightcurve" if base else srcname
                 else:
                     title = base or "Lightcurve"
             axes[0].set_title(title)

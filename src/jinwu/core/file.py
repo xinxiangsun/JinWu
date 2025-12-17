@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, cast, Union, Literal, overload, ClassVar, TYPE_CHECKING
-from astropy.time import TimeDelta
+from .time import TimeDelta,Time
 import numpy as np
 from astropy.io import fits
 from .ogip import (
@@ -583,7 +583,7 @@ class LightcurveData(OgipTimeSeriesBase):
     
     # ========== 核心时间字段（有默认值）==========
     timezero: float = 0.0                   # TIMEZERO 偏移量（秒）
-    timezero_obj: Optional[Any] = None      # Time 对象（根据 TELESCOP 生成）
+    timezero_obj: Optional[Time] = None      # Time 对象（根据 TELESCOP 生成）
     dt: Optional[np.ndarray | float] = None # bin 宽度（秒）
     
     # ========== 便利时间字段 ==========
@@ -1013,19 +1013,19 @@ class LightcurveData(OgipTimeSeriesBase):
         import copy
         return copy.copy(self)
     
-    def slice(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'LightcurveData':
-        """按时间范围筛选光变曲线，返回新实例。委托到 ops.slice_lightcurve。"""
+    def slice(self, tmin: Optional[float | Time | TimeDelta] = None, tmax: Optional[float | Time | TimeDelta] = None) -> 'LightcurveData':
+        """按时间范围筛选光变曲线（支持 float/Time/TimeDelta），返回新实例。委托到 ops.slice_lightcurve。"""
         from .ops import slice_lightcurve
         return slice_lightcurve(self, tmin=tmin, tmax=tmax)
     
 
-    def rebin(self, binsize: float, method: Literal['sum', 'mean'] = 'sum', 
+    def rebin(self, binsize: float, method: Literal['auto', 'sum', 'mean'] = 'auto', 
               *, align_ref: Optional[float] = None, empty_bin: Literal['zero', 'nan'] = 'zero') -> 'LightcurveData':
         """时间重采样(GTI 感知，参考 Stingray 实现）。
         
         参数
         - binsize: 新的时间分辨率（秒）
-        - method: 聚合方法 ('sum' 或 'mean')
+        - method: 聚合方法（'auto' 保持原始纵轴形式；或显式 'sum'/'mean'）
         - align_ref: 可选的对齐参考时间点
         - empty_bin: 空 bin 处理方式 ('zero' 或 'nan')
         
@@ -2123,24 +2123,20 @@ class OgipLightcurveReader:
             time = time_raw - time_offset
             timezero = timezero_raw + time_offset
             
-            # ===== 第 4 步：根据 TELESCOP 生成 Time 对象 =====
+            # ===== 第 4 步：根据 TELESCOP 生成 Time 对象（初步尝试） =====
             telescop = None
             timezero_obj = None
-            
+
             # 尝试从多个位置读取 TELESCOP
             for hdr in [header, dict(h[0].header) if len(h) > 0 else {}]:
                 if "TELESCOP" in hdr:
                     telescop = str(hdr["TELESCOP"]).strip().upper()
                     break
             
-            # 根据 TELESCOP 创建 Time 对象
-            # 使用更新后的 timezero（= timezero_raw + time_raw[0]）
-            if telescop is not None and timezero != 0.0:
+            if telescop is not None:
                 try:
                     from .time import Time  # 使用 jinwu.core.time
-                    
-                    # 根据不同任务选择对应的 MET 格式
-                    # 使用 astropy 已注册的 MET 名称（去掉 _met 后缀）
+
                     format_map = {
                         'FERMI': 'fermi',
                         'EP': 'ep',
@@ -2155,22 +2151,18 @@ class OgipLightcurveReader:
                         'NEWTON': 'newton',
                         'XRISM': 'xrism',
                     }
-                    
+
                     met_format = None
                     for key, fmt in format_map.items():
                         if key in telescop:
                             met_format = fmt
                             break
-                    
-                    # 创建 TIMEZERO 对应的 Time 对象
+
                     if met_format is not None:
                         timezero_obj = Time(timezero, format=met_format)
                     else:
                         # 未知任务，尝试使用 UTC
-                        try:
-                            timezero_obj = Time(timezero, format='unix', scale='utc')
-                        except Exception:
-                            pass
+                        raise RuntimeError("未知望远镜类型,请将header中的相关关键字发送给作者以方便添加" + telescop)
                 except ImportError:
                     # 若 jinwu.core.time 不可用，忽略
                     pass
@@ -2185,7 +2177,7 @@ class OgipLightcurveReader:
             if dt is None and time.size >= 2:
                 dt = float(np.median(np.diff(time)))
             if dt is None:
-                dt = 1.0  # 默认回退
+                raise ValueError('binsize未被正确加载')  # 默认回退
             
             # ===== 第 6 步：计算 bin_lo/bin_hi（便利字段）=====
             # 根据 HEASoft 约定：TIME 是 bin 左缘
@@ -2283,6 +2275,9 @@ class OgipLightcurveReader:
             # ===== 第 12 步：读取元数据 =====
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
+                    
+            if timezero_obj is None:
+                    raise ValueError("无法构建 timezero_obj，请检查 TELESCOP/MJDREF/时间字段")
             
             # ===== 第 13 步：计算曝光时间 =====
             exposure = None
