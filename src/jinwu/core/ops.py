@@ -23,7 +23,7 @@ Pure functional interface; all operations return new instances.
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING, Literal
+from typing import Optional, TYPE_CHECKING, Literal, Sequence
 
 import numpy as np
 from . import gti as gtimod
@@ -37,6 +37,69 @@ from .file import LightcurveData, PhaData, EventData
 
 if TYPE_CHECKING:
     pass
+
+
+def _infer_bin_geometry(lc: 'LightcurveData') -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Resolve (bin_lo, bin_hi, bin_width) with variable-bin support."""
+    t = np.asarray(lc.time, dtype=float)
+    if t.size == 0:
+        return np.asarray([], float), np.asarray([], float), np.asarray([], float)
+
+    if getattr(lc, 'bin_lo', None) is not None and getattr(lc, 'bin_hi', None) is not None:
+        lo = np.asarray(lc.bin_lo, dtype=float)
+        hi = np.asarray(lc.bin_hi, dtype=float)
+        if lo.shape == hi.shape == t.shape:
+            return lo, hi, hi - lo
+
+    if getattr(lc, 'bin_width', None) is not None:
+        bw = np.asarray(lc.bin_width, dtype=float)
+        if bw.shape == t.shape:
+            return t - 0.5 * bw, t + 0.5 * bw, bw
+
+    dt_raw = getattr(lc, 'dt', None)
+    if dt_raw is not None:
+        dt_arr = np.asarray(dt_raw, dtype=float)
+        if dt_arr.ndim == 0:
+            dt_val = float(dt_arr)
+            if np.isfinite(dt_val) and dt_val > 0:
+                bw = np.full_like(t, dt_val, dtype=float)
+                return t - 0.5 * bw, t + 0.5 * bw, bw
+        elif dt_arr.shape == t.shape:
+            bw = dt_arr
+            return t - 0.5 * bw, t + 0.5 * bw, bw
+
+    est = float(np.median(np.diff(t))) if t.size >= 2 else 1.0
+    bw = np.full_like(t, est, dtype=float)
+    return t - 0.5 * bw, t + 0.5 * bw, bw
+
+
+def _effective_exposure_from_lc(lc: 'LightcurveData', width: np.ndarray) -> np.ndarray:
+    expo = getattr(lc, 'bin_exposure', None)
+    if expo is None:
+        return width
+    expo_arr = np.asarray(expo, dtype=float)
+    if expo_arr.shape != width.shape:
+        return width
+    return np.where(np.isfinite(expo_arr) & (expo_arr > 0), expo_arr, width)
+
+
+def _infer_binning_kind(width: np.ndarray) -> Literal['uniform', 'variable', 'unknown']:
+    if width.size == 0:
+        return 'unknown'
+    med = float(np.median(width))
+    return 'uniform' if np.allclose(width, med, rtol=1e-8, atol=1e-12) else 'variable'
+
+
+def _ensure_lc_columns(columns: Optional[tuple[str, ...]], *, is_rate: bool) -> tuple[str, ...]:
+    """Ensure LightcurveData columns include mandatory TIME and RATE/COUNTS tags."""
+    base = tuple(columns or ())
+    upper = {str(c).upper() for c in base}
+    out = list(base)
+    if "TIME" not in upper:
+        out.append("TIME")
+    if not any(k in upper for k in ("RATE", "COUNTS")):
+        out.append("RATE" if is_rate else "COUNTS")
+    return tuple(out)
 
 __all__ = [
     # Lightcurve operations
@@ -52,6 +115,7 @@ __all__ = [
     # Bayesian Blocks
     "BayesianBlocksBinner",
     "bin_bblocks",
+    "txx",
 ]
 
 
@@ -142,12 +206,14 @@ def slice_lightcurve(
             lc.error[mask] if (lc.error is not None and lc.error.ndim == 1)
             else (lc.error[mask, :] if lc.error is not None else None)
         ),
-        dt=lc.dt,
+        dt=(lc.dt[mask] if isinstance(lc.dt, np.ndarray) and lc.dt.shape[0] == mask.shape[0] else lc.dt),
         # 时间字段
         timezero=new_timezero,
         timezero_obj=new_timezero_obj,
         bin_lo=(lc.bin_lo[mask] if getattr(lc, 'bin_lo', None) is not None else None),
         bin_hi=(lc.bin_hi[mask] if getattr(lc, 'bin_hi', None) is not None else None),
+        bin_width=(lc.bin_width[mask] if getattr(lc, 'bin_width', None) is not None else None),
+        binning=getattr(lc, 'binning', 'unknown'),
         tstart=getattr(lc, 'tstart', None),
         tseg=getattr(lc, 'tseg', None),
         # 数据字段
@@ -240,22 +306,11 @@ def rebin_lightcurve(
     # instantaneous and use small epsilon half-width equal to median spacing.
     t = np.asarray(lc.time, dtype=float)
     if t.size == 0:
-        return LightcurveData(path=lc.path, time=np.array([], dtype=float), value=np.array([], dtype=float), error=None, dt=binsize, exposure=lc.exposure, bin_exposure=None, is_rate=lc.is_rate, header=lc.header, meta=lc.meta, headers_dump=lc.headers_dump, region=lc.region)
+        return LightcurveData(path=lc.path, time=np.array([], dtype=float), value=np.array([], dtype=float), error=None, dt=binsize, exposure=lc.exposure, bin_exposure=None, is_rate=lc.is_rate, header=lc.header, meta=lc.meta, headers_dump=lc.headers_dump, region=lc.region, bin_width=np.array([], dtype=float), binning='unknown')
 
-    # infer original dt per bin
-    if lc.dt is not None and lc.dt > 0:
-        orig_dt = float(lc.dt)
-        orig_left = t - 0.5 * orig_dt
-        orig_right = t + 0.5 * orig_dt
-    else:
-        # fallback: estimate spacing and assume these are centers
-        est_dt = float(np.median(np.diff(t))) if t.size >= 2 else float(binsize)
-        orig_dt = est_dt
-        orig_left = t - 0.5 * est_dt
-        orig_right = t + 0.5 * est_dt
+    orig_left, orig_right, orig_width = _infer_bin_geometry(lc)
 
-    # Per-bin宽度（允许轻微非均匀）
-    orig_width = orig_right - orig_left
+    # Per-bin宽度（允许非均匀）
 
     # XRONOS 要求 newbin 不得短于最长原始 bin
     max_bin = float(np.max(orig_width)) if orig_width.size else float(binsize)
@@ -277,16 +332,10 @@ def rebin_lightcurve(
     # Convert original values to counts for safe aggregation
     vals = np.asarray(lc.value, dtype=float)
     errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
+    orig_eff_expo = _effective_exposure_from_lc(lc, orig_width)
     if lc.is_rate:
-        # 若有逐 bin 暴露时间，优先使用它从速率恢复计数
-        bin_expo = getattr(lc, 'bin_exposure', None)
-        if bin_expo is not None:
-            bin_expo_arr = np.asarray(bin_expo, dtype=float)
-            orig_counts = vals * bin_expo_arr
-            orig_err_counts = errs * bin_expo_arr if errs is not None else None
-        else:
-            orig_counts = vals * orig_dt
-            orig_err_counts = errs * orig_dt if errs is not None else None
+        orig_counts = vals * orig_eff_expo
+        orig_err_counts = errs * orig_eff_expo if errs is not None else None
     else:
         orig_counts = vals.copy()
         orig_err_counts = errs.copy() if errs is not None else None
@@ -342,7 +391,7 @@ def rebin_lightcurve(
                         ms_adj, me_adj = gtimod.adjust_gti_to_frame(ms, me, float(frame_dt), timepixr=float(tp_val or 0.0))
                         if ms_adj is not None and me_adj is not None:
                             # recompute per-original-bin exposures based on adjusted GTIs
-                            new_orig_expos = np.zeros_like(orig_bin_expos, dtype=float)
+                            new_orig_expos = np.zeros_like(orig_eff_expo, dtype=float)
                             for idx in range(orig_bin_expos.size):
                                 a = float(orig_left[idx])
                                 b = float(orig_right[idx])
@@ -350,7 +399,7 @@ def rebin_lightcurve(
                                 for s, e in zip(ms_adj, me_adj):
                                     ov += max(0.0, min(b, float(e)) - max(a, float(s)))
                                 new_orig_expos[idx] = ov
-                            orig_bin_expos = new_orig_expos
+                            orig_eff_expo = new_orig_expos
         except Exception:
             # conservative: if anything fails, keep original exposures
             pass
@@ -379,7 +428,7 @@ def rebin_lightcurve(
             # exposure contribution: if original per-bin exposure present,
             # scale it by the overlap fraction; else treat exposure as overlap length
             if orig_bin_expos is not None:
-                new_exposure[j] += float(orig_bin_expos[i]) * frac
+                new_exposure[j] += float(orig_eff_expo[i]) * frac
             else:
                 new_exposure[j] += overlap
 
@@ -432,6 +481,8 @@ def rebin_lightcurve(
         bin_hi=edges[1:],
         tstart=getattr(lc, 'tstart', None),
         tseg=getattr(lc, 'tseg', None),
+        bin_width=np.diff(edges),
+        binning='uniform',
         # 曝光
         exposure=(float(np.sum(ret_bin_exposure)) if ret_bin_exposure is not None else lc.exposure),
         bin_exposure=(ret_bin_exposure if ret_bin_exposure is not None else None),
@@ -822,6 +873,9 @@ def rebin_events_to_lightcurve(
         exposure=float(np.sum(bin_exposure)), is_rate=False,
         header=evt.header, meta=evt.meta, headers_dump=evt.headers_dump,
         region=None, bin_exposure=bin_exposure,
+        bin_lo=edges[:-1], bin_hi=edges[1:],
+        bin_width=np.diff(edges),
+        binning='uniform',
     )
 
 
@@ -850,10 +904,15 @@ class BayesianBlocksBinner:
       值为每块的聚合值，误差按平方和开方传播；每块的 `bin_exposure` 为实际覆盖曝光。
     """
 
-    def __init__(self, p0: float = 0.05, min_snr: float = 3.0, fitness: str = 'regular') -> None:
+    def __init__(
+        self,
+        p0: float = 0.05,
+        min_snr: float = 3.0,
+        fitness: Literal['events', 'regular_events', 'measures'] = 'measures'
+    ) -> None:
         self.p0 = float(p0)
         self.min_snr = float(min_snr)
-        self.fitness = str(fitness)
+        self.fitness: Literal['events', 'regular_events', 'measures'] = fitness
         # 暴露接口：便于后续 Txx 计算使用原始或合并后的边界
         self.last_edges: Optional[np.ndarray] = None
         self.last_merged_indices: Optional[list[np.ndarray]] = None
@@ -877,26 +936,54 @@ class BayesianBlocksBinner:
 
         t = np.asarray(lc.time, dtype=float)
         if t.size == 0:
-            return LightcurveData(path=lc.path, time=np.array([], dtype=float), value=np.array([], dtype=float), error=None, dt=lc.dt, exposure=lc.exposure, bin_exposure=None, is_rate=lc.is_rate, header=lc.header, meta=lc.meta, headers_dump=lc.headers_dump, region=lc.region)
+            empty_cols = _ensure_lc_columns(getattr(lc, 'columns', ()), is_rate=lc.is_rate)
+            return LightcurveData(
+                path=lc.path,
+                time=np.array([], dtype=float),
+                value=np.array([], dtype=float),
+                error=None,
+                dt=lc.dt,
+                timezero=getattr(lc, 'timezero', 0.0),
+                timezero_obj=getattr(lc, 'timezero_obj', None),
+                tstart=getattr(lc, 'tstart', None),
+                tseg=getattr(lc, 'tseg', None),
+                exposure=lc.exposure,
+                bin_exposure=None,
+                is_rate=lc.is_rate,
+                counts=(np.array([], dtype=float) if not lc.is_rate else None),
+                rate=(np.array([], dtype=float) if lc.is_rate else None),
+                counts_err=None,
+                rate_err=None,
+                err_dist=getattr(lc, 'err_dist', None),
+                gti_start=getattr(lc, 'gti_start', None),
+                gti_stop=getattr(lc, 'gti_stop', None),
+                quality=getattr(lc, 'quality', None),
+                fracexp=getattr(lc, 'fracexp', None),
+                backscal=getattr(lc, 'backscal', None),
+                areascal=getattr(lc, 'areascal', None),
+                telescop=getattr(lc, 'telescop', None),
+                timesys=getattr(lc, 'timesys', None),
+                mjdref=getattr(lc, 'mjdref', None),
+                header=lc.header,
+                meta=lc.meta,
+                headers_dump=lc.headers_dump,
+                region=lc.region,
+                columns=empty_cols,
+                ratio=getattr(lc, 'ratio', None),
+            )
 
         # 将输入统一到 counts 及其方差，便于块内聚合与 SNR 计算
         vals = np.asarray(lc.value, dtype=float)
         errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
 
-        # 推断原始 bin 边界与 dt
-        if lc.dt is not None and lc.dt > 0:
-            orig_dt = float(lc.dt)
-            left = t - 0.5 * orig_dt
-            right = t + 0.5 * orig_dt
-        else:
-            est_dt = float(np.median(np.diff(t))) if t.size >= 2 else 1.0
-            orig_dt = est_dt
-            left = t - 0.5 * est_dt
-            right = t + 0.5 * est_dt
+        # 推断原始 bin 边界与每 bin 宽度（支持不等宽）
+        left, right, width = _infer_bin_geometry(lc)
+        orig_dt = float(np.median(width)) if width.size > 0 else 1.0
+        eff_width = _effective_exposure_from_lc(lc, width)
 
         if lc.is_rate:
-            counts = vals * orig_dt
-            err_counts = (errs * orig_dt) if errs is not None else None
+            counts = vals * eff_width
+            err_counts = (errs * eff_width) if errs is not None else None
         else:
             counts = vals.copy()
             err_counts = errs.copy() if errs is not None else None
@@ -908,7 +995,12 @@ class BayesianBlocksBinner:
 
         # 调用 bayesian_blocks 构建初始块边界
         # fitness 类型：'events'(泊松事件), 'regular_events'(规则采样事件), 'measures'(带误差测量)
-        edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0)
+        if self.fitness == 'regular_events':
+            edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0, dt=orig_dt)
+        elif self.fitness == 'measures':
+            edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0, sigma=err_counts)
+        else:
+            edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0)
         # heapy/ppsignal 的做法会扩展首末边界到原始范围；保持与之兼容
         full_left = float(left.min())
         full_right = float(right.max())
@@ -943,7 +1035,12 @@ class BayesianBlocksBinner:
                 csum = np.sum(counts[curr])
                 vsum = np.sum(var_counts[curr])
                 snr = (csum / np.sqrt(vsum)) if vsum > 0 else 0.0
-            merged_indices.append(np.unique(curr))
+            curr_unique = np.unique(curr)
+            # 若走到末尾仍不达阈值，则并回前一块，避免保留低显著性尾块
+            if (snr < self.min_snr) and len(merged_indices) > 0:
+                merged_indices[-1] = np.unique(np.concatenate((merged_indices[-1], curr_unique)))
+            else:
+                merged_indices.append(curr_unique)
             i = j + 1
 
         # 保存以便 Txx 使用
@@ -954,6 +1051,8 @@ class BayesianBlocksBinner:
         out_err = []
         out_expo = []
         out_dt = []
+        out_left = []
+        out_right = []
 
         # 计算每块的实际曝光：使用原始 bin_exposure 如有，否则用时间覆盖长度
         orig_expo = getattr(lc, 'bin_exposure', None)
@@ -963,10 +1062,12 @@ class BayesianBlocksBinner:
             # 聚合 counts/var
             csum = float(np.sum(counts[idxs]))
             vsum = float(np.sum(var_counts[idxs]))
+            expo_blk = float(np.sum(orig_expo[idxs])) if orig_expo is not None else (b - a)
+            denom = expo_blk if expo_blk > 0.0 else (b - a)
             # 值/误差空间：保留与输入一致（counts 或 rate）
             if lc.is_rate:
-                val = csum / (b - a)
-                err = (np.sqrt(vsum) / (b - a)) if vsum > 0 else 0.0
+                val = csum / denom
+                err = (np.sqrt(vsum) / denom) if vsum > 0 else 0.0
             else:
                 val = csum
                 err = (np.sqrt(vsum)) if vsum > 0 else 0.0
@@ -974,16 +1075,22 @@ class BayesianBlocksBinner:
             out_val.append(val)
             out_err.append(err)
             out_dt.append(b - a)
-            if orig_expo is not None:
-                out_expo.append(float(np.sum(orig_expo[idxs])))
-            else:
-                out_expo.append(b - a)
+            out_left.append(a)
+            out_right.append(b)
+            out_expo.append(expo_blk)
 
         out_time = np.asarray(out_time, dtype=float)
         out_val = np.asarray(out_val, dtype=float)
         out_err = np.asarray(out_err, dtype=float)
-        out_dt = float(np.median(out_dt)) if len(out_dt) > 0 else (lc.dt or 0.0)
+        if len(out_dt) > 0:
+            out_dt = float(np.median(out_dt))
+        else:
+            _, _, w0 = _infer_bin_geometry(lc)
+            out_dt = float(np.median(w0)) if w0.size > 0 else 0.0
+        out_left_arr = np.asarray(out_left, dtype=float)
+        out_right_arr = np.asarray(out_right, dtype=float)
         bin_exposure = np.asarray(out_expo, dtype=float)
+        out_cols = _ensure_lc_columns(getattr(lc, 'columns', ()), is_rate=lc.is_rate)
 
         return LightcurveData(
             path=lc.path,
@@ -991,22 +1098,47 @@ class BayesianBlocksBinner:
             value=out_val,
             error=out_err,
             dt=out_dt,
+            timezero=getattr(lc, 'timezero', 0.0),
+            timezero_obj=getattr(lc, 'timezero_obj', None),
+            bin_lo=out_left_arr,
+            bin_hi=out_right_arr,
+            bin_width=(out_right_arr - out_left_arr),
+            binning=_infer_binning_kind(out_right_arr - out_left_arr),
+            tstart=getattr(lc, 'tstart', None),
+            tseg=getattr(lc, 'tseg', None),
             exposure=float(np.sum(bin_exposure)),
             bin_exposure=bin_exposure,
             is_rate=lc.is_rate,
+            counts=None if lc.is_rate else out_val,
+            rate=out_val if lc.is_rate else None,
+            counts_err=None if lc.is_rate else out_err,
+            rate_err=out_err if lc.is_rate else None,
+            err_dist=getattr(lc, 'err_dist', None),
+            gti_start=getattr(lc, 'gti_start', None),
+            gti_stop=getattr(lc, 'gti_stop', None),
+            quality=getattr(lc, 'quality', None),
+            fracexp=getattr(lc, 'fracexp', None),
+            backscal=getattr(lc, 'backscal', None),
+            areascal=getattr(lc, 'areascal', None),
+            telescop=getattr(lc, 'telescop', None),
+            timesys=getattr(lc, 'timesys', None),
+            mjdref=getattr(lc, 'mjdref', None),
             header=lc.header,
             meta=lc.meta,
             headers_dump=lc.headers_dump,
             region=lc.region,
+            columns=out_cols,
+            ratio=getattr(lc, 'ratio', None),
         )
 
     def fit_src_bkg(self, lc_src: 'LightcurveData', lc_bkg: 'LightcurveData', alpha: Optional[float] = None) -> 'LightcurveData':
-        """对源与背景光变同时进行贝叶斯块分 bin，并按 Li&Ma 近似的 SNR 过滤。
+        """对源与背景光变同时进行贝叶斯块分 bin，并按 Li&Ma 显著性过滤。
 
         - `alpha`: 源/背景缩放因子（如面积或BACKSCAL比值）。若未提供，
           尝试以每块曝光之比近似：alpha = expo_src / expo_bkg。
-        - SNR 计算：net = S - alpha*B；var = S + alpha^2 * B；SNR = net/sqrt(var)。
-        - 初始块边界基于源 LC 的 `bayesian_blocks`。
+        - 初始块边界（fitness='measures'）基于净计数 N = S - alpha*B。
+        - 净计数误差传播：sigma_N^2 = sigma_S^2 + alpha^2 * sigma_B^2。
+        - 块合并阈值使用带符号 Li&Ma 显著性。
         """
         
 
@@ -1015,32 +1147,115 @@ class BayesianBlocksBinner:
             t = np.asarray(lc.time, dtype=float)
             vals = np.asarray(lc.value, dtype=float)
             errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
-            if lc.dt is not None and lc.dt > 0:
-                dt = float(lc.dt)
-                left = t - 0.5 * dt
-                right = t + 0.5 * dt
-            else:
-                est_dt = float(np.median(np.diff(t))) if t.size >= 2 else 1.0
-                dt = est_dt
-                left = t - 0.5 * est_dt
-                right = t + 0.5 * est_dt
+            left, right, width = _infer_bin_geometry(lc)
+            eff_width = _effective_exposure_from_lc(lc, width)
             if lc.is_rate:
-                c = vals * dt
-                e = (errs * dt) if errs is not None else None
+                c = vals * eff_width
+                e = (errs * eff_width) if errs is not None else None
             else:
                 c = vals.copy()
                 e = errs.copy() if errs is not None else None
             if e is None:
                 e = np.sqrt(np.maximum(c, 0.0))
-            return t, left, right, c, e
+            return t, left, right, c, e, np.asarray(eff_width, dtype=float)
 
-        t_s, l_s, r_s, c_s, e_s = lc_to_counts(lc_src)
-        t_b, l_b, r_b, c_b, e_b = lc_to_counts(lc_bkg)
+        def _project_by_overlap(
+            src_left: np.ndarray,
+            src_right: np.ndarray,
+            src_values: np.ndarray,
+            tgt_left: np.ndarray,
+            tgt_right: np.ndarray,
+            *,
+            power: float = 1.0,
+        ) -> np.ndarray:
+            """Project source-bin quantities onto target bins by overlap fractions.
+
+            power=1 uses linear scaling (counts/exposure), power=2 for variance split.
+            """
+            out = np.zeros(tgt_left.size, dtype=float)
+            if tgt_left.size == 0 or src_left.size == 0:
+                return out
+            for i in range(tgt_left.size):
+                a = float(tgt_left[i])
+                b = float(tgt_right[i])
+                acc = 0.0
+                for j in range(src_left.size):
+                    l = float(src_left[j])
+                    r = float(src_right[j])
+                    if r <= a or l >= b:
+                        continue
+                    width = max(r - l, 1e-12)
+                    ov = max(0.0, min(b, r) - max(a, l))
+                    if ov <= 0.0:
+                        continue
+                    frac = ov / width
+                    acc += float(src_values[j]) * (frac ** power)
+                out[i] = acc
+            return out
+
+        t_s, l_s, r_s, c_s, e_s, expo_s = lc_to_counts(lc_src)
+        t_b, l_b, r_b, c_b, e_b, expo_b = lc_to_counts(lc_bkg)
         if t_s.size == 0:
-            return LightcurveData(path=lc_src.path, time=np.array([], dtype=float), value=np.array([], dtype=float), error=None, dt=lc_src.dt, exposure=lc_src.exposure, bin_exposure=None, is_rate=lc_src.is_rate, header=lc_src.header, meta=lc_src.meta, headers_dump=lc_src.headers_dump, region=lc_src.region)
+            empty_cols = _ensure_lc_columns(getattr(lc_src, 'columns', ()), is_rate=lc_src.is_rate)
+            return LightcurveData(
+                path=lc_src.path,
+                time=np.array([], dtype=float),
+                value=np.array([], dtype=float),
+                error=None,
+                dt=lc_src.dt,
+                timezero=getattr(lc_src, 'timezero', 0.0),
+                timezero_obj=getattr(lc_src, 'timezero_obj', None),
+                tstart=getattr(lc_src, 'tstart', None),
+                tseg=getattr(lc_src, 'tseg', None),
+                exposure=lc_src.exposure,
+                bin_exposure=None,
+                is_rate=lc_src.is_rate,
+                counts=(np.array([], dtype=float) if not lc_src.is_rate else None),
+                rate=(np.array([], dtype=float) if lc_src.is_rate else None),
+                counts_err=None,
+                rate_err=None,
+                err_dist=getattr(lc_src, 'err_dist', None),
+                gti_start=getattr(lc_src, 'gti_start', None),
+                gti_stop=getattr(lc_src, 'gti_stop', None),
+                quality=getattr(lc_src, 'quality', None),
+                fracexp=getattr(lc_src, 'fracexp', None),
+                backscal=getattr(lc_src, 'backscal', None),
+                areascal=getattr(lc_src, 'areascal', None),
+                telescop=getattr(lc_src, 'telescop', None),
+                timesys=getattr(lc_src, 'timesys', None),
+                mjdref=getattr(lc_src, 'mjdref', None),
+                header=lc_src.header,
+                meta=lc_src.meta,
+                headers_dump=lc_src.headers_dump,
+                region=lc_src.region,
+                columns=empty_cols,
+                ratio=getattr(lc_src, 'ratio', None),
+            )
 
-        # 初始块边界使用源计数
-        edges = bayesian_blocks(t_s, c_s, fitness=self.fitness, p0=self.p0)
+        # 将背景投影到源时间网格：用于净计数初始边界与 alpha_i 估计
+        b_on_s = _project_by_overlap(l_b, r_b, c_b, l_s, r_s, power=1.0)
+        var_b_on_s = _project_by_overlap(l_b, r_b, e_b ** 2, l_s, r_s, power=2.0)
+        expo_b_on_s = _project_by_overlap(l_b, r_b, expo_b, l_s, r_s, power=1.0)
+
+        if alpha is None:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                alpha_i = np.where(expo_b_on_s > 0.0, expo_s / expo_b_on_s, 1.0)
+        else:
+            alpha_i = np.full_like(c_s, float(alpha), dtype=float)
+        alpha_i = np.where(np.isfinite(alpha_i) & (alpha_i > 0.0), alpha_i, 1.0)
+
+        net_for_edges = c_s - alpha_i * b_on_s
+        sigma_net = np.sqrt(np.maximum((e_s ** 2) + (alpha_i ** 2) * var_b_on_s, 0.0))
+        sigma_net = np.where(np.isfinite(sigma_net) & (sigma_net > 0.0), sigma_net, 1e-12)
+
+        # 初始块边界：measures 用净计数，其余 fitness 保持源计数语义
+        est_dt = float(np.median(r_s - l_s)) if r_s.size else 1.0
+        if self.fitness == 'regular_events':
+            edges = bayesian_blocks(t_s, c_s, fitness=self.fitness, p0=self.p0, dt=est_dt)
+        elif self.fitness == 'measures':
+            edges = bayesian_blocks(t_s, net_for_edges, fitness=self.fitness, p0=self.p0, sigma=sigma_net)
+        else:
+            edges = bayesian_blocks(t_s, c_s, fitness=self.fitness, p0=self.p0)
         # 对齐 heapy/ppsignal 的边界扩展策略
         full_left = float(l_s.min())
         full_right = float(r_s.max())
@@ -1069,23 +1284,27 @@ class BayesianBlocksBinner:
             S = float(np.sum(c_s[src_idx]))
             B = float(np.sum(c_b[bkg_idx]))
             # 估计每块曝光（若存在 bin_exposure）
-            expo_src_blk = None
-            expo_bkg_blk = None
-            if getattr(lc_src, 'bin_exposure', None) is not None:
-                expo_src_blk = float(np.sum(np.asarray(lc_src.bin_exposure)[src_idx]))
-            if getattr(lc_bkg, 'bin_exposure', None) is not None:
-                expo_bkg_blk = float(np.sum(np.asarray(lc_bkg.bin_exposure)[bkg_idx]))
+            expo_src_blk = float(np.sum(expo_s[src_idx])) if src_idx.size > 0 else 0.0
+            expo_bkg_blk = float(np.sum(expo_b[bkg_idx])) if bkg_idx.size > 0 else 0.0
             alpha_blk = alpha
             if alpha_blk is None:
-                if (expo_src_blk is not None) and (expo_bkg_blk is not None) and (expo_bkg_blk > 0):
+                if expo_bkg_blk > 0:
                     alpha_blk = expo_src_blk / expo_bkg_blk
                 else:
                     alpha_blk = 1.0
-            # 使用统一的 Li&Ma 近似 SNR（保持与 heapy 使用思路一致）
-            # 这里用近似的 net/sqrt(var) 版本与 utils.snr_li_ma 一致性：当计数较大时接近
             net = S - alpha_blk * B
-            var = S + (alpha_blk ** 2) * B
-            snr = (net / np.sqrt(var)) if var > 0 else 0.0
+            var_s = float(np.sum((e_s[src_idx]) ** 2)) if src_idx.size > 0 else 0.0
+            var_b = float(np.sum((e_b[bkg_idx]) ** 2)) if bkg_idx.size > 0 else 0.0
+            var = var_s + (alpha_blk ** 2) * var_b
+            # 使用带符号的 Li&Ma 显著性作为合并阈值判据
+            # Li&Ma 本身返回非负值；用 net 的符号恢复方向性，便于要求“>= min_snr”
+            try:
+                snr_lima = float(snr_li_ma(max(S, 0.0), max(B, 0.0), max(float(alpha_blk), 1e-12)))
+                if not np.isfinite(snr_lima):
+                    snr_lima = 0.0
+            except Exception:
+                snr_lima = 0.0
+            snr = snr_lima if net >= 0 else -snr_lima
             j = i
             while snr < self.min_snr and (j + 1) < nb:
                 j += 1
@@ -1093,22 +1312,36 @@ class BayesianBlocksBinner:
                 bkg_idx = np.concatenate((bkg_idx, bkg_slices[j]))
                 S = float(np.sum(c_s[src_idx]))
                 B = float(np.sum(c_b[bkg_idx]))
-                expo_src_blk = None
-                expo_bkg_blk = None
-                if getattr(lc_src, 'bin_exposure', None) is not None:
-                    expo_src_blk = float(np.sum(np.asarray(lc_src.bin_exposure)[src_idx]))
-                if getattr(lc_bkg, 'bin_exposure', None) is not None:
-                    expo_bkg_blk = float(np.sum(np.asarray(lc_bkg.bin_exposure)[bkg_idx]))
+                expo_src_blk = float(np.sum(expo_s[src_idx])) if src_idx.size > 0 else 0.0
+                expo_bkg_blk = float(np.sum(expo_b[bkg_idx])) if bkg_idx.size > 0 else 0.0
                 alpha_blk = alpha
                 if alpha_blk is None:
-                    if (expo_src_blk is not None) and (expo_bkg_blk is not None) and (expo_bkg_blk > 0):
+                    if expo_bkg_blk > 0:
                         alpha_blk = expo_src_blk / expo_bkg_blk
                     else:
                         alpha_blk = 1.0
                 net = S - alpha_blk * B
-                var = S + (alpha_blk ** 2) * B
-                snr = (net / np.sqrt(var)) if var > 0 else 0.0
-            merged.append((np.unique(src_idx), np.unique(bkg_idx)))
+                var_s = float(np.sum((e_s[src_idx]) ** 2)) if src_idx.size > 0 else 0.0
+                var_b = float(np.sum((e_b[bkg_idx]) ** 2)) if bkg_idx.size > 0 else 0.0
+                var = var_s + (alpha_blk ** 2) * var_b
+                try:
+                    snr_lima = float(snr_li_ma(max(S, 0.0), max(B, 0.0), max(float(alpha_blk), 1e-12)))
+                    if not np.isfinite(snr_lima):
+                        snr_lima = 0.0
+                except Exception:
+                    snr_lima = 0.0
+                snr = snr_lima if net >= 0 else -snr_lima
+            src_unique = np.unique(src_idx)
+            bkg_unique = np.unique(bkg_idx)
+            # 若到末尾仍未达阈值，则并回前一块，避免低显著性尾块单独输出
+            if (snr < self.min_snr) and len(merged) > 0:
+                prev_src, prev_bkg = merged[-1]
+                merged[-1] = (
+                    np.unique(np.concatenate((prev_src, src_unique))),
+                    np.unique(np.concatenate((prev_bkg, bkg_unique))),
+                )
+            else:
+                merged.append((src_unique, bkg_unique))
             i = j + 1
 
         # 输出 LC（以净计数或净率表示；误差按 var 的 sqrt）
@@ -1118,30 +1351,31 @@ class BayesianBlocksBinner:
         out_err = []
         out_expo = []
         out_dt_list = []
+        out_left = []
+        out_right = []
         for src_idx, bkg_idx in merged:
             a = float(np.min(l_s[src_idx]))
             b = float(np.max(r_s[src_idx]))
             S = float(np.sum(c_s[src_idx]))
             B = float(np.sum(c_b[bkg_idx]))
-            expo_src_blk = None
-            expo_bkg_blk = None
-            if getattr(lc_src, 'bin_exposure', None) is not None:
-                expo_src_blk = float(np.sum(np.asarray(lc_src.bin_exposure)[src_idx]))
-            if getattr(lc_bkg, 'bin_exposure', None) is not None:
-                expo_bkg_blk = float(np.sum(np.asarray(lc_bkg.bin_exposure)[bkg_idx]))
+            expo_src_blk = float(np.sum(expo_s[src_idx])) if src_idx.size > 0 else 0.0
+            expo_bkg_blk = float(np.sum(expo_b[bkg_idx])) if bkg_idx.size > 0 else 0.0
             alpha_blk = alpha
             if alpha_blk is None:
-                if (expo_src_blk is not None) and (expo_bkg_blk is not None) and (expo_bkg_blk > 0):
+                if expo_bkg_blk > 0:
                     alpha_blk = expo_src_blk / expo_bkg_blk
                 else:
                     alpha_blk = 1.0
             net = S - alpha_blk * B
-            var = S + (alpha_blk ** 2) * B
+            var_s = float(np.sum((e_s[src_idx]) ** 2)) if src_idx.size > 0 else 0.0
+            var_b = float(np.sum((e_b[bkg_idx]) ** 2)) if bkg_idx.size > 0 else 0.0
+            var = var_s + (alpha_blk ** 2) * var_b
+            expo_blk = expo_src_blk if expo_src_blk > 0.0 else (b - a)
+            denom = expo_blk if expo_blk > 0.0 else (b - a)
             # 输出空间：保持输入源 LC 的 is_rate 习惯
             if lc_src.is_rate:
-                duration = (b - a)
-                val = net / duration
-                err = (np.sqrt(var) / duration) if var > 0 else 0.0
+                val = net / denom
+                err = (np.sqrt(var) / denom) if var > 0 else 0.0
             else:
                 val = net
                 err = (np.sqrt(var)) if var > 0 else 0.0
@@ -1149,15 +1383,24 @@ class BayesianBlocksBinner:
             out_val.append(val)
             out_err.append(err)
             out_dt_list.append(b - a)
-            out_expo.append(expo_src_blk if expo_src_blk is not None else (b - a))
+            out_left.append(a)
+            out_right.append(b)
+            out_expo.append(expo_blk)
             # 保存索引用于 Txx 接口
             self.last_merged_indices.append(np.asarray(src_idx, dtype=int))
 
         out_time = np.asarray(out_time, dtype=float)
         out_val = np.asarray(out_val, dtype=float)
         out_err = np.asarray(out_err, dtype=float)
-        out_dt = float(np.median(out_dt_list)) if len(out_dt_list) > 0 else (lc_src.dt or 0.0)
+        if len(out_dt_list) > 0:
+            out_dt = float(np.median(out_dt_list))
+        else:
+            _, _, w0 = _infer_bin_geometry(lc_src)
+            out_dt = float(np.median(w0)) if w0.size > 0 else 0.0
+        out_left_arr = np.asarray(out_left, dtype=float)
+        out_right_arr = np.asarray(out_right, dtype=float)
         bin_exposure = np.asarray(out_expo, dtype=float)
+        out_cols = _ensure_lc_columns(getattr(lc_src, 'columns', ()), is_rate=lc_src.is_rate)
 
         return LightcurveData(
             path=lc_src.path,
@@ -1165,13 +1408,37 @@ class BayesianBlocksBinner:
             value=out_val,
             error=out_err,
             dt=out_dt,
+            timezero=getattr(lc_src, 'timezero', 0.0),
+            timezero_obj=getattr(lc_src, 'timezero_obj', None),
+            bin_lo=out_left_arr,
+            bin_hi=out_right_arr,
+            bin_width=(out_right_arr - out_left_arr),
+            binning=_infer_binning_kind(out_right_arr - out_left_arr),
+            tstart=getattr(lc_src, 'tstart', None),
+            tseg=getattr(lc_src, 'tseg', None),
             exposure=float(np.sum(bin_exposure)),
             bin_exposure=bin_exposure,
             is_rate=lc_src.is_rate,
+            counts=None if lc_src.is_rate else out_val,
+            rate=out_val if lc_src.is_rate else None,
+            counts_err=None if lc_src.is_rate else out_err,
+            rate_err=out_err if lc_src.is_rate else None,
+            err_dist=getattr(lc_src, 'err_dist', None),
+            gti_start=getattr(lc_src, 'gti_start', None),
+            gti_stop=getattr(lc_src, 'gti_stop', None),
+            quality=getattr(lc_src, 'quality', None),
+            fracexp=getattr(lc_src, 'fracexp', None),
+            backscal=getattr(lc_src, 'backscal', None),
+            areascal=getattr(lc_src, 'areascal', None),
+            telescop=getattr(lc_src, 'telescop', None),
+            timesys=getattr(lc_src, 'timesys', None),
+            mjdref=getattr(lc_src, 'mjdref', None),
             header=lc_src.header,
             meta=lc_src.meta,
             headers_dump=lc_src.headers_dump,
             region=lc_src.region,
+            columns=out_cols,
+            ratio=getattr(lc_src, 'ratio', None),
         )
 
 
@@ -1241,9 +1508,44 @@ def bin_bblocks(
         lc_src = lc
         lc_bkg = background
 
+    def _select_fitness(lc_in: 'LightcurveData') -> Literal['events', 'regular_events', 'measures']:
+        """根据输入光变选择 bayesian_blocks 的 fitness。
+
+        - `regular_events` 仅适用于每个时间 tick 取值为 0/1 的事件序列。
+        - 常规已分 bin 光变（counts>1、或 rate）使用 `measures` 更稳健。
+        """
+        try:
+            vals = np.asarray(lc_in.value, dtype=float)
+        except Exception:
+            return 'measures'
+
+        if vals.size == 0:
+            return 'measures'
+
+        if lc_in.is_rate:
+            _, _, width = _infer_bin_geometry(lc_in)
+            width = _effective_exposure_from_lc(lc_in, width)
+            counts_like = vals * width
+        else:
+            counts_like = vals
+
+        finite = counts_like[np.isfinite(counts_like)]
+        if finite.size == 0:
+            return 'measures'
+
+        int_like = np.all(np.isclose(finite, np.round(finite)))
+        binary_like = np.all((np.round(finite) == 0) | (np.round(finite) == 1))
+        non_negative = np.all(finite >= 0)
+
+        if int_like and binary_like and non_negative:
+            return 'regular_events'
+        return 'measures'
+
+    fitness: Literal['events', 'regular_events', 'measures'] = _select_fitness(lc_src)
+
     # 无背景：单独源光变分 bin
     if lc_bkg is None:
-        return BayesianBlocksBinner(p0=p0, min_snr=min_snr, fitness='regular_events').fit(lc_src)
+        return BayesianBlocksBinner(p0=p0, min_snr=min_snr, fitness=fitness).fit(lc_src)
 
     # 有背景：源+背景联合分 bin
     # alpha 最终回退逻辑（若前面未设置）
@@ -1254,4 +1556,332 @@ def bin_bblocks(
             alpha = (a_src / a_bkg) if (a_src > 0 and a_bkg > 0) else 1.0
         except Exception:
             alpha = 1.0
-    return BayesianBlocksBinner(p0=p0, min_snr=min_snr, fitness='regular_events').fit_src_bkg(lc_src, lc_bkg, alpha=alpha)
+    return BayesianBlocksBinner(p0=p0, min_snr=min_snr, fitness=fitness).fit_src_bkg(lc_src, lc_bkg, alpha=alpha)
+
+
+
+def txx(
+    lc_src: 'LightcurveData | np.ndarray',
+    background: Optional['LightcurveData | np.ndarray'] = None,
+    *,
+    alpha: Optional[float] = None,
+    percent: float | Sequence[float] = 0.9,
+    nmc: int = 1000,
+    p0: float = 0.05,
+    min_snr: float = 3.0,
+    use_edge_bkg: bool = False,
+    lbkg: Optional[float] = None,
+    rbkg: Optional[float] = None,
+    burst_tstart: Optional[float] = None,
+    burst_tstop: Optional[float] = None,
+    tpeak: Optional[float] = None,
+    src_dist: Literal['poisson', 'gaussian'] = 'poisson',
+    bkg_dist: Literal['poisson', 'gaussian'] = 'poisson',
+    seed: Optional[int] = None,
+) -> dict:
+    """基于 Bayesian Blocks + MC 的 Txx 计算。
+
+    约定
+    ----
+    - percent 为任意 (0, 1) 浮点或列表，默认 0.9 (T90)
+    - 默认双泊松；不做自动模式判定
+    - 背景实时扣除（按每个 bin 处理）
+    - 爆发区间按 battblocks：第一块与最后一块作为背景，爆发区为它们之间
+    - use_edge_bkg=True 时，仅使用首末块估计背景基线（适用于非成像）
+
+        输入
+        ----
+        - lc_src/background 可为 LightcurveData 或 ndarray
+            * 1D ndarray: 视为 counts，time=0..N-1, dt=1
+            * 2D ndarray (N,2): [time, counts]
+            * 2D ndarray (N,3): [time, counts, err]
+
+        返回
+    ----
+    dict: 包含 txx/txx_err, txx1/txx1_err, txx2/txx2_err, peak/peak_err 等字段
+    """
+    rng = np.random.default_rng(seed)
+
+    # ndarray 输入转换
+    def _array_to_lc(arr: np.ndarray, name: str) -> 'LightcurveData':
+        arr = np.asarray(arr)
+        if arr.ndim == 1:
+            counts = arr.astype(float)
+            time = np.arange(counts.size, dtype=float)
+            err = None
+        elif arr.ndim == 2 and arr.shape[1] in (2, 3):
+            time = arr[:, 0].astype(float)
+            counts = arr[:, 1].astype(float)
+            err = arr[:, 2].astype(float) if arr.shape[1] == 3 else None
+        else:
+            raise ValueError(f"{name} ndarray 仅支持 1D 或 (N,2)/(N,3) 形状")
+        if time.size >= 2:
+            dt = float(np.median(np.diff(time)))
+        else:
+            dt = 1.0
+        bin_expo = np.full_like(time, dt, dtype=float)
+        return LightcurveData(
+            path=_Path("<array_input>"),
+            time=time,
+            value=counts,
+            error=err,
+            dt=dt,
+            exposure=float(np.sum(bin_expo)),
+            bin_exposure=bin_expo,
+            is_rate=False,
+            header={},
+            meta={},
+            headers_dump=None,
+            region=None,
+            bin_lo=(time - 0.5 * dt),
+            bin_hi=(time + 0.5 * dt),
+            bin_width=np.full_like(time, dt, dtype=float),
+            binning='uniform',
+        )
+
+    if not isinstance(lc_src, LightcurveData):
+        lc_src = _array_to_lc(lc_src, "lc_src")
+    if background is not None and not isinstance(background, LightcurveData):
+        background = _array_to_lc(background, "background")
+
+    # percent 处理
+    if isinstance(percent, (float, int)):
+        percent_arr = np.asarray([float(percent)], dtype=float)
+    else:
+        percent_arr = np.asarray(list(percent), dtype=float)
+    if np.any((percent_arr <= 0.0) | (percent_arr >= 1.0)):
+        raise ValueError("percent 必须在 (0, 1) 内")
+
+    # 将 LC 转为 counts 并推断边界
+    def _lc_to_counts(lc: 'LightcurveData'):
+        t = np.asarray(lc.time, dtype=float)
+        vals = np.asarray(lc.value, dtype=float)
+        errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
+        left, right, width = _infer_bin_geometry(lc)
+        width = right - left
+        eff_width = _effective_exposure_from_lc(lc, width)
+        if lc.is_rate:
+            counts = vals * eff_width
+            err_counts = (errs * eff_width) if errs is not None else None
+        else:
+            counts = vals.copy()
+            err_counts = errs.copy() if errs is not None else None
+        if err_counts is None:
+            err_counts = np.sqrt(np.maximum(counts, 0.0))
+        return t, left, right, width, counts, err_counts
+
+    t_s, l_s, r_s, w_s, c_s, e_s = _lc_to_counts(lc_src)
+    if t_s.size == 0:
+        raise ValueError("lc_src 为空，无法计算 Txx")
+
+    # Bayesian Blocks 分段，用于爆发区间定位
+    binner = BayesianBlocksBinner(p0=p0, min_snr=min_snr, fitness='measures')
+    _ = binner.fit(lc_src)
+    edges = binner.last_edges
+    if edges is None or edges.size < 2:
+        edges = np.asarray([float(l_s.min()), float(r_s.max())], dtype=float)
+
+    # 爆发区间（battblocks 逻辑：第一块与最后一块为背景）
+    if burst_tstart is None:
+        burst_tstart = float(edges[1]) if edges.size >= 3 else float(l_s.min())
+    if burst_tstop is None:
+        burst_tstop = float(edges[-2]) if edges.size >= 3 else float(r_s.max())
+    if burst_tstop <= burst_tstart:
+        raise ValueError("爆发区间无效：burst_tstop <= burst_tstart")
+
+    # 背景处理
+    def _rebin_to_edges(src_left, src_right, src_counts, src_var, tgt_left, tgt_right):
+        tgt_counts = np.zeros_like(tgt_left, dtype=float)
+        tgt_var = np.zeros_like(tgt_left, dtype=float)
+        for i, (a, b) in enumerate(zip(tgt_left, tgt_right)):
+            overlap = np.minimum(src_right, b) - np.maximum(src_left, a)
+            mask = overlap > 0
+            if not np.any(mask):
+                continue
+            width = src_right[mask] - src_left[mask]
+            frac = overlap[mask] / width
+            tgt_counts[i] = float(np.sum(src_counts[mask] * frac))
+            tgt_var[i] = float(np.sum(src_var[mask] * frac))
+        return tgt_counts, tgt_var
+
+    if use_edge_bkg:
+        # 仅用首末块估计背景（适用于非成像仪器）
+        bkg_counts = np.zeros_like(c_s, dtype=float)
+        bkg_err = np.zeros_like(c_s, dtype=float)
+        alpha = 1.0
+        # 首末块区间
+        t_left_bg = float(edges[0])
+        t_right_bg = float(edges[1]) if edges.size >= 3 else float(l_s.min())
+        t_left_bg2 = float(edges[-2]) if edges.size >= 3 else float(r_s.max())
+        t_right_bg2 = float(edges[-1])
+
+        mask1 = (l_s < t_right_bg) & (r_s > t_left_bg)
+        mask2 = (l_s < t_right_bg2) & (r_s > t_left_bg2)
+        rate1 = (np.sum(c_s[mask1]) / np.sum(w_s[mask1])) if np.any(mask1) else 0.0
+        rate2 = (np.sum(c_s[mask2]) / np.sum(w_s[mask2])) if np.any(mask2) else rate1
+        t1 = 0.5 * (t_left_bg + t_right_bg)
+        t2 = 0.5 * (t_left_bg2 + t_right_bg2)
+        if t2 == t1:
+            t2 = t1 + 1.0
+        # 线性背景
+        center = 0.5 * (l_s + r_s)
+        slope = (rate2 - rate1) / (t2 - t1)
+        bkg_rate = rate1 + slope * (center - t1)
+        bkg_counts = bkg_rate * w_s
+        bkg_err = np.sqrt(np.maximum(bkg_counts, 0.0))
+    else:
+        if background is None:
+            bkg_counts = np.zeros_like(c_s, dtype=float)
+            bkg_err = np.zeros_like(c_s, dtype=float)
+            alpha = 0.0
+        else:
+            if alpha is None:
+                raise ValueError("提供 background 时必须显式传入 alpha")
+            t_b, l_b, r_b, w_b, c_b, e_b = _lc_to_counts(background)
+            var_b = e_b ** 2
+            bkg_counts, bkg_var = _rebin_to_edges(l_b, r_b, c_b, var_b, l_s, r_s)
+            bkg_err = np.sqrt(np.maximum(bkg_var, 0.0))
+
+    # 净计数
+    net_counts = c_s - (alpha or 0.0) * bkg_counts
+    net_err = np.sqrt(np.maximum(e_s ** 2 + (alpha or 0.0) ** 2 * bkg_err ** 2, 0.0))
+
+    # 爆发区间内的 bin
+    in_burst = (l_s < burst_tstop) & (r_s > burst_tstart)
+    if not np.any(in_burst):
+        raise ValueError("爆发区间内无数据 bin")
+    l_burst = l_s[in_burst]
+    r_burst = r_s[in_burst]
+    w_burst = w_s[in_burst]
+    net_burst = net_counts[in_burst]
+    err_burst = net_err[in_burst]
+
+    # 使用观测值计算一次 Txx（作为名义值）
+    def _crossing_time(right_edges, csum, target):
+        if target <= 0:
+            return float(right_edges[0])
+        if target >= csum[-1]:
+            return float(right_edges[-1])
+        idx = int(np.searchsorted(csum, target, side='left'))
+        if idx == 0:
+            return float(right_edges[0])
+        c0 = csum[idx - 1]
+        c1 = csum[idx]
+        t0 = right_edges[idx - 1]
+        t1 = right_edges[idx]
+        if c1 <= c0:
+            return float(t1)
+        return float(t0 + (target - c0) * (t1 - t0) / (c1 - c0))
+
+    def _compute_txx_from_counts(counts):
+        csum = np.cumsum(counts)
+        if csum.size == 0:
+            return np.full(percent_arr.shape, np.nan), np.full(percent_arr.shape, np.nan), np.full(percent_arr.shape, np.nan)
+        csum = np.maximum.accumulate(csum)
+        total = float(csum[-1])
+        if total <= 0:
+            return np.full(percent_arr.shape, np.nan), np.full(percent_arr.shape, np.nan), np.full(percent_arr.shape, np.nan)
+        right_edges = r_burst
+        t1_list = []
+        t2_list = []
+        for p in percent_arr:
+            low = 0.5 * (1.0 - p) * total
+            high = 0.5 * (1.0 + p) * total
+            t1 = _crossing_time(right_edges, csum, low)
+            t2 = _crossing_time(right_edges, csum, high)
+            t1_list.append(t1)
+            t2_list.append(t2)
+        t1_arr = np.asarray(t1_list, dtype=float)
+        t2_arr = np.asarray(t2_list, dtype=float)
+        return t2_arr - t1_arr, t1_arr, t2_arr
+
+    txx_nom, txx1_nom, txx2_nom = _compute_txx_from_counts(net_burst)
+
+    # 峰值计算
+    def _peak_time_from_counts(counts):
+        if tpeak is None:
+            idx = int(np.argmax(counts / w_burst))
+            return 0.5 * (l_burst[idx] + r_burst[idx])
+        right_edges = r_burst
+        csum = np.cumsum(counts)
+        csum = np.maximum.accumulate(csum)
+        total = float(csum[-1])
+        if total <= 0:
+            return float(np.nan)
+
+        def _cum_at(t):
+            if t <= right_edges[0]:
+                return float(0.0)
+            if t >= right_edges[-1]:
+                return float(csum[-1])
+            idx = int(np.searchsorted(right_edges, t, side='right'))
+            t0 = right_edges[idx - 1]
+            t1 = right_edges[idx]
+            c0 = csum[idx - 1]
+            c1 = csum[idx]
+            if t1 <= t0:
+                return float(c1)
+            return float(c0 + (t - t0) * (c1 - c0) / (t1 - t0))
+
+        best = -np.inf
+        best_t = 0.5 * (burst_tstart + burst_tstop)
+        for start in l_burst:
+            end = start + float(tpeak)
+            if end > r_burst[-1]:
+                break
+            val = _cum_at(end) - _cum_at(start)
+            if val > best:
+                best = val
+                best_t = start + 0.5 * float(tpeak)
+        return float(best_t)
+
+    peak_nom = _peak_time_from_counts(net_burst)
+
+    # MC 误差估计
+    nmc = int(nmc)
+    txx_samples = np.zeros((nmc, percent_arr.size), dtype=float)
+    txx1_samples = np.zeros((nmc, percent_arr.size), dtype=float)
+    txx2_samples = np.zeros((nmc, percent_arr.size), dtype=float)
+    peak_samples = np.zeros(nmc, dtype=float)
+
+    def _draw_counts(mean, err, dist):
+        if dist == 'poisson':
+            return rng.poisson(np.maximum(mean, 0.0))
+        return rng.normal(mean, err)
+
+    for i in range(nmc):
+        src_draw = _draw_counts(c_s, e_s, src_dist)
+        bkg_draw = _draw_counts(bkg_counts, bkg_err, bkg_dist) if (not use_edge_bkg) else bkg_counts
+        net_draw = src_draw - (alpha or 0.0) * bkg_draw
+        net_draw_burst = net_draw[in_burst]
+        txx_i, t1_i, t2_i = _compute_txx_from_counts(net_draw_burst)
+        txx_samples[i, :] = txx_i
+        txx1_samples[i, :] = t1_i
+        txx2_samples[i, :] = t2_i
+        peak_samples[i] = _peak_time_from_counts(net_draw_burst)
+
+    def _asym_err(samples, central):
+        p16 = np.nanpercentile(samples, 16, axis=0)
+        p84 = np.nanpercentile(samples, 84, axis=0)
+        low = np.maximum(central - p16, 0.0)
+        high = np.maximum(p84 - central, 0.0)
+        return np.vstack([low, high]).T
+
+    txx_err = _asym_err(txx_samples, txx_nom)
+    txx1_err = _asym_err(txx1_samples, txx1_nom)
+    txx2_err = _asym_err(txx2_samples, txx2_nom)
+    peak_err = _asym_err(peak_samples, peak_nom).reshape(2,)
+
+    return {
+        "percent": percent_arr,
+        "txx": txx_nom,
+        "txx_err": txx_err,
+        "txx1": txx1_nom,
+        "txx1_err": txx1_err,
+        "txx2": txx2_nom,
+        "txx2_err": txx2_err,
+        "peak": peak_nom,
+        "peak_err": peak_err,
+        "burst_tstart": burst_tstart,
+        "burst_tstop": burst_tstop,
+    }

@@ -459,13 +459,23 @@ def plot_lightcurve(
             width = None
             if getattr(lc, 'bin_exposure', None) is not None:
                 width = np.asarray(lc.bin_exposure, float)
-            elif getattr(lc, 'dt', None) is not None and lc.dt:
-                width = float(lc.dt)
+            elif getattr(lc, 'bin_width', None) is not None:
+                width = np.asarray(lc.bin_width, float)
+            elif getattr(lc, 'dt', None) is not None:
+                dt_raw = lc.dt
+                dt_arr = np.asarray(dt_raw, float)
+                if dt_arr.ndim == 0:
+                    dt_val = float(dt_arr)
+                    width = dt_val if (np.isfinite(dt_val) and dt_val > 0) else None
+                else:
+                    width = dt_arr
             if width is None:
                 return None
             if np.ndim(width) == 0:
                 return np.full(v.shape[0], float(width), dtype=float)
             width_arr = np.asarray(width, float)
+            if width_arr.shape[0] != v.shape[0]:
+                return None
             return width_arr
 
         def _to_rate(v: np.ndarray, e: Optional[np.ndarray]) -> tuple[np.ndarray, Optional[np.ndarray], bool]:

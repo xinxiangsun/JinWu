@@ -4,7 +4,7 @@ LastEditors: Xinxiang Sun sunxx@nao.cas.cn
 LastEditTime: 2025-11-07 12:41:26
 FilePath: /research/jinwu/src/jinwu/missions/fermi/gbm/GBMObservation.py
 '''
-from gdt.missions.fermi.time import Time
+from ...core.time import Time
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from gdt.missions.fermi.gbm.finders import ContinuousFinder
@@ -35,7 +35,7 @@ class GBMObservation:
     def __init__(self, 
                  srcname: str = None, 
                  ra: float = None, dec: float = None, 
-                 utc_start: str = None, tstart_offset: float = -400, tstop_offset: float = 400,
+                 utc_start: str | Time = None, tstart_offset: float = -400, tstop_offset: float = 400,
                  filepath: str | Path = Path('/Users/xinxiang/research/'), 
                  ):
         """
@@ -44,7 +44,8 @@ class GBMObservation:
 
         Args:
             srcname (str): The source name. 源名称。
-            utc_start (str): The observation start time in UTC (ISO format). 观测的 UTC 起始时间（ISO 格式）。
+            utc_start (str | Time): The observation start time in UTC (ISO format string or astropy Time object).
+                观测的 UTC 起始时间（ISO 格式字符串或 astropy Time 对象）。
             ra (float): Right Ascension of the source (degrees). 源的赤经（单位：度）。
             dec (float): Declination of the source (degrees). 源的赤纬（单位：度）。
             filepath (str | Path): The file path, can be a string or a Path object. 文件路径，可以是字符串或 Path 对象。
@@ -70,10 +71,15 @@ class GBMObservation:
         """Update time and coordinate-related properties.
         更新时间和坐标相关属性。
         """
-        if not all([self._utc_TSTART, self._ra, self._dec]):
+        if not all([self._utc_TSTART is not None, self._ra, self._dec]):
             raise ValueError("UTC start time, RA, and DEC must be set before updating time and coordinates. "
                              "在更新时间和坐标之前，必须设置 UTC 起始时间、RA 和 DEC。")
-        self.srctime = Time(self._utc_TSTART, scale='utc', precision=9)
+        # Support both string and Time object for utc_start
+        # 支持字符串和 Time 对象作为 utc_start
+        if isinstance(self._utc_TSTART, Time):
+            self.srctime = Time(self._utc_TSTART, scale='utc', precision=9)
+        else:
+            self.srctime = Time(self._utc_TSTART, scale='utc', precision=9)
         self.coord = SkyCoord(self._ra, self._dec, frame='icrs', unit='deg')
         self.isot = self.srctime.isot
 
@@ -156,7 +162,9 @@ class GBMObservation:
                              "在初始化观测之前，必须初始化时间。")
         finder = ContinuousFinder(self.srctime)
         finder.get_poshist(self.datadir)
-        self.poshist_filepath = glob(str(self.datadir / f'glg_poshist_all_{self.yr}{self.month}{self.day}_v*.fit'))
+        # GBM 文件名使用两位年份 (YY)，例如 260119 表示 2026年1月19日
+        yr_short = str(self.yr)[-2:]  # 取年份后两位
+        self.poshist_filepath = glob(str(self.datadir / f'glg_poshist_all_{yr_short}{self.month}{self.day}_v*.fit'))
         if not self.poshist_filepath:
             raise FileNotFoundError("Poshist file not found. 未找到 Poshist 文件。")
         poshist = GbmPosHist.open(self.poshist_filepath[0])
@@ -166,13 +174,16 @@ class GBMObservation:
         self.visiblecheck = self.check_visibility()
         self.gticheck = self.check_gti()
         self.observation = self.visiblecheck and self.gticheck
-        if self.observation:
-            self.detectors = self.get_detectors()
-        else:
+        
+        # 无论是否可观测都获取探测器信息（用于画图）
+        self.detectors = self.get_detectors()
+        
+        if not self.observation:
             reason = "GTI" if not self.gticheck else "visibility"
-            shutil.rmtree(str(self.gbmdir))
-            raise ValueError(f"Source {self._srcname} is not observable at {self.srctime.isot} due to {reason}. "
-                             f"源 {self._srcname} 在 {self.srctime.isot} 不可观测，原因是 {reason}。")
+            import warnings
+            warnings.warn(f"Source {self._srcname} is not observable at {self.srctime.isot} due to {reason}. "
+                         f"源 {self._srcname} 在 {self.srctime.isot} 不可观测，原因是 {reason}。"
+                         f" 但仍可用于画图。", stacklevel=2)
 
     @property
     def srcname(self):
@@ -246,7 +257,10 @@ class GBMObservation:
         检查源是否在 GTI 范围内。
         """
         gti = Gti.from_boolean_mask(self.states['time'].value, self.states['good'].value)
-        return gti.contains(self.srctime)
+        # 将 Time 对象转换为 Fermi MET 时间 (float)
+
+        met_time = Time(self.srctime).fermi
+        return gti.contains(met_time)
 
     def get_detectors(self):
         """Get detectors with an angle less than 90 degrees to the source.
@@ -270,16 +284,78 @@ class GBMObservation:
 
 
     def skymap(self):
-        """Generate a sky map.
-        生成天空图。
+        """Generate a sky map with source, Sun, and Moon positions.
+        生成包含源、太阳和月亮位置的天空图。
         """
+        from astropy.coordinates import get_sun, get_body
+        
         eqplot = EquatorialPlot(interactive=True)
         eqplot.add_frame(self.one_frame)
         eqplot.sun.zorder = 2
         eqplot.sun.size = 300
         eqplot.ax.text(0.02, 0.95, "ICRS", transform=eqplot.ax.transAxes, fontsize=15, color='red', ha='center')
-        SkyPoints(x=self.coord.gcrs.ra.deg, y=self.coord.gcrs.dec.deg, ax=eqplot.ax, label=self._srcname, color='red', marker='*', s=100)
-        eqplot.ax.legend()
+        
+        # 标注源位置（五角星）
+        # Mark source position with a star marker
+        src_plot = SkyPoints(
+            x=self.coord.gcrs.ra.deg, 
+            y=self.coord.gcrs.dec.deg, 
+            ax=eqplot.ax, 
+            color='red', 
+            marker='*',  # 五角星
+            s=300,       # 大小
+            edgecolors='darkred',
+            linewidths=0.5,
+            zorder=10
+        )
+        
+        # 获取太阳位置
+        # Get Sun position at the observation time
+        sun_coord = get_sun(self.srctime)
+        sun_plot = SkyPoints(
+            x=sun_coord.ra.deg,
+            y=sun_coord.dec.deg,
+            ax=eqplot.ax,
+            color='yellow',
+            marker='o',
+            s=400,
+            edgecolors='orange',
+            linewidths=2,
+            zorder=9
+        )
+        
+        # 获取月亮位置
+        # Get Moon position at the observation time
+        moon_coord = get_body('moon', self.srctime)
+        moon_plot = SkyPoints(
+            x=moon_coord.ra.deg,
+            y=moon_coord.dec.deg,
+            ax=eqplot.ax,
+            color='lightgray',
+            marker='o',
+            s=250,
+            edgecolors='gray',
+            linewidths=2,
+            zorder=8
+        )
+        
+        # 创建图例
+        # Create legend with custom handles
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='*', color='w', markerfacecolor='red', 
+                   markeredgecolor='darkred', markersize=15, label=f'{self._srcname}'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='yellow',
+                   markeredgecolor='orange', markersize=12, label='Sun'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='lightgray',
+                   markeredgecolor='gray', markersize=10, label='Moon'),
+        ]
+        eqplot.ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
+        
+        # 添加时间标注
+        # Add time annotation
+        eqplot.ax.set_title(f'{self._srcname} Sky Map @ {self.srctime.isot}', fontsize=12)
+        
         plt.savefig(self.datadir / f"{self._srcname}_skymap.png", dpi=300)
         plt.show()
 
@@ -300,10 +376,34 @@ class GBMObservation:
             None: The function saves the Earth map as a PNG file in the specified directory.
                   该函数将地球地图保存为 PNG 文件到指定目录。
         """
+        from gdt.missions.fermi.time import Time as FermiTime
+        
         saa = GbmSaa()  # Initialize the South Atlantic Anomaly (SAA) region.
                         # 初始化南大西洋异常区（SAA）区域。
         earthplot = FermiEarthPlot(saa)  # Create an Earth plot for the spacecraft trajectory.
                                          # 创建航天器轨迹的地球图。
+
+        # 获取 poshist 的时间范围
+        # Get the time range of the poshist file
+        poshist_tmin = self.frame.obstime.min()
+        poshist_tmax = self.frame.obstime.max()
+        srctime_met = FermiTime(self.srctime).fermi
+        
+        # 计算请求的时间范围
+        requested_tstart = srctime_met + earthmap_start_offset
+        requested_tstop = srctime_met + earthmap_stop_offset
+        
+        # 自动调整时间范围以适应 poshist 数据
+        # Auto-adjust time range to fit within poshist data
+        if requested_tstart < poshist_tmin.value:
+            adjusted_start_offset = poshist_tmin.value - srctime_met + 10  # 加10秒余量
+            print(f"⚠️ 起始时间超出 poshist 范围，自动调整 earthmap_start_offset: {earthmap_start_offset} → {adjusted_start_offset:.1f}")
+            earthmap_start_offset = adjusted_start_offset
+            
+        if requested_tstop > poshist_tmax.value:
+            adjusted_stop_offset = poshist_tmax.value - srctime_met - 10  # 减10秒余量
+            print(f"⚠️ 结束时间超出 poshist 范围，自动调整 earthmap_stop_offset: {earthmap_stop_offset} → {adjusted_stop_offset:.1f}")
+            earthmap_stop_offset = adjusted_stop_offset
 
         # Calculate the duration of the Earth map.
         # 计算地球地图的持续时间。

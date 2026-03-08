@@ -589,6 +589,8 @@ class LightcurveData(OgipTimeSeriesBase):
     # ========== 便利时间字段 ==========
     bin_lo: Optional[np.ndarray] = None     # bin 左缘（time - dt/2）
     bin_hi: Optional[np.ndarray] = None     # bin 右缘（time + dt/2）
+    bin_width: Optional[np.ndarray] = None  # 每个 bin 宽度（秒，优先用于不等宽 bin）
+    binning: Literal['uniform', 'variable', 'unknown'] = 'unknown'  # 新增：binning 语义标签
     tstart: Optional[float] = None          # 观测起始（绝对时间）
     tseg: Optional[float] = None            # 观测总时长
     
@@ -659,6 +661,20 @@ class LightcurveData(OgipTimeSeriesBase):
         # 验证曝光时间
         if self.exposure is not None and self.exposure <= 0:
             rpt.add('WARN', 'BAD_EXPOSURE', f"exposure must be > 0, got {self.exposure}")
+
+        # 验证 bin 几何（支持不等宽）
+        try:
+            left, right, width = self._resolve_bin_geometry()
+            if self.time is not None and len(self.time) != len(width):
+                rpt.add('ERROR', 'BIN_LENGTH_MISMATCH', "time and bin geometry length mismatch")
+            if np.any(~np.isfinite(width)) or np.any(width <= 0):
+                rpt.add('ERROR', 'BAD_BIN_WIDTH', "bin widths must be finite and > 0")
+        except Exception as e:
+            rpt.add('WARN', 'BIN_GEOMETRY_UNRESOLVED', f"failed to resolve bin geometry: {e}")
+
+        if self.bin_exposure is not None and self.time is not None:
+            if len(self.bin_exposure) != len(self.time):
+                rpt.add('ERROR', 'BIN_EXPOSURE_MISMATCH', "bin_exposure length must match time length")
         
         rpt.ok = len(rpt.errors()) == 0
         return rpt
@@ -673,7 +689,9 @@ class LightcurveData(OgipTimeSeriesBase):
     @property
     def absolute_time(self) -> np.ndarray:
         """绝对时间 = time + timezero（OGIP 标准）"""
-        return self.time + self.timezero
+        if self.time is None:
+            return np.asarray([], dtype=float)
+        return np.asarray(self.time, dtype=float) + float(self.timezero)
     
     @property
     def gti(self) -> Optional[list[tuple[float, float]]]:
@@ -709,9 +727,50 @@ class LightcurveData(OgipTimeSeriesBase):
     @property
     def bin_centers(self) -> Optional[np.ndarray]:
         """Bin 中心时刻 = (bin_lo + bin_hi) / 2"""
-        if self.bin_lo is None or self.bin_hi is None:
+        try:
+            left, right, _ = self._resolve_bin_geometry()
+            return 0.5 * (left + right)
+        except Exception:
             return None
-        return 0.5 * (self.bin_lo + self.bin_hi)
+
+    def _resolve_bin_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """返回 (bin_lo, bin_hi, bin_width)，优先真实边界，兼容不等宽输入。"""
+        if self.time is None:
+            return np.asarray([], float), np.asarray([], float), np.asarray([], float)
+        t = np.asarray(self.time, dtype=float)
+        n = t.size
+        if n == 0:
+            return np.asarray([], float), np.asarray([], float), np.asarray([], float)
+
+        # 1) 优先 bin_lo/bin_hi
+        if self.bin_lo is not None and self.bin_hi is not None:
+            lo = np.asarray(self.bin_lo, dtype=float)
+            hi = np.asarray(self.bin_hi, dtype=float)
+            if lo.shape == hi.shape == t.shape:
+                return lo, hi, hi - lo
+
+        # 2) 其次 bin_width
+        if self.bin_width is not None:
+            bw = np.asarray(self.bin_width, dtype=float)
+            if bw.shape == t.shape:
+                return t - 0.5 * bw, t + 0.5 * bw, bw
+
+        # 3) 兼容 dt（标量/数组）
+        if self.dt is not None:
+            dt_arr = np.asarray(self.dt, dtype=float)
+            if dt_arr.ndim == 0:
+                dt_val = float(dt_arr)
+                if np.isfinite(dt_val) and dt_val > 0:
+                    bw = np.full_like(t, dt_val, dtype=float)
+                    return t - 0.5 * bw, t + 0.5 * bw, bw
+            elif dt_arr.shape == t.shape:
+                bw = dt_arr
+                return t - 0.5 * bw, t + 0.5 * bw, bw
+
+        # 4) 最后按 time 差分估计
+        est = float(np.median(np.diff(t))) if n >= 2 else 1.0
+        bw = np.full_like(t, est, dtype=float)
+        return t - 0.5 * bw, t + 0.5 * bw, bw
     
     @property
     def mean_rate(self) -> Optional[float]:
@@ -794,7 +853,9 @@ class LightcurveData(OgipTimeSeriesBase):
         
         from stingray.gti import create_gti_mask
         gti_arr = np.array(self.gti)
-        mask = create_gti_mask(self.bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+        bin_lo, _, _ = self._resolve_bin_geometry()
+        mask = create_gti_mask(bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+        mask = np.asarray(mask, dtype=bool)
         return self.apply_mask(mask, inplace=inplace)
     
     def split_by_gti(self, min_points: int = 1) -> list['LightcurveData']:
@@ -814,7 +875,9 @@ class LightcurveData(OgipTimeSeriesBase):
         
         for start, stop in self.gti:
             gti_arr = np.array([[start, stop]])
-            mask = create_gti_mask(self.bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+            bin_lo, _, _ = self._resolve_bin_geometry()
+            mask = create_gti_mask(bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+            mask = np.asarray(mask, dtype=bool)
             
             if np.sum(mask) < min_points:
                 continue
@@ -843,7 +906,7 @@ class LightcurveData(OgipTimeSeriesBase):
         
         # 定义所有可过滤的数组属性
         all_array_attrs = [
-            'bin_lo', 'bin_hi', 'counts', 'rate', 'counts_err', 'rate_err',
+            'bin_lo', 'bin_hi', 'bin_width', 'counts', 'rate', 'counts_err', 'rate_err',
             'quality', 'fracexp', 'bin_exposure'
         ]
         if filtered_attrs is None:
@@ -869,10 +932,20 @@ class LightcurveData(OgipTimeSeriesBase):
                     pass
         
         # 重新计算 tstart, tseg
-        if lc_new.bin_lo is not None and len(lc_new.bin_lo) > 0:
-            lc_new.tstart = float(lc_new.bin_lo[0])
-            if lc_new.bin_hi is not None:
-                lc_new.tseg = float(lc_new.bin_hi[-1] - lc_new.bin_lo[0])
+        try:
+            lo, hi, bw = lc_new._resolve_bin_geometry()
+            if lo.size > 0:
+                lc_new.tstart = float(lo[0])
+                lc_new.tseg = float(hi[-1] - lo[0])
+                lc_new.bin_lo = lo
+                lc_new.bin_hi = hi
+                lc_new.bin_width = bw
+                if np.allclose(bw, float(np.median(bw)), rtol=1e-8, atol=1e-12):
+                    lc_new.binning = 'uniform'
+                else:
+                    lc_new.binning = 'variable'
+        except Exception:
+            pass
         
         return lc_new
     
@@ -904,8 +977,10 @@ class LightcurveData(OgipTimeSeriesBase):
             # 已经在上面的 if 中检查过非 None，这里直接使用
             assert other.mjdref is not None and self.mjdref is not None
             time_offset = (other.mjdref - self.mjdref) * 86400.0
-            other.bin_lo = other.bin_lo + time_offset
-            other.bin_hi = other.bin_hi + time_offset
+            o_lo, o_hi, o_bw = other._resolve_bin_geometry()
+            other.bin_lo = o_lo + time_offset
+            other.bin_hi = o_hi + time_offset
+            other.bin_width = o_bw
             if other.gti_start is not None:
                 other.gti_start = other.gti_start + time_offset
             if other.gti_stop is not None:
@@ -921,16 +996,21 @@ class LightcurveData(OgipTimeSeriesBase):
             second_lc = self
         
         # 检查重叠
-        if len(np.intersect1d(self.bin_lo, other.bin_lo)) > 0:
+        self_lo, _, _ = self._resolve_bin_geometry()
+        other_lo, _, _ = other._resolve_bin_geometry()
+        if len(np.intersect1d(self_lo, other_lo)) > 0:
             warnings.warn(
                 "The two light curves have overlapping time ranges. "
                 "In overlapping regions, counts will be summed.",
                 UserWarning
             )
         
-        # 合并数据
-        new_bin_lo = np.concatenate([first_lc.bin_lo, second_lc.bin_lo])
-        new_bin_hi = np.concatenate([first_lc.bin_hi, second_lc.bin_hi])
+        # 合并数据（优先使用解析后的 bin 边界）
+        lo1, hi1, bw1 = first_lc._resolve_bin_geometry()
+        lo2, hi2, bw2 = second_lc._resolve_bin_geometry()
+        new_bin_lo = np.concatenate([lo1, lo2])
+        new_bin_hi = np.concatenate([hi1, hi2])
+        new_bin_width = np.concatenate([bw1, bw2])
         new_counts = np.concatenate([first_lc.counts, second_lc.counts]) if (first_lc.counts is not None and second_lc.counts is not None) else None
         new_rate = np.concatenate([first_lc.rate, second_lc.rate]) if (first_lc.rate is not None and second_lc.rate is not None) else None
         new_counts_err = np.concatenate([first_lc.counts_err, second_lc.counts_err]) if (first_lc.counts_err is not None and second_lc.counts_err is not None) else None
@@ -949,6 +1029,7 @@ class LightcurveData(OgipTimeSeriesBase):
         lc_new = LightcurveData(
             path=self.path,
             bin_lo=new_bin_lo, bin_hi=new_bin_hi,
+            bin_width=new_bin_width,
             counts=new_counts, rate=new_rate,
             counts_err=new_counts_err, rate_err=new_rate_err,
             dt=self.dt, tstart=float(new_bin_lo[0]),
@@ -957,6 +1038,7 @@ class LightcurveData(OgipTimeSeriesBase):
             exposure=self.exposure, header=self.header,
             meta=self.meta, headers_dump=self.headers_dump, columns=self.columns
         )
+        lc_new.binning = 'variable' if (new_bin_width.size > 1 and not np.allclose(new_bin_width, np.median(new_bin_width))) else 'uniform'
         lc_new.tseg = float(new_bin_hi[-1] - new_bin_lo[0]) if len(new_bin_hi) > 0 else None
         return lc_new
     
@@ -971,11 +1053,12 @@ class LightcurveData(OgipTimeSeriesBase):
         - LightcurveData: 裁剪后的光变曲线
         """
         # 确保 tmin/tmax 不为 None，便于后续比较
-        tmin_val: float = tmin if tmin is not None else (self.bin_lo[0] if len(self.bin_lo) > 0 else 0.0)
-        tmax_val: float = tmax if tmax is not None else (self.bin_hi[-1] if len(self.bin_hi) > 0 else float(np.inf))
+        lo, hi, _ = self._resolve_bin_geometry()
+        tmin_val: float = tmin if tmin is not None else (lo[0] if len(lo) > 0 else 0.0)
+        tmax_val: float = tmax if tmax is not None else (hi[-1] if len(hi) > 0 else float(np.inf))
         
         # 现在 tmin_val 和 tmax_val 都是 float 了
-        mask = (self.bin_lo >= tmin_val) & (self.bin_hi <= tmax_val)
+        mask = (lo >= tmin_val) & (hi <= tmax_val)
         lc_truncated = self.apply_mask(mask, inplace=False)
         
         # 更新 GTI：仅保留 [tmin_val, tmax_val] 内的 GTI
@@ -1003,8 +1086,9 @@ class LightcurveData(OgipTimeSeriesBase):
         返回
         - LightcurveData: 排序后的光变曲线
         """
-        sort_idx = np.argsort(self.bin_lo)
-        mask = np.zeros(len(self.bin_lo), dtype=bool)
+        lo, _, _ = self._resolve_bin_geometry()
+        sort_idx = np.argsort(lo)
+        mask = np.zeros(len(lo), dtype=bool)
         mask[sort_idx] = True
         return self.apply_mask(mask, inplace=inplace)
     
@@ -1075,7 +1159,7 @@ class LightcurveData(OgipTimeSeriesBase):
         # 直接委托给 netdata，它会自动计算 ratio（当 ratio=None）
         return netdata(self, other, ratio=ratio, use_exposure_weighted_ratio=use_exposure_weighted_ratio)
     
-    def __add__(self, other: 'LightcurveData') -> 'LightcurveDataset':
+    def __add__(self, other: 'LightcurveData') :
         """两个光变曲线相加，返回 LightcurveDataset 容器
         
         示例
@@ -2293,10 +2377,33 @@ class OgipLightcurveReader:
                     pass
             
             bin_exposure = None
-            if fracexp is not None and exposure is not None:
-                bin_exposure = fracexp * exposure
-            elif exposure is not None and len(time) > 0:
-                bin_exposure = np.full(len(time), exposure / len(time))
+            # 每bin宽度：优先真实边界，其次 dt
+            bin_width = None
+            if (bin_lo is not None) and (bin_hi is not None) and (len(bin_lo) == len(bin_hi)):
+                try:
+                    bin_width = np.asarray(bin_hi, dtype=float) - np.asarray(bin_lo, dtype=float)
+                except Exception:
+                    bin_width = None
+            if bin_width is None and len(time) > 0:
+                dt_arr = np.asarray(dt, dtype=float) if dt is not None else np.asarray([], dtype=float)
+                if dt_arr.ndim == 0 and dt_arr.size != 0 and np.isfinite(float(dt_arr)) and float(dt_arr) > 0:
+                    bin_width = np.full(len(time), float(dt_arr), dtype=float)
+                elif dt_arr.ndim == 1 and dt_arr.size == len(time):
+                    bin_width = dt_arr
+
+            if fracexp is not None and len(time) > 0:
+                fracexp_arr = np.asarray(fracexp, dtype=float)
+                if fracexp_arr.shape == (len(time),):
+                    fracexp_arr = np.where(np.isfinite(fracexp_arr), fracexp_arr, 1.0)
+                    fracexp_arr = np.clip(fracexp_arr, 0.0, 1.0)
+                    if bin_width is not None:
+                        bin_exposure = fracexp_arr * np.asarray(bin_width, dtype=float)
+            if bin_exposure is None and bin_width is not None:
+                # 无 FRACEXP 时，默认每bin有效曝光约等于bin宽度
+                bin_exposure = np.asarray(bin_width, dtype=float)
+            if bin_exposure is None and exposure is not None and len(time) > 0:
+                # 最后兜底：仅在无法推断 bin 宽时再均分总曝光
+                bin_exposure = np.full(len(time), exposure / len(time), dtype=float)
             
             # ===== 第 14 步：推断误差分布 =====
             err_dist = None

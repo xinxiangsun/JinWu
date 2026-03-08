@@ -171,7 +171,7 @@ def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_count
     # attach grouping into result
     if not rebin:
         # produce PhaData with same channels but grouping array filled
-        newpha = PhaData(kind='pha', path=pha.path, channels=pha.channels, counts=pha.counts,
+        newpha = PhaData( path=pha.path, channels=pha.channels, counts=pha.counts,
                          stat_err=pha.stat_err, exposure=pha.exposure, backscal=pha.backscal,
                          areascal=pha.areascal, quality=pha.quality, grouping=grouping,
                          ebounds=pha.ebounds, header=pha.header, meta=pha.meta, headers_dump=pha.headers_dump, columns=pha.columns)

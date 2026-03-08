@@ -7,9 +7,18 @@ FilePath: /research/jinwu/src/jinwu/core/utils.py
 '''
 import numpy as np
 from jinwu.core.heasoft import HeasoftEnvManager as hem
-import xspec as xs
-from xspec import FakeitSettings, AllData
-from jinwu.spectrum.specfake import XspecKFactory
+try:
+    import xspec as xs
+    from xspec import FakeitSettings, AllData
+except ModuleNotFoundError:
+    xs = None
+    FakeitSettings = None
+    AllData = None
+
+try:
+    from jinwu.spectrum.specfake import XspecKFactory
+except ModuleNotFoundError:
+    XspecKFactory = None
 from typing import Any, Union
 import os
 import gzip
@@ -17,6 +26,13 @@ import shutil
 from pathlib import Path
 from astropy.cosmology import Planck18 as cosmo
 from astropy import units as u
+
+
+def _require_xspec():
+    if xs is None or XspecKFactory is None:
+        raise ModuleNotFoundError(
+            "xspec is required for this functionality. Please install HEASOFT/pyxspec and ensure 'xspec' is importable."
+        )
 
 
 def generate_download_url(isot_time):
@@ -147,6 +163,7 @@ class RedshiftExtrapolator():
     
     def __init__(self, z0, bkgnum, duration, model, par, arfpath: Path | str, rmfpath: Path | str, bkgpath: Path | str , area_ratio: float = 1/12):
         '''红移外推器 - 基于原有代码保守重构'''
+        _require_xspec()
         # 基本参数
         self._z0 = float(z0)
         self._model = str(model)

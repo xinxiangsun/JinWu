@@ -409,7 +409,7 @@ class TimeHXMT(TimeFromEpoch):
 class TimeSwift(TimeFromEpoch):
     """Swift Mission Elapsed Time (MET) format with UTCF correction."""
 
-    name = 'swift'
+    name = 'swiftmet'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
     epoch_val = '2001-01-01 00:00:00'
     epoch_val2 = None

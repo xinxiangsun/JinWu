@@ -27,7 +27,6 @@ from . import time as time
 from . import ops as ops
 from .datasets import *
 from . import redshift
-from .redshift import *
 # Selected public API re-export from core.file
 from .file import (
 	# Data containers
