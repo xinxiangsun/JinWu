@@ -133,8 +133,8 @@ class LightcurveDataset:
             )
         elif isinstance(other, LightcurveDataset):
             new_labels = None
-            if self.labels is not None or other.labels is not None:
-                new_labels = (self.labels or [None]*len(self.data)) + (other.labels or [None]*len(other.data))
+            if self.labels is not None and other.labels is not None:
+                new_labels = self.labels + other.labels
             return LightcurveDataset(
                 data=self.data + other.data,
                 labels=new_labels
@@ -294,13 +294,18 @@ def netdata(
         if use_exposure_weighted_ratio:
             src_area = src_lc.region.area if (src_lc.region and src_lc.region.area) else None
             bkg_area = bkg_lc.region.area if (bkg_lc.region and bkg_lc.region.area) else None
-            src_exp = src_lc.exposure if src_lc.exposure else ValueError("Source exposure is None")
-            bkg_exp = bkg_lc.exposure if bkg_lc.exposure else ValueError("Background exposure is None")
+            src_exp = src_lc.exposure
+            bkg_exp = bkg_lc.exposure
             
             if src_area is None or bkg_area is None or bkg_area == 0:
                 raise ValueError(
                     "Cannot infer ratio: region area missing. "
                     "Provide ratio explicitly or ensure both have valid region.area"
+                )
+            if src_exp is None or bkg_exp is None or bkg_exp == 0:
+                raise ValueError(
+                    "Cannot infer exposure-weighted ratio: exposure missing or zero. "
+                    "Provide ratio explicitly or ensure both have valid exposure"
                 )
             ratio = (src_area * src_exp) / (bkg_area * bkg_exp)
         else:
@@ -311,28 +316,43 @@ def netdata(
             ratio = src_area / bkg_area
     
     # ========== 2. 对齐时间轴 ==========
+    if src_lc.time is None or bkg_lc.time is None:
+        raise ValueError("source/background time array is None")
+
+    src_time = np.asarray(src_lc.time, dtype=float)
+    bkg_time = np.asarray(bkg_lc.time, dtype=float)
+
     bkg_aligned = bkg_lc
-    if not (src_lc.time.shape == bkg_lc.time.shape and np.allclose(src_lc.time, bkg_lc.time)):
+    if not (src_time.shape == bkg_time.shape and np.allclose(src_time, bkg_time)):
         from jinwu.core.ops import rebin_lightcurve
         if src_lc.dt is None:
             raise ValueError("Cannot align: source.dt is None")
+
+        binsize_arr = np.asarray(src_lc.dt, dtype=float)
+        binsize = float(np.median(binsize_arr)) if binsize_arr.ndim > 0 else float(binsize_arr)
+        if not np.isfinite(binsize) or binsize <= 0:
+            raise ValueError(f"Cannot align: invalid source binsize={binsize}")
+
         bkg_aligned = rebin_lightcurve(
-            bkg_lc, binsize=src_lc.dt, method='auto',
+            bkg_lc, binsize=binsize, method='auto',
             align_ref=src_lc.timezero if src_lc.timezero else None
         )
     
     # ========== 3. 转换到计数空间 ==========
     def _to_counts(lc):
         """将 LightcurveData 转为计数空间，返回 (counts, err_counts, exposure_array)"""
+        if lc.value is None:
+            raise ValueError("LightcurveData.value is None")
         exp = lc.bin_exposure if lc.bin_exposure is not None else (lc.dt if lc.dt is not None else 1.0)
         exp_arr = np.asarray(exp, dtype=float)
+        val = np.asarray(lc.value, dtype=float)
         
         if lc.is_rate:
-            counts = lc.value * exp_arr
-            err_counts = (lc.error * exp_arr) if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
+            counts = val * exp_arr
+            err_counts = (np.asarray(lc.error, dtype=float) * exp_arr) if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
         else:
-            counts = lc.value
-            err_counts = lc.error if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
+            counts = val
+            err_counts = np.asarray(lc.error, dtype=float) if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
         
         return counts, err_counts, exp_arr
     
@@ -345,8 +365,11 @@ def netdata(
     
     # ========== 5. 转换回原始单位 ==========
     if src_lc.is_rate:
-        out_value = net_counts / src_exp_arr
-        out_err = np.sqrt(net_var) / src_exp_arr
+        valid_exp = np.isfinite(src_exp_arr) & (src_exp_arr > 0)
+        out_value = np.full_like(net_counts, np.nan, dtype=float)
+        out_err = np.full_like(net_counts, np.nan, dtype=float)
+        out_value[valid_exp] = net_counts[valid_exp] / src_exp_arr[valid_exp]
+        out_err[valid_exp] = np.sqrt(net_var[valid_exp]) / src_exp_arr[valid_exp]
     else:
         out_value = net_counts
         out_err = np.sqrt(net_var)
@@ -361,12 +384,46 @@ def netdata(
             out_err[zero_mask] = np.nan
     
     # ========== 7. 构造结果 ==========
+    if src_lc.is_rate:
+        out_rate = out_value
+        out_rate_err = out_err
+        out_counts = net_counts
+        out_counts_err = np.sqrt(net_var)
+    else:
+        out_counts = out_value
+        out_counts_err = out_err
+        out_rate = np.full_like(net_counts, np.nan, dtype=float)
+        out_rate_err = np.full_like(net_counts, np.nan, dtype=float)
+        valid_exp = np.isfinite(src_exp_arr) & (src_exp_arr > 0)
+        out_rate[valid_exp] = out_counts[valid_exp] / src_exp_arr[valid_exp]
+        out_rate_err[valid_exp] = out_counts_err[valid_exp] / src_exp_arr[valid_exp]
+
+    bin_lo = src_lc.bin_lo
+    bin_hi = src_lc.bin_hi
+    bin_width = src_lc.bin_width
+    binning = src_lc.binning
+    if (bin_lo is None or bin_hi is None or bin_width is None) and src_lc.time is not None:
+        try:
+            lo, hi, bw = src_lc._resolve_bin_geometry()
+            bin_lo = lo
+            bin_hi = hi
+            bin_width = bw
+            if bw.size > 0 and np.allclose(bw, float(np.median(bw)), rtol=1e-8, atol=1e-12):
+                binning = 'uniform'
+            else:
+                binning = 'variable'
+        except Exception:
+            pass
+
     net = LightcurveData(
         time=src_lc.time, value=out_value, error=out_err,
         dt=src_lc.dt, exposure=src_lc.exposure, is_rate=src_lc.is_rate,
         bin_exposure=src_lc.bin_exposure,
         timezero=src_lc.timezero, timezero_obj=src_lc.timezero_obj,
-        bin_lo=src_lc.bin_lo, bin_hi=src_lc.bin_hi,
+        bin_lo=bin_lo, bin_hi=bin_hi, bin_width=bin_width, binning=binning,
+        counts=out_counts, rate=out_rate,
+        counts_err=out_counts_err, rate_err=out_rate_err,
+        err_dist=src_lc.err_dist,
         tstart=src_lc.tstart, tseg=src_lc.tseg,
         gti_start=src_lc.gti_start, gti_stop=src_lc.gti_stop,
         quality=src_lc.quality, fracexp=src_lc.fracexp,

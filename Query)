@@ -1,9 +1,0 @@
-Help on function get_sat in module gdt.missions.swift.bat.finders:
-
-ggeett__ssaatt(self, download_dir, *args, **kwargs)
-    Download SAT File for the observation
-
-    Args:
-        download_dir (str): The download directory
-        verbose (bool, optional): If True, will output the download status.
-                                  Default is True.

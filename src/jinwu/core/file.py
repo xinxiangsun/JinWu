@@ -1157,7 +1157,10 @@ class LightcurveData(OgipTimeSeriesBase):
         """
         from jinwu.core.datasets import netdata
         # 直接委托给 netdata，它会自动计算 ratio（当 ratio=None）
-        return netdata(self, other, ratio=ratio, use_exposure_weighted_ratio=use_exposure_weighted_ratio)
+        result = netdata(self, other, ratio=ratio, use_exposure_weighted_ratio=use_exposure_weighted_ratio)
+        if getattr(result, "kind", None) != "lc":
+            raise TypeError(f"netdata must return LightcurveData-like object, got {type(result).__name__}")
+        return result
     
     def __add__(self, other: 'LightcurveData') :
         """两个光变曲线相加，返回 LightcurveDataset 容器
@@ -1373,43 +1376,149 @@ class EventData(OgipTimeSeriesBase):
         # No conversion available
         return None
 
-    def plot(self, ax: Optional[Any] = None, *, bin_size: Optional[float] = None, max_bins: int = 200, yscale: str = 'linear', title: Optional[str] = None, **kwargs):
-        """简单事件时间分布绘图。
+    def plot(
+        self,
+        ax: Optional[Any] = None,
+        *,
+        bins: Union[int, Tuple[int, int]] = 300,
+        cmap: str = 'viridis',
+        title: Optional[str] = None,
+        invert_ra: bool = True,
+        show_grid: bool = True,
+        show_colorbar: bool = True,
+        **kwargs,
+    ):
+        """绘制事件天区图（RA/DEC 坐标）。
 
-        - bin_size: 指定时间分辨率；若为 None 自动使用 (tmax-tmin)/min(max_bins, N//5)
-        - max_bins: 自动模式时的最大 bin 数
-        - yscale: y 轴尺度（linear/log）
-        - kwargs: 传给 matplotlib.bar
+        优先级：
+        1) 使用事件表中的 RA/DEC 列；
+        2) 若缺失，则尝试用 X/Y + WCS 头关键字转换到 RA/DEC。
+
+        参数
+        - bins: 2D 直方图分箱数（int 或 (nx, ny)）
+        - cmap: 颜色映射
+        - invert_ra: 是否反向 RA 轴（天文图常见）
+        - show_grid: 是否显示网格
+        - show_colorbar: 是否显示 colorbar
+        - kwargs: 透传给 matplotlib.axes.Axes.hist2d
         """
         import matplotlib.pyplot as _plt
+
+        def _get_raw_col(name: Optional[str]) -> Optional[np.ndarray]:
+            if name is None:
+                return None
+            if self.raw_columns is None:
+                return None
+            if name in self.raw_columns:
+                return np.asarray(self.raw_columns[name], float)
+            return None
+
+        def _find_name(cands: Tuple[str, ...]) -> Optional[str]:
+            if self.raw_columns is None:
+                return None
+            upper_to_orig = {str(k).upper(): str(k) for k in self.raw_columns.keys()}
+            for c in cands:
+                if c.upper() in upper_to_orig:
+                    return upper_to_orig[c.upper()]
+            return None
+
+        def _to_ra_dec_from_xy(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+            hdr = self.header or {}
+
+            try:
+                from astropy.wcs import WCS
+
+                w = WCS(hdr)
+                if getattr(w, 'has_celestial', False):
+                    world = np.asarray(w.all_pix2world(np.column_stack([x, y]), 1), float)
+                    ra_w = np.asarray(world[..., 0], float)
+                    dec_w = np.asarray(world[..., 1], float)
+                    if np.isfinite(ra_w).any() and np.isfinite(dec_w).any():
+                        return ra_w, dec_w
+            except Exception:
+                pass
+
+            def _pick_float(keys: Tuple[str, ...], default: Optional[float] = None) -> Optional[float]:
+                for k in keys:
+                    if k in hdr:
+                        try:
+                            return float(hdr[k])
+                        except Exception:
+                            continue
+                return default
+
+            crval1 = _pick_float(('TCRVL11', 'CRVAL1', 'TCRVL1'))
+            crval2 = _pick_float(('TCRVL12', 'CRVAL2', 'TCRVL2'))
+            crpix1 = _pick_float(('TCRPX11', 'CRPIX1', 'TCRPX1'), default=0.0)
+            crpix2 = _pick_float(('TCRPX12', 'CRPIX2', 'TCRPX2'), default=0.0)
+            cdelt1 = _pick_float(('TCDLT11', 'CDELT1', 'TCDLT1'))
+            cdelt2 = _pick_float(('TCDLT12', 'CDELT2', 'TCDLT2'))
+
+            if (crval1 is None) or (crval2 is None) or (cdelt1 is None) or (cdelt2 is None):
+                raise ValueError('Cannot build RA/DEC: missing RA/DEC columns and WCS keywords')
+
+            cos_dec0 = np.cos(np.deg2rad(crval2))
+            if np.abs(cos_dec0) < 1e-8:
+                cos_dec0 = 1.0
+            crpix1_f = float(0.0 if crpix1 is None else crpix1)
+            crpix2_f = float(0.0 if crpix2 is None else crpix2)
+            ra_l = crval1 + (x - crpix1_f) * float(cdelt1) / cos_dec0
+            dec_l = crval2 + (y - crpix2_f) * float(cdelt2)
+            return np.asarray(ra_l, float), np.asarray(dec_l, float)
+
+        ra_name = self.colmap.get('ra') if self.colmap is not None else None
+        dec_name = self.colmap.get('dec') if self.colmap is not None else None
+        ra = _get_raw_col(ra_name)
+        dec = _get_raw_col(dec_name)
+
+        if (ra is None) or (dec is None):
+            if ra is None:
+                ra_alt = _find_name(('RA', 'RA_OBJ', 'RAX', 'RA_DEG'))
+                ra = _get_raw_col(ra_alt)
+            if dec is None:
+                dec_alt = _find_name(('DEC', 'DEC_OBJ', 'DECX', 'DEC_DEG'))
+                dec = _get_raw_col(dec_alt)
+
+        if (ra is None) or (dec is None):
+            x = np.asarray(self.x, float) if self.x is not None else None
+            y = np.asarray(self.y, float) if self.y is not None else None
+            if (x is None) or (y is None):
+                key_x = self.colmap.get('x') if self.colmap is not None else None
+                key_y = self.colmap.get('y') if self.colmap is not None else None
+                x = _get_raw_col(key_x)
+                y = _get_raw_col(key_y)
+            if (x is None) or (y is None):
+                raise ValueError('No RA/DEC columns and no X/Y columns available for sky plotting')
+            ra, dec = _to_ra_dec_from_xy(np.asarray(x, float), np.asarray(y, float))
+
+        ra = np.asarray(ra, float)
+        dec = np.asarray(dec, float)
+        mask = np.isfinite(ra) & np.isfinite(dec)
+        if not np.any(mask):
+            raise ValueError('No finite RA/DEC values available for plotting')
+
+        ra = ra[mask]
+        dec = dec[mask]
+
         ax = ax or _plt.gca()
         assert ax is not None
-        t = np.asarray(self.time, float)
-        if t.size == 0:
-            ax.text(0.5, 0.5, 'No events', transform=ax.transAxes, ha='center')
-            return ax
-        tmin, tmax = float(t.min()), float(t.max())
-        if bin_size is None:
-            span = tmax - tmin
-            est_bins = min(max_bins, max(1, int(t.size // 5)))
-            bin_size = span / est_bins if span > 0 else 1.0
-        nbins = max(1, int(np.ceil((tmax - tmin) / bin_size)))
-        edges = tmin + np.arange(nbins + 1) * bin_size
-        hist, _ = np.histogram(t, bins=edges)
-        centers = 0.5 * (edges[:-1] + edges[1:])
-        kwargs.setdefault('alpha', 0.7)
-        ax.bar(centers, hist, width=bin_size * 0.9, align='center', **kwargs)
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('Counts per bin')
-        ax.set_yscale(yscale)
+
+        h = ax.hist2d(ra, dec, bins=bins, cmap=cmap, **kwargs)
+        if show_colorbar:
+            _plt.colorbar(h[3], ax=ax, label='Counts')
+
+        ax.set_xlabel('Right ascension (deg)')
+        ax.set_ylabel('Declination (deg)')
+        if invert_ra:
+            ax.invert_xaxis()
+
         if title is None:
-            title = Path(str(getattr(self, 'path', ''))).name or 'EVENTS'
+            fname = Path(str(getattr(self, 'path', ''))).name
+            title = f'{fname} sky image' if fname else 'Sky image'
         ax.set_title(title)
-        ax.grid(alpha=0.3, ls='--')
-        # 可选叠加 GTI 区域阴影
-        if self.gti_start is not None and self.gti_stop is not None:
-            for s, e in zip(self.gti_start, self.gti_stop):
-                ax.axvspan(float(s), float(e), color='orange', alpha=0.1)
+
+        if show_grid:
+            ax.grid(alpha=0.3, ls='--')
         return ax
 
     def slice(self, tmin: Optional[float] = None, tmax: Optional[float] = None, *, pi_min: Optional[int] = None, pi_max: Optional[int] = None, ch_min: Optional[int] = None, ch_max: Optional[int] = None) -> 'EventData':
@@ -1439,8 +1548,8 @@ class EventData(OgipTimeSeriesBase):
             self._xselect_session = XSelectSession(self)
         return self._xselect_session
     
-    def filter_time(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'XSelectSession':
-        """应用时间过滤并返回 XSelectSession 以便继续过滤。
+    def filter_time(self, tmin: Optional[float] = None, tmax: Optional[float] = None) -> 'EventData':
+        """应用时间过滤并返回过滤后的 EventData。
 
         tmin/tmax 可以是:
         - float（以秒为单位，直接与 TIME 列比较）；
@@ -1452,19 +1561,22 @@ class EventData(OgipTimeSeriesBase):
         """
         session = self.xselect()
         session.apply_time(tmin=tmin, tmax=tmax)
-        return session
+        cur = getattr(session, 'current', None)
+        return cur if cur is not None else self
 
-    def filter_region(self, region) -> 'XSelectSession':
-        """应用区域过滤并返回 XSelectSession 以便继续过滤。"""
+    def filter_region(self, region) -> 'EventData':
+        """应用区域过滤并返回过滤后的 EventData。"""
         session = self.xselect()
         session.apply_region(region)
-        return session
+        cur = getattr(session, 'current', None)
+        return cur if cur is not None else self
     
-    def filter_energy(self, pi_min: Optional[int] = None, pi_max: Optional[int] = None) -> 'XSelectSession':
-        """应用能量过滤并返回 XSelectSession 以便继续过滤。"""
+    def filter_energy(self, pi_min: Optional[int] = None, pi_max: Optional[int] = None) -> 'EventData':
+        """应用能量过滤并返回过滤后的 EventData。"""
         session = self.xselect()
         session.apply_energy(pi_min=pi_min, pi_max=pi_max)
-        return session
+        cur = getattr(session, 'current', None)
+        return cur if cur is not None else self
     
     
     def _current_for_products(self) -> 'EventData':
@@ -2210,9 +2322,10 @@ class OgipLightcurveReader:
             # ===== 第 4 步：根据 TELESCOP 生成 Time 对象（初步尝试） =====
             telescop = None
             timezero_obj = None
+            primary_header = dict(cast(Any, h[0]).header) if len(h) > 0 else {}
 
             # 尝试从多个位置读取 TELESCOP
-            for hdr in [header, dict(h[0].header) if len(h) > 0 else {}]:
+            for hdr in [header, primary_header]:
                 if "TELESCOP" in hdr:
                     telescop = str(hdr["TELESCOP"]).strip().upper()
                     break
@@ -2773,9 +2886,10 @@ class OgipEventReader:
             # ===== 第 5 步：根据 TELESCOP 生成 Time 对象 =====
             telescop = None
             timezero_obj = None
+            primary_header = dict(cast(Any, h[0]).header) if len(h) > 0 else {}
             
             # 尝试从多个位置读取 TELESCOP
-            for hdr in [header, dict(h[0].header) if len(h) > 0 else {}]:
+            for hdr in [header, primary_header]:
                 if "TELESCOP" in hdr:
                     telescop = str(hdr["TELESCOP"]).strip().upper()
                     break
