@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import numpy as np
-from ..core.file import PhaData
+from ..core.data import PhaData
 
 def rebin_pha(pha: PhaData, nbins: int) -> PhaData:
     ch = np.asarray(pha.channels, dtype=int)
@@ -31,7 +31,7 @@ def rebin_pha(pha: PhaData, nbins: int) -> PhaData:
             if idx < nbins:
                 counts[idx] += v
         stat_err = np.sqrt(counts)
-        return PhaData(kind=pha.kind, path=pha.path, channels=channels, counts=counts, stat_err=stat_err,
+        return PhaData(path=pha.path, channels=channels, counts=counts, stat_err=stat_err,
                        exposure=pha.exposure, backscal=pha.backscal, areascal=pha.areascal,
                        quality=pha.quality, grouping=None, ebounds=pha.ebounds, header=pha.header,
                        meta=pha.meta, headers_dump=pha.headers_dump, columns=pha.columns)
@@ -54,7 +54,7 @@ def rebin_pha(pha: PhaData, nbins: int) -> PhaData:
 
     stat_err = np.sqrt(counts)
     channels = np.arange(0, nbins, dtype=int)
-    return PhaData(kind=pha.kind, path=pha.path, channels=channels, counts=counts, stat_err=stat_err,
+    return PhaData(path=pha.path, channels=channels, counts=counts, stat_err=stat_err,
                    exposure=pha.exposure, backscal=pha.backscal, areascal=pha.areascal,
                    quality=pha.quality, grouping=None, ebounds=pha.ebounds, header=pha.header,
                    meta=pha.meta, headers_dump=pha.headers_dump, columns=pha.columns)

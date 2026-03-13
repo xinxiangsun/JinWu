@@ -3,7 +3,7 @@
 目标：提供事件筛选、从事件生成 PHA、以及写出 OGIP-style PHA 文件的基础工具。
 本模块为最小可用实现，便于后续逐步增加 region、GTI 合并、复杂表达式解析、分组/重整等功能。
 
-注意：该实现依赖于同包内已有的 `file.py` 中的数据类与读取器（`read_evt`、`PhaData` 等），以及
+注意：该实现依赖于同包内 `data.py/io.py` 中的数据类与读取器（`read_evt`、`PhaData` 等），以及
 `astropy` 与 `numpy`。输出的 PHA 文件使用常见的 `SPECTRUM` BinTable HDU 布局。
 """
 
@@ -15,7 +15,9 @@ from typing import Optional, Tuple, Any, cast
 import numpy as np
 from astropy.io import fits
 
-from .file import EventData, PhaData, read_evt, OgipMeta, LightcurveData
+from .base import OgipMeta
+from .data import EventData, PhaData, LightcurveData
+from .io import read_evt
 from ..ftools import region as regionmod
 from ..ftools import ftselect as exprmod
 from . import gti as gtimod
@@ -28,6 +30,36 @@ from .. import ftools
 __all__ = [
     'select_events', 'accumulate_spectrum_from_events', 'write_pha', 'XSelectSession',
 ]
+
+
+def _new_event_like(ev: EventData, **updates: Any) -> EventData:
+    payload: dict[str, Any] = {
+        'path': ev.path,
+        'time': ev.time,
+        'timezero': ev.timezero,
+        'timezero_obj': ev.timezero_obj,
+        'telescop': ev.telescop,
+        'pi': ev.pi,
+        'channel': ev.channel,
+        'x': ev.x,
+        'y': ev.y,
+        'gti_start': ev.gti_start,
+        'gti_stop': ev.gti_stop,
+        'gti_start_obj': ev.gti_start_obj,
+        'gti_stop_obj': ev.gti_stop_obj,
+        'gti': ev.gti,
+        'raw_columns': ev.raw_columns,
+        'colmap': ev.colmap,
+        'energy': ev.energy,
+        'ebounds': ev.ebounds,
+        'header': ev.header,
+        'meta': ev.meta,
+        'columns': ev.columns,
+        'headers_dump': ev.headers_dump,
+    }
+    payload.update(updates)
+    ev_cls = type(ev)
+    return ev_cls(**payload)
 
 
 class XSelectSession:
@@ -195,7 +227,7 @@ def write_curve(lc: LightcurveData, outpath: str | Path, *, overwrite: bool = Fa
     if outp.exists() and not overwrite:
         raise FileExistsError(str(outp))
 
-    from .file import LightcurveData
+    from .data import LightcurveData
     if not isinstance(lc, LightcurveData):
         raise TypeError('lc must be LightcurveData')
 
@@ -353,15 +385,15 @@ def select_events(path: str | Path | EventData, *, tmin: Optional[float] = None,
         new_x = None if ev2.x is None else np.asarray(ev2.x)[mask]
         new_y = None if ev2.y is None else np.asarray(ev2.y)[mask]
         new_energy = None if ev2.energy is None else np.asarray(ev2.energy)[mask]
-        ev2 = EventData(
-            path=ev2.path, time=new_time,
-            timezero=ev2.timezero, timezero_obj=ev2.timezero_obj, telescop=ev2.telescop,
-            pi=new_pi, channel=new_ch, x=new_x, y=new_y,
-            gti_start=ev2.gti_start, gti_stop=ev2.gti_stop,
-            gti_start_obj=ev2.gti_start_obj, gti_stop_obj=ev2.gti_stop_obj,
-            gti=ev2.gti,
-            raw_columns=None, colmap=ev2.colmap, energy=new_energy, ebounds=ev2.ebounds,
-            header=ev2.header, meta=ev2.meta, columns=ev2.columns, headers_dump=ev2.headers_dump
+        ev2 = _new_event_like(
+            ev2,
+            time=new_time,
+            pi=new_pi,
+            channel=new_ch,
+            x=new_x,
+            y=new_y,
+            energy=new_energy,
+            raw_columns=None,
         )
 
     if region is not None:
@@ -447,7 +479,7 @@ def _coerce_time_bound(val: Optional[float | Any], ev: Optional[EventData] = Non
     # 检查是否为 Time 对象（非 TimeDelta）
     # 优先检查是否有 timezero_obj 可用于转换
     if ev is not None and getattr(ev, 'timezero_obj', None) is not None:
-        timezero_obj = ev.timezero_obj
+        timezero_obj = cast(Any, ev.timezero_obj)
         # 尝试判断 val 是否为 Time 对象（有 jd 属性但非 TimeDelta）
         has_jd = hasattr(val, 'jd')
         is_timedelta = hasattr(val, 'to_value') and not has_jd
@@ -456,11 +488,11 @@ def _coerce_time_bound(val: Optional[float | Any], ev: Optional[EventData] = Non
             # val 是 Time 对象，转换为相对时间
             try:
                 # 相对时间 = (val - timezero_obj) 的秒数
-                diff = val - timezero_obj
+                diff = cast(Any, val) - timezero_obj
                 if hasattr(diff, 'sec'):
                     return float(diff.sec)
                 elif hasattr(diff, 'to_value'):
-                    return float(diff.to_value('sec'))
+                    return float(cast(Any, diff).to_value('sec'))
             except Exception:
                 pass
     
@@ -468,7 +500,7 @@ def _coerce_time_bound(val: Optional[float | Any], ev: Optional[EventData] = Non
     try:
         if hasattr(val, 'to_value'):
             try:
-                return float(val.to_value('sec'))
+                return float(cast(Any, val).to_value('sec'))
             except Exception:
                 pass
         # 某些 Time-like 对象可能有 .sec 属性
@@ -537,21 +569,15 @@ def filter_time(ev: EventData, *, tmin: Optional[float] = None, tmax: Optional[f
     new_y = None if ev.y is None else np.asarray(ev.y)[mask]
     new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
     
-    return EventData(
-        path=ev.path, 
-        time=new_time, 
-        timezero=ev.timezero,
-        timezero_obj=ev.timezero_obj,
-        telescop=ev.telescop,
-        pi=new_pi, channel=new_ch,
-        x=new_x, y=new_y,
-        gti_start=ev.gti_start, gti_stop=ev.gti_stop,
-        gti_start_obj=ev.gti_start_obj, gti_stop_obj=ev.gti_stop_obj,
-        gti=ev.gti,
-        raw_columns=None,  # 过滤后不保留 raw_columns
-        colmap=ev.colmap, energy=new_energy,
-        ebounds=ev.ebounds,
-        header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump
+    return _new_event_like(
+        ev,
+        time=new_time,
+        pi=new_pi,
+        channel=new_ch,
+        x=new_x,
+        y=new_y,
+        energy=new_energy,
+        raw_columns=None,
     )
 
 
@@ -578,21 +604,15 @@ def filter_energy(ev: EventData, *, pi_min: Optional[int] = None, pi_max: Option
     new_x = None if ev.x is None else np.asarray(ev.x)[mask]
     new_y = None if ev.y is None else np.asarray(ev.y)[mask]
     new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
-    return EventData(
-        path=ev.path, 
+    return _new_event_like(
+        ev,
         time=new_time,
-        timezero=ev.timezero,
-        timezero_obj=ev.timezero_obj,
-        telescop=ev.telescop,
-        pi=new_pi, channel=new_ch,
-        x=new_x, y=new_y,
-        gti_start=ev.gti_start, gti_stop=ev.gti_stop,
-        gti_start_obj=ev.gti_start_obj, gti_stop_obj=ev.gti_stop_obj,
-        gti=ev.gti,
+        pi=new_pi,
+        channel=new_ch,
+        x=new_x,
+        y=new_y,
+        energy=new_energy,
         raw_columns=None,
-        colmap=ev.colmap, energy=new_energy,
-        ebounds=ev.ebounds,
-        header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump
     )
 
 
@@ -627,15 +647,15 @@ def trim_events_to_gti(ev: EventData, *, tol: float = 1e-9) -> EventData:
     
     if t.size == 0:
         # empty events, but update GTI fields
-        return EventData(
-            path=ev.path, time=t, 
-            timezero=ev.timezero, timezero_obj=ev.timezero_obj, telescop=ev.telescop,
-            pi=ev.pi, channel=ev.channel, x=ev.x, y=ev.y,
-            gti_start=ms, gti_stop=me,
-            gti_start_obj=gti_start_obj_new, gti_stop_obj=gti_stop_obj_new,
+        return _new_event_like(
+            ev,
+            time=t,
+            gti_start=ms,
+            gti_stop=me,
+            gti_start_obj=gti_start_obj_new,
+            gti_stop_obj=gti_stop_obj_new,
             gti=[(float(s), float(e)) for s, e in zip(ms, me)],
-            raw_columns=None, colmap=ev.colmap, energy=ev.energy, ebounds=ev.ebounds,
-            header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump
+            raw_columns=None,
         )
 
     mask = np.zeros(t.size, dtype=bool)
@@ -649,15 +669,20 @@ def trim_events_to_gti(ev: EventData, *, tol: float = 1e-9) -> EventData:
     new_y = None if ev.y is None else np.asarray(ev.y)[mask]
     new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
 
-    return EventData(
-        path=ev.path, time=new_time,
-        timezero=ev.timezero, timezero_obj=ev.timezero_obj, telescop=ev.telescop,
-        pi=new_pi, channel=new_ch, x=new_x, y=new_y,
-        gti_start=ms, gti_stop=me,
-        gti_start_obj=gti_start_obj_new, gti_stop_obj=gti_stop_obj_new,
+    return _new_event_like(
+        ev,
+        time=new_time,
+        pi=new_pi,
+        channel=new_ch,
+        x=new_x,
+        y=new_y,
+        gti_start=ms,
+        gti_stop=me,
+        gti_start_obj=gti_start_obj_new,
+        gti_stop_obj=gti_stop_obj_new,
         gti=[(float(s), float(e)) for s, e in zip(ms, me)],
-        raw_columns=None, colmap=ev.colmap, energy=new_energy, ebounds=ev.ebounds,
-        header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump
+        energy=new_energy,
+        raw_columns=None,
     )
 
 
@@ -923,15 +948,15 @@ def filter_region(ev_or_path: EventData | str | Path, region: dict) -> EventData
     new_y = None if ev.y is None else np.asarray(ev.y)[mask]
     new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
 
-    return EventData(
-        path=ev.path, time=new_time,
-        timezero=ev.timezero, timezero_obj=ev.timezero_obj, telescop=ev.telescop,
-        pi=new_pi, channel=new_ch, x=new_x, y=new_y,
-        gti_start=ev.gti_start, gti_stop=ev.gti_stop,
-        gti_start_obj=ev.gti_start_obj, gti_stop_obj=ev.gti_stop_obj,
-        gti=ev.gti,
-        raw_columns=None, colmap=ev.colmap, energy=new_energy, ebounds=ev.ebounds,
-        header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump
+    return _new_event_like(
+        ev,
+        time=new_time,
+        pi=new_pi,
+        channel=new_ch,
+        x=new_x,
+        y=new_y,
+        energy=new_energy,
+        raw_columns=None,
     )
 
 
@@ -969,7 +994,7 @@ def extract_curve(ev_or_path: EventData | str | Path, *, binsize: float, tmin: O
 
     t = np.asarray(ev.time, dtype=float)
     if t.size == 0:
-        from .file import LightcurveData
+        from .data import LightcurveData
         # 空事件集时返回空的 LightcurveData，保持字段兼容
         empty = np.array([])
         return LightcurveData(
@@ -1047,7 +1072,7 @@ def extract_curve(ev_or_path: EventData | str | Path, *, binsize: float, tmin: O
     else:
         expo = np.full(nbins, float(binsize))
 
-    from .file import LightcurveData
+    from .data import LightcurveData
     # 为了与当前 LightcurveData 设计兼容，这里同时填充 counts/counts_err、bin_lo/bin_hi、GTI 等字段
     # 从 EventData 继承时间参考和元数据
     return LightcurveData(

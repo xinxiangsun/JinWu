@@ -6,7 +6,7 @@ jinwu.core.plot
 - PHA 能谱图（EP/WXT、Swift/BAT 等）
 - 光变曲线（支持单能段与多能段）
 
-与 jinwu.core.file 的数据类配合使用：
+与 jinwu.core.data / jinwu.core.io 的数据类和读取器配合使用：
 - 接受 PhaData / LightcurveData 直接绘图；
 - 也可传入路径，内部自动读取并路由；
 - 一切筛选/切片/重采样逻辑请放在其他模块完成后再调用这里的绘图。
@@ -27,7 +27,7 @@ from matplotlib.figure import Figure
 
 """在运行期尝试导入实际数据类；若失败，则使用哑类以便 isinstance 不抛错。"""
 try:  # runtime import; avoids typing.Any isinstance crash
-    from .file import PhaData, LightcurveData  # type: ignore
+    from .data import PhaData, LightcurveData  # type: ignore
 except Exception:  # pragma: no cover
     class _Dummy:  # minimal placeholder
         pass
@@ -35,7 +35,7 @@ except Exception:  # pragma: no cover
     LightcurveData = _Dummy  # type: ignore
 
 try:
-    from .file import readfits, guess_ogip_kind  # type: ignore
+    from .io import readfits, guess_ogip_kind  # type: ignore
 except Exception:  # 允许在未安装上游模块时静态检查通过
     def readfits(path: Union[str, Path], kind: Optional[str] = None) -> Any:  # type: ignore
         return path

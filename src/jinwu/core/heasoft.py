@@ -82,7 +82,7 @@ class HeasoftEnvManager:
         rc_candidates = [
             os.path.join(home, ".bashrc"),
             os.path.join(home, ".bash_profile"),
-            os.path.join(home, ".profile"),
+            os.path.join(home, ".zprofile"),
             os.path.join(home, ".zshrc"),
         ]
         for rc in rc_candidates:

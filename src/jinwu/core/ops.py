@@ -27,16 +27,16 @@ from typing import Optional, TYPE_CHECKING, Literal, Sequence
 
 import numpy as np
 from . import gti as gtimod
+from .base import LightcurveDataBase
 from ..ftools import xselect_mdb
 from pathlib import Path as _Path
 import warnings
 from .utils import snr_li_ma
 from astropy.stats import bayesian_blocks
-from .file import LightcurveData, PhaData, EventData
 
 
 if TYPE_CHECKING:
-    pass
+    from .data import LightcurveData, PhaData, EventData
 
 
 def _infer_bin_geometry(lc: 'LightcurveData') -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -199,7 +199,8 @@ def slice_lightcurve(
         new_timezero = getattr(lc, 'timezero', 0.0)
         new_timezero_obj = getattr(lc, 'timezero_obj', None)
     
-    return LightcurveData(
+    lc_cls = type(lc)
+    return lc_cls(
         path=lc.path,
         time=new_time,
         value=lc.value[mask] if lc.value.ndim == 1 else lc.value[mask, :],
@@ -296,6 +297,8 @@ def rebin_lightcurve(
     -------
     Rebin lightcurve to new time resolution by grouping and aggregating data points.
     """
+    lc_cls = type(lc)
+
     if method == 'auto':
         method = 'mean' if lc.is_rate else 'sum'
 
@@ -307,7 +310,7 @@ def rebin_lightcurve(
     # instantaneous and use small epsilon half-width equal to median spacing.
     t = np.asarray(lc.time, dtype=float)
     if t.size == 0:
-        return LightcurveData(path=lc.path, time=np.array([], dtype=float), value=np.array([], dtype=float), error=None, dt=binsize, exposure=lc.exposure, bin_exposure=None, is_rate=lc.is_rate, header=lc.header, meta=lc.meta, headers_dump=lc.headers_dump, region=lc.region, bin_width=np.array([], dtype=float), binning='unknown')
+        return lc_cls(path=lc.path, time=np.array([], dtype=float), value=np.array([], dtype=float), error=None, dt=binsize, exposure=lc.exposure, bin_exposure=None, is_rate=lc.is_rate, header=lc.header, meta=lc.meta, headers_dump=lc.headers_dump, region=lc.region, bin_width=np.array([], dtype=float), binning='unknown')
 
     orig_left, orig_right, orig_width = _infer_bin_geometry(lc)
 
@@ -469,7 +472,7 @@ def rebin_lightcurve(
     # 始终返回累积的新 bin 曝光，用于下游转换/筛选
     ret_bin_exposure = new_exposure
 
-    return LightcurveData(
+    return lc_cls(
         path=lc.path,
         time=centers,
         value=out_value,
@@ -563,7 +566,8 @@ def slice_pha(
             mask &= (pha.channels <= int(ch_hi))
         sel_idx = np.where(mask)[0]
     
-    return PhaData(
+    pha_cls = type(pha)
+    return pha_cls(
         path=pha.path,
         channels=pha.channels[sel_idx],
         counts=pha.counts[sel_idx],
@@ -661,7 +665,8 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
             eb_hi.append(float(np.max(e_hi[idxs])))
         new_ebounds = (np.asarray(eb_ch, dtype=int), np.asarray(eb_lo, dtype=float), np.asarray(eb_hi, dtype=float))
 
-    return PhaData(
+    pha_cls = type(pha)
+    return pha_cls(
         path=pha.path,
         channels=new_ch,
         counts=new_counts,
@@ -748,7 +753,8 @@ def slice_events(
         if ch_max is not None:
             mask &= (evt.channel <= int(ch_max))
     
-    return EventData(
+    evt_cls = type(evt)
+    return evt_cls(
         path=evt.path,
         time=evt.time[mask],
         pi=evt.pi[mask] if evt.pi is not None else None,
@@ -802,6 +808,8 @@ def rebin_events_to_lightcurve(
     -------
     Bin events into lightcurve with given time resolution; returns LightcurveData.
     """
+    from .data import LightcurveData as _LightcurveData
+
     t = evt.time
     if tmin is None:
         tmin = float(t.min()) if t.size > 0 else 0.0
@@ -868,7 +876,7 @@ def rebin_events_to_lightcurve(
     centers = 0.5 * (edges[:-1] + edges[1:])
     err = np.sqrt(hist)
 
-    return LightcurveData(
+    return _LightcurveData(
         path=evt.path,
         time=centers, value=hist.astype(float), error=err, dt=binsize,
         exposure=float(np.sum(bin_exposure)), is_rate=False,
@@ -935,6 +943,8 @@ class BayesianBlocksBinner:
         return s / float(np.sqrt(v))
 
     def fit(self, lc: 'LightcurveData') -> 'LightcurveData':
+        lc_cls = type(lc)
+
         try:
             from astropy.stats import bayesian_blocks
         except Exception:
@@ -946,7 +956,7 @@ class BayesianBlocksBinner:
         t = np.asarray(lc.time, dtype=float)
         if t.size == 0:
             empty_cols = _ensure_lc_columns(getattr(lc, 'columns', ()), is_rate=lc.is_rate)
-            return LightcurveData(
+            return lc_cls(
                 path=lc.path,
                 time=np.array([], dtype=float),
                 value=np.array([], dtype=float),
@@ -1078,7 +1088,7 @@ class BayesianBlocksBinner:
         bin_exposure = np.asarray(out_expo, dtype=float)
         out_cols = _ensure_lc_columns(getattr(lc, 'columns', ()), is_rate=lc.is_rate)
 
-        return LightcurveData(
+        return lc_cls(
             path=lc.path,
             time=out_time,
             value=out_val,
@@ -1127,6 +1137,8 @@ class BayesianBlocksBinner:
         - 块合并阈值使用带符号 Li&Ma 显著性。
         """
         
+
+        lc_cls = type(lc_src)
 
         # 统一到 counts 域
         def lc_to_counts(lc: 'LightcurveData'):
@@ -1183,7 +1195,7 @@ class BayesianBlocksBinner:
         t_b, l_b, r_b, c_b, e_b, expo_b = lc_to_counts(lc_bkg)
         if t_s.size == 0:
             empty_cols = _ensure_lc_columns(getattr(lc_src, 'columns', ()), is_rate=lc_src.is_rate)
-            return LightcurveData(
+            return lc_cls(
                 path=lc_src.path,
                 time=np.array([], dtype=float),
                 value=np.array([], dtype=float),
@@ -1316,7 +1328,7 @@ class BayesianBlocksBinner:
 
         if len(out_time) == 0:
             empty_cols = _ensure_lc_columns(getattr(lc_src, 'columns', ()), is_rate=lc_src.is_rate)
-            return LightcurveData(
+            return lc_cls(
                 path=lc_src.path,
                 time=np.array([], dtype=float),
                 value=np.array([], dtype=float),
@@ -1364,7 +1376,7 @@ class BayesianBlocksBinner:
         bin_exposure = np.asarray(out_expo, dtype=float)
         out_cols = _ensure_lc_columns(getattr(lc_src, 'columns', ()), is_rate=lc_src.is_rate)
 
-        return LightcurveData(
+        return lc_cls(
             path=lc_src.path,
             time=out_time,
             value=out_val,
@@ -1550,6 +1562,8 @@ def autobin(
     - 末尾若未达阈值但净计数>0，则保留并给出 warning。
     """
 
+    lc_cls = type(lc_src)
+
     def _lc_to_counts(lc: 'LightcurveData'):
         t = np.asarray(lc.time, dtype=float)
         vals = np.asarray(lc.value, dtype=float)
@@ -1700,7 +1714,7 @@ def autobin(
     out_expo_arr = np.asarray(out_expo, dtype=float)
     out_width_arr = out_right_arr - out_left_arr
 
-    return LightcurveData(
+    return lc_cls(
         path=lc_src.path,
         time=out_time_arr,
         value=out_val_arr,
@@ -1800,17 +1814,8 @@ def txx(
     rng = np.random.default_rng(seed)
 
     def _is_lightcurve_like(obj: object) -> bool:
-        # Normal case
-        if isinstance(obj, LightcurveData):
+        if isinstance(obj, LightcurveDataBase):
             return True
-
-        # Notebook reload compatibility: jinwu.core.file may have a new class identity
-        try:
-            from jinwu.core import file as _jwfile
-            if isinstance(obj, _jwfile.LightcurveData):
-                return True
-        except Exception:
-            pass
 
         # Duck-typing fallback for lc-like objects
         kind = getattr(obj, 'kind', None)
@@ -1821,6 +1826,8 @@ def txx(
 
     # ndarray 输入转换
     def _array_to_lc(arr: np.ndarray, name: str) -> 'LightcurveData':
+        from .data import LightcurveData as _LightcurveData
+
         arr = np.asarray(arr)
         if arr.ndim == 1:
             counts = arr.astype(float)
@@ -1837,7 +1844,7 @@ def txx(
         else:
             dt = 1.0
         bin_expo = np.full_like(time, dt, dtype=float)
-        return LightcurveData(
+        return _LightcurveData(
             path=_Path("<array_input>"),
             time=time,
             value=counts,

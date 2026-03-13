@@ -11,13 +11,15 @@ more concrete analysis needs arise.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Literal, Union, cast
+from typing import TYPE_CHECKING, List, Optional, Literal, Union, cast
 
 import numpy as np
 
-from jinwu.core.file import LightcurveData, PhaData
-from jinwu.core.file import RegionArea
+from jinwu.core.base import LightcurveDataBase, PhaBase, RegionArea
 from jinwu.core.ops import rebin_lightcurve
+
+if TYPE_CHECKING:
+    from jinwu.core.data import LightcurveData, PhaData
 
 __all__ = [
     "LightcurveDataset",
@@ -29,10 +31,10 @@ __all__ = [
 
 # ---- typing helpers -------------------------------------------------------
 
-LightcurveInput = LightcurveData | PhaData
+LightcurveInput = LightcurveDataBase | PhaBase
 
 
-def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData:
+def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveDataBase:
     """Ensure the input is a LightcurveData instance.
 
     Accepts any OgipData but raises a clear error if the provided object
@@ -42,20 +44,8 @@ def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData
     """
 
     # Fast-path: normal case (no module reload / single class identity)
-    if isinstance(obj, LightcurveData):
+    if isinstance(obj, LightcurveDataBase):
         return obj
-
-    # Notebook workflows often use importlib.reload(jinwu.core.file) which creates a
-    # *new* LightcurveData class object. Instances created after reload will fail
-    # the isinstance check above, even though they are semantically LightcurveData.
-    try:
-        from jinwu.core import file as _jwfile
-
-        if isinstance(obj, _jwfile.LightcurveData):
-            return cast(LightcurveData, obj)
-    except Exception:
-        # If import fails, fall back to duck-typing below.
-        pass
 
     kind = getattr(obj, "kind", None)
 
@@ -75,7 +65,7 @@ def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData
             "is_rate",
         )
         if all(hasattr(obj, attr) for attr in required_attrs):
-            return cast(LightcurveData, obj)
+            return cast(LightcurveDataBase, obj)
 
     raise TypeError(
         f"{arg_name} must be a LightcurveData (kind='lc'), got {type(obj).__name__} from {type(obj).__module__} with kind={kind!r}."
@@ -100,7 +90,7 @@ class LightcurveDataset:
     >>> ds = ds + lc4  # 添加新曲线
     """
     
-    data: List[LightcurveData]
+    data: List[LightcurveDataBase]
     labels: Optional[List[str]] = None
     
     def __post_init__(self):
@@ -115,10 +105,10 @@ class LightcurveDataset:
     def __len__(self) -> int:
         return len(self.data)
     
-    def __getitem__(self, index: int) -> LightcurveData:
+    def __getitem__(self, index: int) -> LightcurveDataBase:
         return self.data[index]
     
-    def __add__(self, other: Union[LightcurveData, 'LightcurveDataset']) -> 'LightcurveDataset':
+    def __add__(self, other: Union[LightcurveDataBase, 'LightcurveDataset']) -> 'LightcurveDataset':
         """添加新的光变曲线到容器
         
         示例
@@ -126,7 +116,7 @@ class LightcurveDataset:
         >>> ds = ds + new_lc
         >>> ds = ds1 + ds2  # 合并两个 dataset
         """
-        if isinstance(other, LightcurveData):
+        if isinstance(other, LightcurveDataBase):
             return LightcurveDataset(
                 data=self.data + [other],
                 labels=self.labels
@@ -239,7 +229,7 @@ def netdata(
     ratio: Optional[float] = None,
     use_exposure_weighted_ratio: bool = True,
     offset: float = 0.0,
-) -> LightcurveData:
+) -> LightcurveDataBase:
     """计算净光变曲线（源 - 背景）
     
     这是核心的背景减除函数，支持 LightcurveData 和未来的 PhaData。
@@ -415,7 +405,8 @@ def netdata(
         except Exception:
             pass
 
-    net = LightcurveData(
+    net_cls = type(src_lc)
+    net = net_cls(
         time=src_lc.time, value=out_value, error=out_err,
         dt=src_lc.dt, exposure=src_lc.exposure, is_rate=src_lc.is_rate,
         bin_exposure=src_lc.bin_exposure,

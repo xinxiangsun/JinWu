@@ -12,7 +12,9 @@ from typing import Optional
 
 import numpy as np
 
-from ..core.file import read_evt, PhaData, EventData, OgipMeta
+from ..core.base import OgipMeta
+from ..core.data import PhaData, EventData
+from ..core.io import read_evt
 from ..core import gti as gtimod
 from . import region as regionmod
 
@@ -22,8 +24,10 @@ def _estimate_exposure_from_eventdata(ev: EventData) -> float:
         if ms is not None and me is not None and ms.size > 0:
             return float(np.sum(me - ms))
     if ev.meta is not None and isinstance(ev.meta, OgipMeta):
-        if getattr(ev.meta, 'tstart', None) is not None and getattr(ev.meta, 'tstop', None) is not None:
-            return float(ev.meta.tstop - ev.meta.tstart)
+        tstart = getattr(ev.meta, 'tstart', None)
+        tstop = getattr(ev.meta, 'tstop', None)
+        if tstart is not None and tstop is not None:
+            return float(tstop - tstart)
     if hasattr(ev, 'time') and ev.time is not None and getattr(ev.time, 'size', 0) > 0:
         return float(np.max(ev.time) - np.min(ev.time))
     return 0.0
@@ -53,7 +57,7 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
         new_time = t[mask]
         new_pi = None if ev.pi is None else np.asarray(ev.pi, dtype=int)[mask]
         new_ch = None if ev.channel is None else np.asarray(ev.channel, dtype=int)[mask]
-        ev = EventData(kind=ev.kind, path=ev.path, time=new_time, pi=new_pi, channel=new_ch,
+        ev = EventData(path=ev.path, time=new_time, pi=new_pi, channel=new_ch,
                        gti_start=ev.gti_start, gti_stop=ev.gti_stop, header=ev.header, meta=ev.meta,
                        columns=ev.columns, headers_dump=ev.headers_dump)
 

@@ -38,9 +38,49 @@ Documentation: https://jinwu.readthedocs.io
 
 from __future__ import annotations
 
+import sys
+import types
+from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.util import find_spec
 from pathlib import Path
+from typing import TYPE_CHECKING
 import tomllib
+
+if TYPE_CHECKING:
+    from . import (
+        core,
+        lightcurve,
+        background,
+        spectrum,
+        response,
+        timing,
+        fermi,
+        ep,
+        swift,
+        ftools,
+        model,
+        physics,
+    )
+    from .core import time as time
+    from .core import (
+        netdata,
+        readfits,
+        read_arf,
+        read_rmf,
+        read_pha,
+        read_lc,
+        read_evt,
+        ArfData,
+        RmfData,
+        PhaData,
+        LightcurveDataBase,
+        LightcurveData,
+        EventDataBase,
+        EventData,
+    )
+    if find_spec('.data', __name__) is not None:
+        from . import data
 
 
 def _read_version_from_pyproject() -> str:
@@ -71,36 +111,66 @@ except Exception:
 
 __author__ = "Xinxiang Sun"
 __email__ = "sunxx@nao.cas.cn"
-__license__ = "BSD-3-Clause"
+__license__ = "GPL-3.0-or-later"
 
-# Re-export subpackages for ergonomic imports
-from . import (
-    core,
-    lightcurve,
-    background,
-    spectrum,
-    response,
-    timing,
-    fermi,
-    ep,
-    swift,
-    ftools,
-    model,
-    physics,
-)
+_SUBPACKAGES = {
+    'core',
+    'lightcurve',
+    'background',
+    'spectrum',
+    'response',
+    'timing',
+    'fermi',
+    'ep',
+    'swift',
+    'ftools',
+    'model',
+    'physics',
+}
 
-try:
-    from . import data
-    _has_data = True
-except ImportError:
-    _has_data = False
+_CORE_EXPORTS = {
+    'netdata',
+    'readfits',
+    'read_arf',
+    'read_rmf',
+    'read_pha',
+    'read_lc',
+    'read_evt',
+    'ArfData',
+    'RmfData',
+    'PhaData',
+    'LightcurveDataBase',
+    'LightcurveData',
+    'EventDataBase',
+    'EventData',
+}
 
-# Re-export common utilities from core
-from .core import netdata, readfits
+_HAS_DATA = find_spec('.data', __name__) is not None
+
+
+class _LazyTimeModule(types.ModuleType):
+    _loaded: types.ModuleType | None = None
+
+    def _load(self) -> types.ModuleType:
+        if self._loaded is None:
+            self._loaded = import_module('.core.time', __name__)
+            sys.modules[f'{__name__}.time'] = self._loaded
+        return self._loaded
+
+    def __getattr__(self, item: str):
+        return getattr(self._load(), item)
+
+    def __dir__(self) -> list[str]:
+        return sorted(set(super().__dir__()) | set(dir(self._load())))
+
+
+if f'{__name__}.time' not in sys.modules:
+    sys.modules[f'{__name__}.time'] = _LazyTimeModule(f'{__name__}.time')
 
 __all__ = [
     # Subpackages
     'core',
+    'time',
     'lightcurve',
     'background',
     'spectrum',
@@ -115,6 +185,19 @@ __all__ = [
     # Common utilities
     'netdata',
     'readfits',
+    'read_arf',
+    'read_rmf',
+    'read_pha',
+    'read_lc',
+    'read_evt',
+    # Core data classes
+    'ArfData',
+    'RmfData',
+    'PhaData',
+    'LightcurveDataBase',
+    'LightcurveData',
+    'EventDataBase',
+    'EventData',
     # Package metadata
     '__version__',
     '__author__',
@@ -122,6 +205,35 @@ __all__ = [
     '__license__',
 ]
 
-if _has_data:
+if _HAS_DATA:
     __all__.append('data')
+
+
+def __getattr__(name: str):
+    if name == 'time':
+        mod = sys.modules[f'{__name__}.time']
+        globals()[name] = mod
+        return mod
+
+    if name in _SUBPACKAGES:
+        mod = import_module(f'.{name}', __name__)
+        globals()[name] = mod
+        return mod
+
+    if name == 'data' and _HAS_DATA:
+        mod = import_module('.data', __name__)
+        globals()[name] = mod
+        return mod
+
+    if name in _CORE_EXPORTS:
+        core_mod = import_module('.core', __name__)
+        value = getattr(core_mod, name)
+        globals()[name] = value
+        return value
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals().keys()) | set(__all__))
 

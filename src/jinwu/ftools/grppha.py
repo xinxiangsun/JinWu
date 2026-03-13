@@ -22,7 +22,8 @@ from typing import Optional, Tuple, List
 import numpy as np
 from astropy.io import fits
 
-from ..core.file import PhaData, read_pha
+from ..core.data import PhaData
+from ..core.io import read_pha
 
 __all__ = [
     'compute_grouping_by_min_counts', 'read_groupfile', 'grppha', 'write_grouped_pha',
@@ -193,7 +194,7 @@ def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_count
         new_counts.append(s)
         new_stat.append(float(np.sqrt(s)))
 
-    newpha = PhaData(kind='pha', path=pha.path, channels=np.asarray(new_channels, dtype=int), counts=np.asarray(new_counts, dtype=float),
+    newpha = PhaData(path=pha.path, channels=np.asarray(new_channels, dtype=int), counts=np.asarray(new_counts, dtype=float),
                      stat_err=np.asarray(new_stat, dtype=float), exposure=pha.exposure, backscal=pha.backscal,
                      areascal=pha.areascal, quality=None, grouping=None,
                      ebounds=None, header=pha.header, meta=pha.meta, headers_dump=pha.headers_dump, columns=('CHANNEL','COUNTS'))

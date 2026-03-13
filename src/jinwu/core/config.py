@@ -174,8 +174,6 @@ class WXT(InstrumentConfig):
         defaults.update(kwargs)
         super().__init__(**defaults)
     
-    def extract_spectrum(self, **kwargs):
-        return "WXT spectrum extraction"
 
 @register_instrument
 @dataclass

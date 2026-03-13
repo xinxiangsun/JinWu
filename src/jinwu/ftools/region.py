@@ -656,11 +656,11 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
         mask = ~mask
 
     # build new EventData
-    from ..core.file import EventData
+    from ..core.data import EventData
     t = np.asarray(ev.time, dtype=float)
     new_time = t[mask]
     new_pi = None if ev.pi is None else np.asarray(ev.pi)[mask]
     new_ch = None if ev.channel is None else np.asarray(ev.channel)[mask]
-    return EventData(kind=ev.kind, path=ev.path, time=new_time, pi=new_pi, channel=new_ch,
+    return EventData(path=ev.path, time=new_time, pi=new_pi, channel=new_ch,
                      gti_start=ev.gti_start, gti_stop=ev.gti_stop,
                      header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump)

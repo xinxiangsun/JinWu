@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import numpy as np
-from ..core.file import PhaData
+from ..core.data import PhaData
 
 def group_min_counts(pha: PhaData, min_counts: int) -> PhaData:
     if min_counts <= 0:
@@ -43,7 +43,7 @@ def group_min_counts(pha: PhaData, min_counts: int) -> PhaData:
         new_counts.append(acc_cnt)
         new_stat_err.append(np.sqrt(acc_err2))
 
-    return PhaData(kind=pha.kind, path=pha.path, channels=np.array(new_channels, dtype=int),
+    return PhaData(path=pha.path, channels=np.array(new_channels, dtype=int),
                    counts=np.array(new_counts, dtype=float), stat_err=np.array(new_stat_err, dtype=float),
                    exposure=pha.exposure, backscal=pha.backscal, areascal=pha.areascal,
                    quality=pha.quality, grouping=None, ebounds=pha.ebounds, header=pha.header,

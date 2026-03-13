@@ -822,7 +822,7 @@ def extract_time_interval(
     Examples
     --------
     >>> from jinwu.core.time import extract_time_interval
-    >>> from jinwu.core.file import readfits
+    >>> from jinwu.core.io import readfits
     >>> 
     >>> # 读取Swift BAT谱文件（PHA）
     >>> bat_pha = readfits('sw00123456000b_avg.pha')

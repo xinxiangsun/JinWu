@@ -26,7 +26,7 @@ import numpy as np
 from astropy.modeling import Fittable1DModel, Parameter
 from astropy.modeling.fitting import LMLSQFitter, TRFLSQFitter
 
-from jinwu.core.file import LightcurveData
+from jinwu.core.data import LightcurveData
 from jinwu.core.datasets import LightcurveDataset
 
 __all__ = [
