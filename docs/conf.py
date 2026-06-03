@@ -9,6 +9,22 @@ from unittest.mock import MagicMock
 if "xspec" not in sys.modules:
     sys.modules["xspec"] = MagicMock()
 
+# GDT submodules (astro-gdt may be installed but sub-path varies by version;
+# our mock must sit in sys.modules before the real gdt.missions parent prevents
+# traversal into non-existent .fermi child.)
+_gdt_mocks = [
+    "gdt.missions.fermi",
+    "gdt.missions.fermi.gbm",
+    "gdt.missions.fermi.gbm.detectors",
+]
+for _mod in _gdt_mocks:
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()
+
+# If gdt itself isn't installed at all, also mock it (belt and suspenders)
+if "gdt" not in sys.modules:
+    sys.modules["gdt"] = MagicMock()
+
 # -- Path setup ----------------------------------------------------------------
 # Add the src/ directory so Sphinx can import jinwu
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
