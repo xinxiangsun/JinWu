@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu"
-version = "0.0.24"
+version = "0.0.27"
 description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -23,7 +23,8 @@ dependencies = [
     "regions",
     "ipyaladin",
     "requests",
-    "pillow"
+    "pillow",
+    "batanalysis"
 ]
 keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
 
@@ -42,5 +43,18 @@ Homepage = "https://github.com/xinxiangsun/jinwu"
 Repository = "https://github.com/xinxiangsun/jinwu"
 Documentation = "https://github.com/xinxiangsun/jinwu/blob/master/README.md"
 
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7",
+    "pydata-sphinx-theme>=0.15",
+    "sphinx-automodapi>=0.17",
+    "myst-parser>=3",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "network: tests that require internet access (hits live Swift UKSSDC APIs)",
+]

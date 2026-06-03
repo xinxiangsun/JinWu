@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Sequence, ClassVar
+from typing import Dict, Any, Optional, List, Sequence
 
 __all__ = [
     "ValidationMessage", "ValidationReport",
@@ -63,7 +63,7 @@ class OgipFitsBase:
     header: Dict[str, Any]
     meta: Any  # OgipMeta (延迟导入避免循环)
     headers_dump: Any  # FitsHeaderDump
-    _validation: ClassVar[Optional[ValidationReport]] = None
+    _validation: Optional[ValidationReport] = field(default=None, init=False, repr=False, compare=False)
 
     def validate(self) -> ValidationReport:
         """通用层：仅检查路径与 header 存在性。子类会扩展。"""
@@ -75,6 +75,12 @@ class OgipFitsBase:
         rpt.ok = len(rpt.errors()) == 0
         self._validation = rpt
         return rpt
+
+    def _has_key_ci(self, key: str) -> bool:
+        return self.get_keyword_ci(key, default=None) is not None
+
+    def _has_any_key_ci(self, keys: Sequence[str]) -> bool:
+        return any(self._has_key_ci(k) for k in keys)
 
     def get_keyword_ci(self, key: str, default: Optional[Any] = None) -> Any:
         """大小写不敏感地从 header 中读取关键字（若 header 为 dict）.
@@ -115,6 +121,7 @@ class OgipTimeSeriesBase(OgipFitsBase):
 
     # 根据 OGIP-94-003 (Events) 的建议/要求，时间序列至少应包含时间系统与时间单位
     REQUIRED_KEYS = ["TELESCOP", "INSTRUME", "TIMESYS", "TIMEUNIT"]
+    CRITICAL_KEYS = ["TIMESYS", "TIMEUNIT"]
     OPTIONAL_KEYS = ["OBJECT", "OBS_ID", "MJDREF", "MJDREFI", "MJDREFF", "TIMEZERO", "TREFPOS", "DATE-OBS"]
     REQUIRED_COLUMNS_ANY = [["TIME"]]  # 至少包含 TIME
 
@@ -122,9 +129,9 @@ class OgipTimeSeriesBase(OgipFitsBase):
         rpt = super().validate()
         # Header keyword checks
         for k in self.REQUIRED_KEYS:
-            if k not in self.header:
-                # 对于时间序列类，缺少 TIMESYS/TIMEUNIT 通常是较严重的 WARN
-                rpt.add('WARN', 'MISSING_KEY', f"Required key '{k}' not found (OGIP-93-003).")
+            if not self._has_key_ci(k):
+                lvl = 'ERROR' if k in self.CRITICAL_KEYS else 'WARN'
+                rpt.add(lvl, 'MISSING_KEY', f"Required key '{k}' not found (OGIP-93-003).")
         # Column checks
         cols = getattr(self, 'columns', ()) or ()
         colset = {c.upper() for c in cols}
@@ -132,8 +139,7 @@ class OgipTimeSeriesBase(OgipFitsBase):
             if not any(c.upper() in colset for c in group):
                 rpt.add('ERROR', 'MISSING_COLUMN', f"Missing required column group: {group}")
         # MJDREF 合并检查（MJDREFI+MJDREFF 或 MJDREF 之一应存在）
-        hdr = self.header or {}
-        if not (('MJDREF' in hdr) or (('MJDREFI' in hdr) or ('MJDREFF' in hdr))):
+        if not (self._has_key_ci('MJDREF') or self._has_any_key_ci(['MJDREFI', 'MJDREFF'])):
             rpt.add('WARN', 'MISSING_MJDREF', 'MJDREF / (MJDREFI+MJDREFF) not found in header; absolute times may be ambiguous.')
         # TIMEUNIT/TIMESYS presence already warned above; optionally validate common values
         timeunit = None
@@ -193,20 +199,23 @@ class OgipSpectrumBase(OgipFitsBase):
 
     REQUIRED_KEYS = ["TELESCOP", "INSTRUME", "CHANTYPE"]
     OPTIONAL_KEYS = ["FILTER", "EXPOSURE", "BACKSCAL", "AREASCAL", "RESPFILE", "ANCRFILE", "CORRFILE", "CORRSCAL"]
-    REQUIRED_COLUMNS = ["CHANNEL", "COUNTS"]  # 简化：通常至少有 CHANNEL/COUNTS
+    REQUIRED_COLUMNS = ["CHANNEL"]
+    OPTIONAL_RATE_COLUMNS = ["COUNTS", "RATE"]
 
     def validate(self) -> ValidationReport:
         rpt = super().validate()
         for k in self.REQUIRED_KEYS:
-            if k not in self.header:
+            if not self._has_key_ci(k):
                 rpt.add('WARN', 'MISSING_KEY', f"Required key '{k}' not found (OGIP-92-007).")
         cols = getattr(self, 'columns', ()) or ()
         colset = {c.upper() for c in cols}
         for c in self.REQUIRED_COLUMNS:
             if c.upper() not in colset:
                 rpt.add('ERROR', 'MISSING_COLUMN', f"Missing required column '{c}' for PHA.")
+        if not any(c in colset for c in self.OPTIONAL_RATE_COLUMNS):
+            rpt.add('ERROR', 'MISSING_COLUMN', "Missing required PHA value column: one of ['COUNTS', 'RATE']")
         # Basic sanity: exposure>0 if present
-        exp_val = self.header.get('EXPOSURE', self.header.get('EXPTIME', None))
+        exp_val = self.get_keyword_ci('EXPOSURE', self.get_keyword_ci('EXPTIME', None))
         if exp_val is not None:
             try:
                 if float(exp_val) <= 0:
@@ -228,9 +237,8 @@ class OgipResponseBase(OgipFitsBase):
     def validate(self) -> ValidationReport:
         rpt = super().validate()
         # Header presence: at least one from each group
-        hdr = self.header
         for group in self.REQUIRED_KEYS_ANY:
-            if not any(g in hdr for g in group):
+            if not self._has_any_key_ci(group):
                 rpt.add('WARN', 'MISSING_KEY', f"Missing one of required keys {group} (CAL/GEN/92-002).")
         # Column checks will be done in concrete subclasses where we know type
         rpt.ok = len(rpt.errors()) == 0

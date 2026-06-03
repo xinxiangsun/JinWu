@@ -18,8 +18,11 @@ LightcurveData and LightcurveDataset inputs.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Dict, Any, Literal, Union, Sequence
+from typing import TYPE_CHECKING, Callable, Optional, Dict, Any, Literal, Mapping, Union, Sequence
 from pathlib import Path
+import math
+import os
+import re
 import warnings
 
 import numpy as np
@@ -27,12 +30,22 @@ from astropy.modeling import Fittable1DModel, Parameter
 from astropy.modeling.fitting import LMLSQFitter, TRFLSQFitter
 
 from jinwu.core.data import LightcurveData
-from jinwu.core.datasets import LightcurveDataset
+
+if TYPE_CHECKING:
+    from jinwu.core.datasets import LightcurveDataset
+    from jinwu.core.instruments import Catalog
 
 __all__ = [
     "FitResult",
     "LightcurveFitter",
     "ModelRegistry",
+    "XspecChainParameter",
+    "XspecChainResult",
+    "fit_spectrum",
+    "fit_spectrum_from_files",
+    "fit",
+    "fit_prepared",
+    "run_xspec_chain",
 ]
 
 
@@ -397,6 +410,7 @@ class LightcurveFitter:
             模型注册表（默认使用全局注册表）
         """
         self.registry = registry or _default_registry
+        from jinwu.core.datasets import LightcurveDataset
         
         # 统一提取时间、值、误差
         if isinstance(data, LightcurveDataset):
@@ -1506,3 +1520,1314 @@ class LightcurveFitter:
             # 静默忽略，布局可能略有偏差但不影响使用
             pass
         return ax1, ax2
+
+
+# =============================================================================
+# XSPEC 光谱拟合模块
+# =============================================================================
+
+def _require_xspec():
+    """检查XSPEC是否可用"""
+    try:
+        import xspec
+        return xspec
+    except ImportError:
+        raise ImportError(
+            "xspec module is required for spectral fitting. "
+            "Please install heasoftpy and set up XSPEC environment."
+        )
+
+
+@dataclass(slots=True)
+class XspecChainParameter:
+    """Metadata for a parameter sampled by an XSPEC chain session."""
+
+    index: int
+    component: str | None
+    name: str
+    value: float | None
+    frozen: bool
+    unit: str | None
+
+
+@dataclass(slots=True)
+class XspecChainResult:
+    """Result payload for an XSPEC MCMC chain run."""
+
+    chain_path: str
+    fit_statistic: float | None
+    fit_dof: int | None
+    stat_method: str | None
+    free_parameters: list[XspecChainParameter]
+    all_parameters: list[XspecChainParameter]
+    source_counts: float | None
+    background_counts: float | None
+    chain_settings: dict
+    parallel_settings: dict
+    warnings: list[str]
+    status: str
+
+
+def _default_xspec_parallel_processes(fraction: float = 0.75) -> int:
+    """Return the default XSPEC parallel process count for this host."""
+    if fraction <= 0:
+        raise ValueError("parallel fraction must be greater than 0")
+
+    n_cpu = os.cpu_count() or 1
+    return max(1, math.floor(n_cpu * fraction))
+
+
+def _xspec_chain_models(xspec) -> list[Any]:
+    """Return one model copy per active XSPEC source for the first data group."""
+    models = []
+    sources = getattr(xspec.AllModels, "sources", None)
+
+    if isinstance(sources, dict):
+        for _, model_name in sorted(sources.items()):
+            try:
+                models.append(xspec.AllModels(1, model_name))
+            except TypeError:
+                models.append(xspec.AllModels(1))
+            except Exception:
+                continue
+
+    if not models:
+        try:
+            models.append(xspec.AllModels(1))
+        except Exception:
+            pass
+
+    return models
+
+
+def _xspec_parameter_value(param) -> float | None:
+    try:
+        return float(param.values[0])
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return None
+
+
+def _xspec_chain_parameters(models: Sequence[Any]) -> list[XspecChainParameter]:
+    """Collect component-aware parameter metadata from XSPEC model objects."""
+    parameters = []
+
+    for model in models:
+        for component_name in getattr(model, "componentNames", ()):
+            component = getattr(model, component_name)
+
+            for parameter_name in getattr(component, "parameterNames", ()):
+                parameter = getattr(component, parameter_name)
+                parameters.append(
+                    XspecChainParameter(
+                        index=int(parameter.index),
+                        component=str(component_name),
+                        name=str(getattr(parameter, "name", parameter_name)),
+                        value=_xspec_parameter_value(parameter),
+                        frozen=bool(parameter.frozen),
+                        unit=getattr(parameter, "unit", None) or None,
+                    )
+                )
+
+    return parameters
+
+
+def _xspec_chain_spectra(xspec, spectra) -> list[Any]:
+    if spectra is None:
+        return [xspec.AllData(index) for index in range(1, int(xspec.AllData.nSpectra) + 1)]
+
+    if isinstance(spectra, (str, bytes)):
+        raise TypeError("spectra must be Spectrum objects or an iterable of Spectrum objects")
+
+    try:
+        return list(spectra)
+    except TypeError:
+        return [spectra]
+
+
+def _xspec_spectrum_counts(spectra: Sequence[Any], warnings_list: list[str]) -> tuple[float | None, float | None]:
+    source_counts = 0.0
+    background_counts = 0.0
+    source_seen = False
+    background_seen = False
+
+    for spectrum in spectra:
+        try:
+            source_counts += float(np.sum(spectrum.values)) * float(spectrum.exposure)
+            source_seen = True
+        except (AttributeError, TypeError, ValueError):
+            warnings_list.append("Could not calculate source counts for one XSPEC spectrum.")
+
+        try:
+            background = spectrum.background
+        except Exception:
+            background = None
+
+        if background is None:
+            continue
+
+        try:
+            background_counts += float(np.sum(background.values)) * float(background.exposure)
+            background_seen = True
+        except (AttributeError, TypeError, ValueError):
+            warnings_list.append("Could not calculate background counts for one XSPEC spectrum.")
+
+    return (
+        source_counts if source_seen else None,
+        background_counts if background_seen else None,
+    )
+
+
+def _xspec_fit_value(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _xspec_fit_dof(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def run_xspec_chain(
+    *,
+    chain_path: str | Path,
+    refit: bool = True,
+    chain_length: int = 50000,
+    chain_burn: int = 10000,
+    chain_algorithm: Literal["gw", "mh"] = "gw",
+    chain_walkers: int = 10,
+    parallel_fraction: float = 0.75,
+    parallel_processes: int | None = None,
+    overwrite: bool = False,
+    spectra=None,
+) -> XspecChainResult:
+    """Run an XSPEC MCMC chain for all currently thawed model parameters."""
+    xspec = _require_xspec()
+
+    if int(getattr(xspec.AllData, "nSpectra", 0) or 0) < 1:
+        raise RuntimeError("run_xspec_chain requires at least one loaded XSPEC spectrum.")
+
+    models = _xspec_chain_models(xspec)
+    if not models:
+        raise RuntimeError("run_xspec_chain requires a loaded XSPEC model.")
+
+    all_parameters = _xspec_chain_parameters(models)
+    free_parameters = [parameter for parameter in all_parameters if not parameter.frozen]
+    if not free_parameters:
+        raise RuntimeError("run_xspec_chain requires at least one thawed XSPEC parameter.")
+
+    if chain_algorithm not in {"gw", "mh"}:
+        raise ValueError("chain_algorithm must be 'gw' or 'mh'.")
+    if chain_length < 1:
+        raise ValueError("chain_length must be at least 1.")
+    if chain_burn < 0:
+        raise ValueError("chain_burn must be non-negative.")
+    if chain_walkers < 1:
+        raise ValueError("chain_walkers must be at least 1.")
+
+    cpu_count = os.cpu_count() or 1
+    if parallel_processes is None:
+        n_parallel = _default_xspec_parallel_processes(parallel_fraction)
+    else:
+        if parallel_processes < 1:
+            raise ValueError("parallel_processes must be at least 1.")
+        n_parallel = int(parallel_processes)
+
+    xspec.Xset.parallel.walkers = n_parallel
+    if refit:
+        xspec.Xset.parallel.leven = n_parallel
+        xspec.Fit.perform()
+
+    chain_file = Path(chain_path).expanduser()
+    if not chain_file.parent.exists():
+        raise FileNotFoundError(f"XSPEC chain parent directory does not exist: {chain_file.parent}")
+    if chain_file.exists():
+        if not overwrite:
+            raise FileExistsError(f"XSPEC chain file already exists: {chain_file}")
+        chain_file.unlink()
+
+    warnings_list = []
+    selected_spectra = _xspec_chain_spectra(xspec, spectra)
+    source_counts, background_counts = _xspec_spectrum_counts(selected_spectra, warnings_list)
+
+    status = "chain_ready"
+    try:
+        xspec.Chain(
+            str(chain_file),
+            burn=chain_burn,
+            runLength=chain_length,
+            algorithm=chain_algorithm,
+            walkers=chain_walkers,
+        )
+    except Exception as exc:
+        status = "failed"
+        warnings_list.append(f"XSPEC chain run failed: {exc}")
+
+    return XspecChainResult(
+        chain_path=str(chain_file),
+        fit_statistic=_xspec_fit_value(getattr(xspec.Fit, "statistic", None)),
+        fit_dof=_xspec_fit_dof(getattr(xspec.Fit, "dof", None)),
+        stat_method=getattr(xspec.Fit, "statMethod", None),
+        free_parameters=free_parameters,
+        all_parameters=all_parameters,
+        source_counts=source_counts,
+        background_counts=background_counts,
+        chain_settings={
+            "refit": refit,
+            "length": chain_length,
+            "burn": chain_burn,
+            "algorithm": chain_algorithm,
+            "walkers": chain_walkers,
+            "overwrite": overwrite,
+        },
+        parallel_settings={
+            "cpu_count": cpu_count,
+            "fraction": parallel_fraction,
+            "processes": n_parallel,
+            "contexts": {
+                "walkers": n_parallel,
+                "leven": n_parallel if refit else None,
+            },
+        },
+        warnings=warnings_list,
+        status=status,
+    )
+
+
+def _generate_xspec_result(model, spectrum) -> dict:
+    """
+    根据XSPEC模型和光谱自动生成结果字典
+
+    参数:
+        model: XSPEC模型对象
+        spectrum: XSPEC光谱对象
+
+    返回:
+        包含模型参数、flux、rate等信息的字典
+    """
+    xspec = _require_xspec()
+
+    lines = []
+    result = {}
+    result['model'] = model.expression
+
+    result['parameters'] = {}
+    lines.append(f"Model: {model.expression}")
+
+    processed_params = set()
+
+    for comp_name in model.componentNames:
+        try:
+            comp = getattr(model, comp_name)
+
+            for param_name in comp.parameterNames:
+                param_key = f"{comp_name}.{param_name}"
+                if param_key in processed_params:
+                    continue
+                processed_params.add(param_key)
+
+                param = getattr(comp, param_name)
+                param_val = param.values[0]
+
+                param_dict = {
+                    'value': param_val,
+                    'frozen': param.frozen
+                }
+
+                if not param.frozen:
+                    try:
+                        array = np.array(param.error[:2]) - param_val
+                        err_lo = abs(array[0])
+                        err_hi = abs(array[1])
+                        param_dict['error_lo'] = err_lo
+                        param_dict['error_hi'] = err_hi
+                        lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (-{err_lo:.4f}, +{err_hi:.4f})(1sigma error)")
+                    except Exception:
+                        lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (error calculation failed)")
+                else:
+                    lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (fixed)")
+
+                result['parameters'][param_key] = param_dict
+
+        except Exception as e:
+            continue
+
+    try:
+        emin = model.cflux.Emin.values[0] if hasattr(model, 'cflux') else None
+        emax = model.cflux.Emax.values[0] if hasattr(model, 'cflux') else None
+        xspec.AllModels.calcFlux(f"{emin} {emax}")
+        flux_erg = float(spectrum.flux[0])
+        flux_photons = float(spectrum.flux[3])
+    except Exception:
+        flux_erg = None
+        flux_photons = None
+        emin = None
+        emax = None
+
+    result['flux_abs'] = {
+        'erg_cm2_s': flux_erg,
+        'photons_cm2_s': flux_photons
+    }
+
+    if flux_erg is not None and emin is not None and emax is not None:
+        lines.append(f"Absorbed Flux ({emin:.1f}-{emax:.1f} keV): {flux_erg:.4e} erg/cm²/s")
+        lines.append(f"Absorbed Photon Flux ({emin:.1f}-{emax:.1f} keV): {flux_photons:.4e} photons/cm²/s")
+
+    try:
+        rate = float(spectrum.rate[0])
+        rate_err = float(spectrum.rate[1]) if len(spectrum.rate) > 1 else None
+    except Exception:
+        rate = None
+        rate_err = None
+
+    result['rate'] = {
+        'value': rate,
+        'error': rate_err
+    }
+
+    if rate is not None:
+        if rate_err is not None:
+            lines.append(f"Rate: {rate:.4f} ± {rate_err:.4f} cts/s")
+        else:
+            lines.append(f"Rate: {rate:.4f} cts/s")
+
+    exposure = spectrum.exposure if hasattr(spectrum, 'exposure') else None
+
+    if rate is not None and rate > 0 and flux_erg is not None and flux_erg > 0:
+        try:
+            conv_factor = 10**model.cflux.lg10Flux.values[0] / rate
+        except Exception:
+            conv_factor = None
+    else:
+        conv_factor = None
+    photon_counts = rate * exposure if rate is not None and exposure is not None else None
+    result['conversion'] = {
+        'exposure_s': exposure,
+        'erg_per_count': conv_factor,
+        'counts': photon_counts
+    }
+
+    if exposure is not None:
+        lines.append(f"Exposure: {exposure:.1f} s")
+
+    if conv_factor is not None:
+        lines.append(f"Conversion factor: {conv_factor:.4e} erg/cm²/s per cts/s")
+    if photon_counts is not None:
+        lines.append(f"Total counts: {photon_counts:.2f} counts")
+
+    try:
+        statistic = xspec.Fit.statistic
+        dof = xspec.Fit.dof
+        stat_method = xspec.Fit.statMethod
+        statdof = statistic / dof if dof > 0 else None
+        null_prob = xspec.Fit.nullhyp
+
+        lines.append(f"Stat/dof: {stat_method}={statistic:.2f}/{dof}={statdof:.2f}" if statdof else f"Stat/dof: {stat_method}={statistic:.2f}/{dof}")
+        lines.append(f"Null hypothesis probability: {null_prob:.4f}")
+
+        result['statistics'] = {
+            'method': stat_method,
+            'value': statistic,
+            'dof': dof,
+            'reduced': statdof,
+            'null_hypothesis_probability': null_prob
+        }
+    except Exception:
+        result['statistics'] = {}
+
+    result['text'] = "\n".join(lines)
+
+    return result
+
+
+def fit_spectrum(
+    phapath: str | Path,
+    rmfpath: str | Path,
+    outdir: str | Path,
+    *,
+    bkgpath: Optional[str | Path] = None,
+    arfpath: Optional[str | Path] = None,
+    group_min: int = 1,
+    emin: float = 0.5,
+    emax: float = 4.0,
+    model_name: str = "tbabs*ztbabs*cflux*powerlaw",
+    redshift: float = 0.0,
+    save_pha: bool = True,
+    clobber: bool = True,
+) -> dict:
+    """
+    执行XSPEC光谱拟合的自动化流程
+
+    参数:
+        phapath: 输入的PHA文件路径
+        rmfpath: RMF响应文件路径
+        outdir: 输出目录
+        bkgpath: 背景文件路径（可选）
+        arfpath: ARF有效面积文件路径（可选）
+        group_min: 最小计数分组数（默认1）
+        emin: 能量下限 keV（默认0.5）
+        emax: 能量上限 keV（默认4.0）
+        model_name: XSPEC模型名称（默认'tbabs*ztbabs*cflux*powerlaw'）
+        redshift: 源红移（默认0.0）
+        save_pha: 是否保存分组后的PHA文件
+        clobber: 是否覆盖已存在的文件
+
+    返回:
+        包含拟合结果的字典
+
+    示例:
+        >>> result = fit_spectrum(
+        ...     phapath="source.pha",
+        ...     rmfpath="response.rmf",
+        ...     outdir="output",
+        ...     group_min=1,
+        ...     emin=0.5,
+        ...     emax=4.0,
+        ...     model_name="tbabs*ztbabs*cflux*powerlaw",
+        ...     redshift=0.1
+        ... )
+    """
+    import xspec
+    from jinwu.ftools.grppha import grppha as jinwu_grppha
+
+    phapath = Path(phapath)
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    grouped_pha = outdir / f"grouped_g{group_min}.pha"
+
+    jinwu_grppha(
+        input_pha=str(phapath),
+        outfile=str(grouped_pha) if save_pha else None,
+        min_counts=group_min,
+        overwrite=clobber,
+    )
+
+    xspec.AllData.clear()
+    xspec.AllModels.clear()
+    xspec.Xset.abund = "wilm"
+    xspec.Fit.query = "yes"
+    xspec.Fit.statMethod = "cstat"
+
+    s1 = xspec.Spectrum(str(grouped_pha))
+
+    if bkgpath is not None:
+        s1.background = str(bkgpath)
+    if arfpath is not None:
+        s1.arf = str(arfpath)
+    s1.response = str(rmfpath)
+
+    xspec.AllData.ignore("bad")
+    s1.ignore(f"**-{emin} {emax}-**")
+
+    m = xspec.Model(model_name)
+
+    m.TBabs.nH = 1.0
+    m.TBabs.nH.frozen = True
+
+    if "ztbabs" in model_name.lower():
+        m.zTBabs.nH = 0.5
+        m.zTBabs.nH.min = 0.0
+        m.zTBabs.nH.max = 100.0
+        if redshift > 0:
+            m.zTBabs.Redshift = redshift
+            m.zTBabs.Redshift.frozen = True
+
+    if hasattr(m, "cflux"):
+        m.cflux.Emin = emin
+        m.cflux.Emax = emax
+        if hasattr(m.cflux, "lg10Flux"):
+            m.cflux.lg10Flux = -10.0
+            m.cflux.lg10Flux.min = -20.0
+            m.cflux.lg10Flux.max = 10.0
+
+    if hasattr(m, "powerlaw"):
+        m.powerlaw.PhoIndex = 2.0
+        m.powerlaw.PhoIndex.min = 0.0
+        m.powerlaw.PhoIndex.max = 9.0
+
+    if hasattr(m, "zpowerlw"):
+        m.zpowerlw.PhoIndex = 2.0
+        m.zpowerlw.PhoIndex.min = 0.0
+        m.zpowerlw.PhoIndex.max = 9.0
+        if redshift > 0:
+            m.zpowerlw.Redshift = redshift
+            m.zpowerlw.Redshift.frozen = True
+
+    xspec.Fit.perform()
+
+    param_str = ""
+    if "ztbabs" in model_name.lower() and hasattr(m, "zTBabs") and hasattr(m, "cflux"):
+        param_str += f"1. {m.zTBabs.nH.index} "
+    if hasattr(m, "cflux") and hasattr(m.cflux, "lg10Flux"):
+        param_str += f"1. {m.cflux.lg10Flux.index} "
+    if hasattr(m, "powerlaw"):
+        param_str += f"1. {m.powerlaw.PhoIndex.index}"
+    elif hasattr(m, "zpowerlw"):
+        param_str += f"1. {m.zpowerlw.PhoIndex.index}"
+
+    if param_str.strip():
+        xspec.Fit.error(param_str.strip())
+
+    results = _generate_xspec_result(m, s1)
+
+    results["group_min"] = group_min
+    results["energy_range"] = {"emin": emin, "emax": emax}
+    results["input_files"] = {
+        "pha": str(phapath),
+        "grouped_pha": str(grouped_pha),
+        "rmf": str(rmfpath),
+        "bkg": str(bkgpath) if bkgpath else None,
+        "arf": str(arfpath) if arfpath else None,
+    }
+
+    return results
+
+
+def fit_spectrum_from_files(
+    phafile: str | Path,
+    rmfobj: Any,
+    outdir: str | Path,
+    *,
+    bkgfile: Optional[str | Path] = None,
+    arffile: Optional[str | Path] = None,
+    group_min: int = 1,
+    emin: float = 0.5,
+    emax: float = 4.0,
+    model_name: str = "tbabs*ztbabs*cflux*powerlaw",
+    redshift: float = 0.0,
+    save_pha: bool = True,
+    clobber: bool = True,
+    srcname: Optional[str] = None,
+    instname: Optional[str] = None,
+    nhgal_kw: Optional[dict] = None,
+    plottype: str = "ldata_eeufspec_delchi",
+    plot_backend: str = "matplotlib",
+    plot_outdir: Optional[str | Path] = None,
+    plot_format: str = "png",
+    plot_density: int = 300,
+) -> dict:
+    """
+    从文件路径执行完整的XSPEC光谱拟合，包括绘图
+
+    这是一个高级封装，组合了光谱分组、XSPEC拟合和结果绘图
+
+    参数:
+        phafile: 输入的PHA文件路径
+        rmfobj: RMF对象（Path字符串或RMFData对象）
+        outdir: 输出目录
+        bkgfile: 背景文件路径（可选）
+        arffile: ARF有效面积文件路径（可选）
+        group_min: 最小计数分组数（默认1）
+        emin: 能量下限 keV（默认0.5）
+        emax: 能量上限 keV（默认4.0）
+        model_name: XSPEC模型名称
+        redshift: 源红移（默认0.0）
+        save_pha: 是否保存分组后的PHA文件
+        clobber: 是否覆盖已存在的文件
+        srcname: 源名称（用于绘图标题）
+        instname: 仪器名称（用于绘图标题）
+        nhgal_kw: nhgal函数的关键字参数（可选）
+        plottype: 兼容参数；当前拟合图固定为 ldata + eeufspec + delchi 三联图
+        plot_backend: 绘图后端，'matplotlib'或'xspec'
+        plot_outdir: 绘图输出目录（默认与outdir相同）
+        plot_format: 绘图输出格式
+        plot_density: 绘图分辨率
+
+    返回:
+        包含拟合结果和图表路径的字典
+
+    示例:
+        >>> result = fit_spectrum_from_files(
+        ...     phafile="source.pha",
+        ...     rmfobj="response.rmf",
+        ...     outdir="output",
+        ...     srcname="MySource",
+        ...     instname="WXT"
+        ... )
+    """
+    import xspec
+    from jinwu.core.plot import plotfit
+
+    rmfpath = str(rmfobj) if isinstance(rmfobj, (str, Path)) else None
+
+    results = fit_spectrum(
+        phapath=phafile,
+        rmfpath=rmfpath,
+        outdir=outdir,
+        bkgpath=bkgfile,
+        arfpath=arffile,
+        group_min=group_min,
+        emin=emin,
+        emax=emax,
+        model_name=model_name,
+        redshift=redshift,
+        save_pha=save_pha,
+        clobber=clobber,
+    )
+
+    if srcname is None:
+        srcname = Path(phafile).stem
+    if instname is None:
+        instname = "INST"
+
+    plotdir = plot_outdir if plot_outdir is not None else outdir
+
+    try:
+        figurefit, _ = plotfit(
+            srcname=srcname,
+            instname=instname,
+            group_min=group_min,
+            modelname=model_name,
+            redshift=redshift,
+            plottype=plottype,
+            outputdir=plotdir,
+            backend=plot_backend,
+            output_format=plot_format,
+            density=plot_density,
+        )
+        results["plot_fit"] = str(figurefit) if figurefit else None
+    except Exception as e:
+        results["plot_fit"] = None
+        results["plot_fit_error"] = str(e)
+
+    return results
+
+
+def _model_parameter_index(model, parameter) -> int:
+    start = getattr(model, "startParIndex", None)
+    index = int(parameter.index)
+    if start in (None, 1):
+        return index
+    return int(start) + index - 1
+
+
+def _prepared_error_parameters(model, model_name: str, models=None) -> str:
+    parameters = []
+    if "ztbabs" in model_name.lower() and hasattr(model, "zTBabs"):
+        if hasattr(model.zTBabs, "nH"):
+            parameters.append(f"1. {_model_parameter_index(model, model.zTBabs.nH)}")
+    for group_model in models or [model]:
+        if hasattr(group_model, "cflux") and hasattr(group_model.cflux, "lg10Flux"):
+            parameters.append(
+                f"1. {_model_parameter_index(group_model, group_model.cflux.lg10Flux)}"
+            )
+    if hasattr(model, "powerlaw") and hasattr(model.powerlaw, "PhoIndex"):
+        parameters.append(f"1. {_model_parameter_index(model, model.powerlaw.PhoIndex)}")
+    elif hasattr(model, "zpowerlw") and hasattr(model.zpowerlw, "PhoIndex"):
+        parameters.append(f"1. {_model_parameter_index(model, model.zpowerlw.PhoIndex)}")
+    return " ".join(parameters)
+
+
+def _set_prepared_parameter_bounds(parameter, value: float, lower: float, upper: float) -> None:
+    """Set bounds on fake test parameters and real PyXspec parameters."""
+    try:
+        parameter.min = lower
+        parameter.max = upper
+    except Exception:
+        parameter.values = f"{value},,{lower},{lower},{upper},{upper}"
+
+
+def _configure_prepared_model(model, *, model_name: str, emin: float, emax: float, redshift: float) -> None:
+    if hasattr(model, "TBabs") and hasattr(model.TBabs, "nH"):
+        model.TBabs.nH = 1.0
+        model.TBabs.nH.frozen = True
+
+    if "ztbabs" in model_name.lower() and hasattr(model, "zTBabs"):
+        if hasattr(model.zTBabs, "nH"):
+            model.zTBabs.nH = 0.5
+            _set_prepared_parameter_bounds(model.zTBabs.nH, 0.5, 0.0, 100.0)
+        if redshift > 0 and hasattr(model.zTBabs, "Redshift"):
+            model.zTBabs.Redshift = redshift
+            model.zTBabs.Redshift.frozen = True
+
+    if hasattr(model, "cflux"):
+        if hasattr(model.cflux, "Emin"):
+            model.cflux.Emin = emin
+            model.cflux.Emin.frozen = True
+        if hasattr(model.cflux, "Emax"):
+            model.cflux.Emax = emax
+            model.cflux.Emax.frozen = True
+        if hasattr(model.cflux, "lg10Flux"):
+            model.cflux.lg10Flux = -10.0
+            _set_prepared_parameter_bounds(model.cflux.lg10Flux, -10.0, -20.0, 10.0)
+
+    if hasattr(model, "powerlaw") and hasattr(model.powerlaw, "PhoIndex"):
+        model.powerlaw.PhoIndex = 2.0
+        _set_prepared_parameter_bounds(model.powerlaw.PhoIndex, 2.0, 0.0, 9.0)
+        if hasattr(model.powerlaw, "norm"):
+            model.powerlaw.norm = 1.0
+            model.powerlaw.norm.frozen = True
+
+    if hasattr(model, "zpowerlw") and hasattr(model.zpowerlw, "PhoIndex"):
+        model.zpowerlw.PhoIndex = 2.0
+        _set_prepared_parameter_bounds(model.zpowerlw.PhoIndex, 2.0, 0.0, 9.0)
+        if redshift > 0 and hasattr(model.zpowerlw, "Redshift"):
+            model.zpowerlw.Redshift = redshift
+            model.zpowerlw.Redshift.frozen = True
+
+
+def _prepared_input_dict(prepared) -> dict[str, str | int | None]:
+    return {
+        "instrument": prepared.instrument,
+        "obsid": prepared.obsid,
+        "module": prepared.module,
+        "detector": prepared.detector,
+        "source_id": prepared.source_id,
+        "source_pha": str(prepared.source_pha) if prepared.source_pha else None,
+        "grouped_pha": str(prepared.grouped_pha) if prepared.grouped_pha else None,
+        "background_pha": str(prepared.background_pha) if prepared.background_pha else None,
+        "arf": str(prepared.arf) if prepared.arf else None,
+        "rmf": str(prepared.rmf) if prepared.rmf else None,
+        "group_min": prepared.group_min,
+    }
+
+
+def _prepared_spectrum_key(prepared) -> str:
+    if prepared.module:
+        return f"{prepared.obsid}:{prepared.module}"
+    if prepared.detector:
+        suffix = f":{prepared.source_id}" if prepared.source_id else ""
+        return f"{prepared.obsid}:{prepared.detector}{suffix}"
+    return f"{prepared.obsid}:{prepared.instrument}"
+
+
+def _prepared_energy_ranges(
+    prepared_spectra,
+    *,
+    emin: float | None,
+    emax: float | None,
+    energy_ranges: Mapping[str, tuple[float, float]] | None,
+) -> dict[str, tuple[float, float]]:
+    if energy_ranges and (emin is not None or emax is not None):
+        raise ValueError("energy_ranges cannot be combined with global emin/emax")
+
+    resolved = {
+        _prepared_spectrum_key(spectrum): (
+            float(emin if emin is not None else spectrum.energy_range_keV[0]),
+            float(emax if emax is not None else spectrum.energy_range_keV[1]),
+        )
+        for spectrum in prepared_spectra
+    }
+    if not energy_ranges:
+        return resolved
+
+    unknown = set(energy_ranges) - set(resolved)
+    if unknown:
+        choices = ", ".join(sorted(resolved))
+        names = ", ".join(sorted(unknown))
+        raise ValueError(f"Unknown prepared energy range keys: {names}. Available: {choices}")
+    for key, limits in energy_ranges.items():
+        lower, upper = limits
+        resolved[key] = (float(lower), float(upper))
+    return resolved
+
+
+def _prepared_data_groups(prepared_spectra, fit_ranges) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, float, float], dict[str, Any]] = {}
+    ordered_groups = []
+    for spectrum_index, spectrum in enumerate(prepared_spectra, start=1):
+        spectrum_key = _prepared_spectrum_key(spectrum)
+        emin, emax = fit_ranges[spectrum_key]
+        key = (spectrum.instrument, emin, emax)
+        group = groups.get(key)
+        if group is None:
+            group = {
+                "group_index": len(ordered_groups) + 1,
+                "instrument": spectrum.instrument,
+                "energy_range": {"emin": emin, "emax": emax},
+                "spectrum_keys": [],
+                "spectrum_indices": [],
+                "spectra": [],
+            }
+            groups[key] = group
+            ordered_groups.append(group)
+        group["spectrum_keys"].append(spectrum_key)
+        group["spectrum_indices"].append(spectrum_index)
+        group["spectra"].append(spectrum)
+    return ordered_groups
+
+
+def _xspec_model_for_group(xspec, model, group_index: int):
+    if group_index == 1:
+        return model
+    try:
+        return xspec.AllModels(group_index)
+    except TypeError:
+        return xspec.AllModels(group_index, "")
+
+
+def _link_parameter(parameter, reference) -> None:
+    try:
+        parameter.link = reference
+    except Exception:
+        parameter.link = str(getattr(reference, "index", reference))
+
+
+def _link_default_prepared_model_groups(models, model_name: str) -> None:
+    if model_name.lower().replace(" ", "") != "tbabs*ztbabs*cflux*powerlaw":
+        return
+    if len(models) <= 1:
+        return
+    reference = models[0]
+    for model in models[1:]:
+        if hasattr(reference, "zTBabs") and hasattr(model, "zTBabs"):
+            if hasattr(reference.zTBabs, "nH") and hasattr(model.zTBabs, "nH"):
+                _link_parameter(model.zTBabs.nH, reference.zTBabs.nH)
+        if hasattr(reference, "powerlaw") and hasattr(model, "powerlaw"):
+            if hasattr(reference.powerlaw, "PhoIndex") and hasattr(model.powerlaw, "PhoIndex"):
+                _link_parameter(model.powerlaw.PhoIndex, reference.powerlaw.PhoIndex)
+
+
+def _set_prepared_xspec_links(spectrum, prepared) -> None:
+    if prepared.background_pha is not None:
+        try:
+            background = spectrum.background
+        except Exception:
+            background = None
+        if background is None:
+            spectrum.background = str(prepared.background_pha)
+
+    try:
+        response = spectrum.response
+    except Exception:
+        response = None
+    if prepared.rmf is not None and response is None:
+        spectrum.response = str(prepared.rmf)
+        try:
+            response = spectrum.response
+        except Exception:
+            response = None
+
+    if prepared.arf is not None:
+        if response is not None and hasattr(response, "arf"):
+            if not getattr(response, "arf", None):
+                response.arf = str(prepared.arf)
+        elif hasattr(spectrum, "arf"):
+            spectrum.arf = str(prepared.arf)
+
+
+def _load_prepared_xspec_spectrum(
+    xspec,
+    prepared,
+    *,
+    index: int | None = None,
+    data_group: int | None = None,
+):
+    """Load one grouped PHA where XSPEC can resolve its local response links."""
+    grouped = Path(prepared.grouped_pha).expanduser().resolve()
+    original = Path.cwd()
+    os.chdir(grouped.parent)
+    try:
+        if index is None:
+            return xspec.Spectrum(str(grouped))
+        xspec.AllData(f"{data_group or 1}:{index} {grouped}")
+        return xspec.AllData(index)
+    finally:
+        os.chdir(original)
+
+
+def _capture_xspec_log(xspec, path: Path, action, warnings_list: list[str]) -> str:
+    opener = getattr(getattr(xspec, "Xset", None), "openLog", None)
+    closer = getattr(getattr(xspec, "Xset", None), "closeLog", None)
+    if not callable(opener) or not callable(closer):
+        action()
+        return ""
+
+    try:
+        opener(str(path))
+        action()
+    finally:
+        try:
+            closer()
+        except Exception as exc:
+            warnings_list.append(f"Could not close XSPEC log {path.name}: {exc}")
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError as exc:
+        warnings_list.append(f"Could not read XSPEC log {path.name}: {exc}")
+        return ""
+    try:
+        path.unlink()
+    except OSError:
+        pass
+    return text
+
+
+def _xspec_show_text(xspec, outdir: Path, label: str, warnings_list: list[str]) -> str:
+    def show() -> None:
+        xspec.AllModels.show()
+        xspec.Fit.show()
+
+    try:
+        return _capture_xspec_log(xspec, outdir / f"{label}.xspec_show.tmp.log", show, warnings_list)
+    except Exception as exc:
+        warnings_list.append(f"Could not capture XSPEC show output: {exc}")
+        return ""
+
+
+def _write_prepared_report(
+    *,
+    path: Path,
+    prepared_inputs: list[dict[str, str | int | None]],
+    results: dict,
+    show_text: str,
+    error_command: str | None,
+    error_text: str,
+    warnings_list: list[str],
+    data_groups=None,
+    per_group=None,
+) -> Path:
+    lines = ["[prepared_inputs]"]
+    for index, item in enumerate(prepared_inputs, start=1):
+        lines.append(f"Spectrum {index}")
+        lines.extend(f"{key}: {value}" for key, value in item.items())
+    if data_groups:
+        lines.extend(["", "[data_groups]"])
+        for group in data_groups:
+            lines.extend(
+                [
+                    f"Group {group['group_index']}",
+                    f"instrument: {group['instrument']}",
+                    f"energy_range: {group['energy_range']}",
+                    f"spectrum_indices: {group['spectrum_indices']}",
+                    f"spectrum_keys: {group['spectrum_keys']}",
+                ]
+            )
+    if per_group:
+        lines.extend(["", "[per_group]"])
+        for group in per_group:
+            lines.extend(
+                [
+                    f"Group {group['group_index']}",
+                    f"instrument: {group['instrument']}",
+                    f"energy_range: {group['energy_range']}",
+                    f"flux_abs: {group.get('flux_abs')}",
+                    f"cflux: {group.get('cflux')}",
+                    f"member_spectra: {group['member_spectra']}",
+                ]
+            )
+    lines.extend(["", "[fit_summary]", str(results.get("text", ""))])
+    if error_command:
+        lines.extend(["", "[xspec.Fit.error]", f"command: {error_command}", error_text])
+    if show_text:
+        lines.extend(["", "[xspec.AllModels.show / xspec.Fit.show]", show_text])
+    if warnings_list:
+        lines.extend(["", "[warnings]"])
+        lines.extend(warnings_list)
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def fit_prepared(
+    prepared,
+    *,
+    outdir: str | Path,
+    emin: float | None = None,
+    emax: float | None = None,
+    energy_ranges: Mapping[str, tuple[float, float]] | None = None,
+    model_name: str = "tbabs*ztbabs*cflux*powerlaw",
+    redshift: float = 0.0,
+    stat_method: str = "cstat",
+    calculate_errors: bool = True,
+    error_command: str | None = None,
+    srcname: str | None = None,
+    instname: str | None = None,
+    plot_backend: str = "matplotlib",
+    plot_format: str = "png",
+    plot_density: int = 300,
+) -> dict:
+    """Fit one prepared spectrum or multiple prepared spectra with XSPEC."""
+    from jinwu.core.plot import plotfit
+    from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum
+
+    if isinstance(prepared, PreparedSpectrum):
+        prepared_spectra = [prepared]
+    elif isinstance(prepared, PreparedJointSpectrum):
+        prepared_spectra = list(prepared.spectra)
+    elif isinstance(prepared, Sequence) and not isinstance(prepared, (str, bytes)):
+        prepared_spectra = list(prepared)
+        if not all(isinstance(spectrum, PreparedSpectrum) for spectrum in prepared_spectra):
+            raise TypeError("prepared sequences must contain PreparedSpectrum items")
+    else:
+        raise TypeError(
+            "prepared must be PreparedSpectrum, PreparedJointSpectrum, "
+            "or a sequence of PreparedSpectrum items"
+        )
+    if not prepared_spectra or any(not spectrum.ready for spectrum in prepared_spectra):
+        raise RuntimeError("fit_prepared requires ready prepared spectra")
+    if any(spectrum.grouped_pha is None for spectrum in prepared_spectra):
+        raise RuntimeError("fit_prepared requires grouped PHA paths")
+
+    xspec = _require_xspec()
+    output = Path(outdir).expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    warnings_list: list[str] = []
+    fit_ranges = _prepared_energy_ranges(
+        prepared_spectra,
+        emin=emin,
+        emax=emax,
+        energy_ranges=energy_ranges,
+    )
+    first_key = _prepared_spectrum_key(prepared_spectra[0])
+    fit_emin, fit_emax = fit_ranges[first_key]
+
+    xspec.AllData.clear()
+    xspec.AllModels.clear()
+    xspec.Xset.abund = "wilm"
+    xspec.Fit.query = "yes"
+    xspec.Fit.statMethod = stat_method
+
+    data_groups = _prepared_data_groups(prepared_spectra, fit_ranges)
+    group_for_index = {
+        spectrum_index: group
+        for group in data_groups
+        for spectrum_index in group["spectrum_indices"]
+    }
+    xspec_spectra = []
+    if len(prepared_spectra) == 1:
+        xspec_spectrum = _load_prepared_xspec_spectrum(xspec, prepared_spectra[0])
+        _set_prepared_xspec_links(xspec_spectrum, prepared_spectra[0])
+        xspec_spectra.append(xspec_spectrum)
+    else:
+        for index, spectrum in enumerate(prepared_spectra, start=1):
+            xspec_spectrum = _load_prepared_xspec_spectrum(
+                xspec,
+                spectrum,
+                index=index,
+                data_group=group_for_index[index]["group_index"],
+            )
+            _set_prepared_xspec_links(xspec_spectrum, spectrum)
+            xspec_spectra.append(xspec_spectrum)
+
+    xspec.AllData.ignore("bad")
+    for xspec_spectrum, spectrum in zip(xspec_spectra, prepared_spectra):
+        spectrum_emin, spectrum_emax = fit_ranges[_prepared_spectrum_key(spectrum)]
+        xspec_spectrum.ignore(f"**-{spectrum_emin} {spectrum_emax}-**")
+
+    model = xspec.Model(model_name)
+    group_models = []
+    for group in data_groups:
+        group_model = _xspec_model_for_group(xspec, model, group["group_index"])
+        group_models.append(group_model)
+        _configure_prepared_model(
+            group_model,
+            model_name=model_name,
+            emin=group["energy_range"]["emin"],
+            emax=group["energy_range"]["emax"],
+            redshift=redshift,
+        )
+    _link_default_prepared_model_groups(group_models, model_name)
+    xspec.Fit.perform()
+
+    command = error_command or _prepared_error_parameters(model, model_name, group_models)
+    error_text = ""
+    if calculate_errors and command:
+        try:
+            error_text = _capture_xspec_log(
+                xspec,
+                output / "fit_prepared.xspec_error.tmp.log",
+                lambda: xspec.Fit.error(command),
+                warnings_list,
+            )
+        except Exception as exc:
+            warnings_list.append(f"XSPEC error calculation failed: {exc}")
+
+    results = _generate_xspec_result(model, xspec_spectra[0])
+    prepared_inputs = [_prepared_input_dict(spectrum) for spectrum in prepared_spectra]
+    if srcname is None:
+        first = prepared_spectra[0]
+        srcname = "_".join(
+            str(value)
+            for value in (first.obsid, first.module or first.detector, first.source_id)
+            if value
+        ) or "prepared"
+    if instname is None:
+        instname = "+".join(
+            spectrum.module or spectrum.detector or spectrum.instrument
+            for spectrum in prepared_spectra
+        )
+    label = re.sub(r"[^A-Za-z0-9_.+-]+", "_", f"{srcname}_{instname}").strip("_")
+
+    per_group = []
+    for group, group_model in zip(data_groups, group_models):
+        spectrum_index = group["spectrum_indices"][0]
+        group_result = _generate_xspec_result(group_model, xspec_spectra[spectrum_index - 1])
+        cflux = {}
+        if hasattr(group_model, "cflux"):
+            for name in ("Emin", "Emax", "lg10Flux"):
+                parameter = getattr(group_model.cflux, name, None)
+                if parameter is not None:
+                    cflux[name] = _xspec_parameter_value(parameter)
+        per_group.append(
+            {
+                "group_index": group["group_index"],
+                "instrument": group["instrument"],
+                "energy_range": group["energy_range"],
+                "member_spectra": list(group["spectrum_keys"]),
+                "spectrum_indices": list(group["spectrum_indices"]),
+                "model": group_result.get("model"),
+                "parameters": group_result.get("parameters"),
+                "flux_abs": group_result.get("flux_abs"),
+                "cflux": cflux,
+            }
+        )
+
+    show_text = _xspec_show_text(xspec, output, label, warnings_list)
+    report = _write_prepared_report(
+        path=output / f"{label}_fit.txt",
+        prepared_inputs=prepared_inputs,
+        results=results,
+        show_text=show_text,
+        error_command=command if calculate_errors else None,
+        error_text=error_text,
+        warnings_list=warnings_list,
+        data_groups=data_groups,
+        per_group=per_group,
+    )
+
+    results["energy_range"] = {"emin": fit_emin, "emax": fit_emax}
+    results["energy_ranges"] = {
+        key: {"emin": limits[0], "emax": limits[1]}
+        for key, limits in fit_ranges.items()
+    }
+    results["data_groups"] = [
+        {
+            key: value
+            for key, value in group.items()
+            if key != "spectra"
+        }
+        for group in data_groups
+    ]
+    results["per_group"] = per_group
+    results["input_files"] = prepared_inputs
+    results["prepared"] = prepared
+    results["report_txt"] = str(report)
+    results["warnings"] = warnings_list
+    results["group_min"] = prepared_spectra[0].group_min
+    results["group_mins"] = {
+        _prepared_spectrum_key(spectrum): spectrum.group_min
+        for spectrum in prepared_spectra
+    }
+
+    try:
+        figure_path, _ = plotfit(
+            srcname=srcname,
+            instname=instname,
+            group_min=prepared_spectra[0].group_min,
+            modelname=model_name,
+            redshift=redshift,
+            outputdir=output,
+            backend=plot_backend,
+            output_format=plot_format,
+            density=plot_density,
+        )
+        results["plot_fit"] = str(figure_path) if figure_path else None
+    except Exception as exc:
+        results["plot_fit"] = None
+        results["plot_fit_error"] = str(exc)
+        warnings_list.append(f"fit plot failed: {exc}")
+    return results
+
+
+def _validate_fit_catalogs(catalogs) -> None:
+    from jinwu.core.instruments import Catalog
+
+    if not catalogs:
+        raise TypeError("fit() requires at least one Catalog")
+    for catalog in catalogs:
+        if not isinstance(catalog, Catalog):
+            raise TypeError("fit() accepts Catalog inputs from jinwu.core.instruments.scan()")
+        if not catalog.bundles:
+            raise RuntimeError(f"Catalog has no spectrum bundles ready for fit: {catalog.root}")
+        for manifest in catalog.manifests:
+            if manifest.instrument.upper() != "WXT":
+                continue
+            source_ids = {
+                bundle.source_id
+                for bundle in manifest.bundles
+                if bundle.source_id is not None
+            }
+            if len(source_ids) > 1:
+                raise ValueError(
+                    "fit() requires one WXT source per Catalog; "
+                    "call catalog.select_source('sN') first"
+                )
+
+
+def _fit_prepare_outdir(catalogs, prepare_outdir: str | Path | None) -> Path | None:
+    if prepare_outdir is not None:
+        return Path(prepare_outdir).expanduser().resolve()
+    if len(catalogs) == 1:
+        return None
+
+    parents = {catalog.root.expanduser().resolve().parent for catalog in catalogs}
+    if len(parents) != 1:
+        raise ValueError(
+            "Joint fit Catalog roots must share one parent directory, "
+            "or pass prepare_outdir explicitly"
+        )
+    return parents.pop() / "jointfit"
+
+
+def _fit_catalog_input(catalogs, *, prepare_outdir: Path | None):
+    from jinwu.core.instruments import Catalog
+
+    if len(catalogs) == 1:
+        return catalogs[0]
+    root = prepare_outdir if prepare_outdir is not None else catalogs[0].root.parent
+    return Catalog(
+        root=root,
+        manifests=[
+            manifest
+            for catalog in catalogs
+            for manifest in catalog.manifests
+        ],
+        warnings=[
+            warning
+            for catalog in catalogs
+            for warning in catalog.warnings
+        ],
+    )
+
+
+def fit(
+    *catalogs: Catalog,
+    outdir: str | Path | None = None,
+    prepare_outdir: str | Path | None = None,
+    overwrite: bool = True,
+    energy_ranges: Mapping[str, tuple[float, float]] | None = None,
+    **fit_kwargs,
+) -> dict:
+    """Prepare scanned spectrum catalogs and run one XSPEC fit."""
+    from jinwu.core.spectrum_prep import prepare_spectra
+
+    if "group_min" in fit_kwargs:
+        raise TypeError("fit() uses InstrumentConfig.group_min_counts and has no group_min override")
+
+    _validate_fit_catalogs(catalogs)
+    resolved_prepare_outdir = _fit_prepare_outdir(catalogs, prepare_outdir)
+    prepared = prepare_spectra(
+        _fit_catalog_input(catalogs, prepare_outdir=resolved_prepare_outdir),
+        outdir=resolved_prepare_outdir,
+        overwrite=overwrite,
+    )
+    if not prepared.spectra or any(not spectrum.ready for spectrum in prepared.spectra):
+        raise RuntimeError("fit() requires all prepared spectra to be ready")
+
+    prepared_input = prepared.spectra[0] if len(prepared.spectra) == 1 else tuple(prepared.spectra)
+    fit_outdir = Path(outdir).expanduser().resolve() if outdir is not None else prepared.root / "fit"
+    results = fit_prepared(
+        prepared_input,
+        outdir=fit_outdir,
+        energy_ranges=energy_ranges,
+        **fit_kwargs,
+    )
+    results["catalogs"] = tuple(catalogs)
+    results["prepared_catalog"] = prepared
+    results["prepared_spectra"] = tuple(prepared.spectra)
+    results["prepare_root"] = str(prepared.root)
+    return results

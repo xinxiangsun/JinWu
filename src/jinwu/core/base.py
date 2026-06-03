@@ -125,7 +125,6 @@ class RmfBase(OgipResponseBase):
     e_max: Optional[np.ndarray] = None
     columns: Tuple[str, ...] = ()
 
-
 @dataclass(slots=True)
 class PhaBase(OgipSpectrumBase):
     """Pure field-only base dataclass for PHA spectrum data."""
@@ -134,6 +133,7 @@ class PhaBase(OgipSpectrumBase):
 
     channels: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=int))
     counts: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))
+    rate: Optional[np.ndarray] = None
     stat_err: Optional[np.ndarray] = None
     exposure: float = 0.0
     backscal: Optional[float] = None
@@ -143,6 +143,7 @@ class PhaBase(OgipSpectrumBase):
     quality: Optional[np.ndarray] = None
     grouping: Optional[np.ndarray] = None
     ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None
+    raw_spectrum_columns: Optional[Dict[str, np.ndarray]] = None
     columns: Tuple[str, ...] = ()
 
 
@@ -153,6 +154,8 @@ class LightcurveDataBase(OgipTimeSeriesBase):
     kind: ClassVar[Literal['lc']] = 'lc'
 
     time: Optional[np.ndarray] = None
+    time_raw: Optional[np.ndarray] = None
+    time_rel: Optional[np.ndarray] = None
     value: Optional[np.ndarray] = None
 
     timezero: float = 0.0
@@ -200,6 +203,8 @@ class EventDataBase(OgipTimeSeriesBase):
     kind: ClassVar[Literal['evt']] = 'evt'
 
     time: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))
+    time_raw: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))
+    time_rel: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))
     timezero: float = 0.0
     timezero_obj: Optional[Any] = None
     telescop: Optional[str] = None

@@ -14,14 +14,20 @@ jinwu.core.plot
 """
 
 from __future__ import annotations
-
+from PIL import Image
 from typing import Optional, Union, List, Tuple, Any, Callable, cast, Literal
 from pathlib import Path
 import warnings
+import os
 
+import xspec
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
+try:
+        from .time import Time as AstroTime, TimeDelta as AstroTimeDelta
+except Exception:  # pragma: no cover
+        from astropy.time import Time as AstroTime, TimeDelta as AstroTimeDelta
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
@@ -47,7 +53,10 @@ PathLike = Union[str, Path]
 __all__ = [
     "plot_spectrum",
     "plot_lightcurve",
+    "plot_event_txx",
     "plot_ogip",
+    "plotfit",
+    "plot_xspec_origin",
 ]
 
 
@@ -722,6 +731,619 @@ def plot_lightcurve(
     return axes_to_return
 
 
+def plot_event_txx(
+    src: Union[Any, PathLike],
+    txx_result: dict,
+    *,
+    background: Optional[Union[Any, PathLike]] = None,
+    alpha: Optional[float] = None,
+    srcname: Optional[str] = None,
+    title: Optional[str] = None,
+    figsize: Tuple[float, float] = (10.5, 8.2),
+    out: Optional[PathLike] = None,
+    timezero: Optional[Any] = None,
+) -> tuple[Figure, tuple[Axes, Axes]]:
+    """可视化事件 Txx 结果：Source/Background + Bayesian Blocks 风格图。
+
+    参数
+    - src: EventData 或事件文件路径。
+    - txx_result: `ops.txx` 返回字典。
+    - background: 背景 EventData 或路径；若提供则优先使用真实背景事件绘图。
+    - alpha: 背景缩放系数；若缺省，将尝试从结果或数据自动估计。
+    - srcname: 图中显示的源名称（缺省时自动从元信息推断）。
+    - timezero: 时间零点。支持数值秒（与事件时间同标尺）或 astropy.time.Time。
+    - out: 若提供路径则保存图片。
+    """
+
+    evt: Optional[Any] = None
+    if hasattr(src, "kind") and getattr(src, "kind") == "evt":
+        evt = src
+    elif isinstance(src, (str, Path)):
+        obj = readfits(src, kind="evt")  # type: ignore[arg-type]
+        if hasattr(obj, "kind") and getattr(obj, "kind") == "evt":
+            evt = obj
+        else:
+            raise ValueError(f"提供的路径看起来不是 EVT：{src}")
+    else:
+        raise TypeError("plot_event_txx 需要 EventData 或事件文件路径作为输入")
+
+    bkg_evt: Optional[Any] = None
+    if background is not None:
+        if hasattr(background, "kind") and getattr(background, "kind") == "evt":
+            bkg_evt = background
+        elif isinstance(background, (str, Path)):
+            bkg_obj = readfits(background, kind="evt")  # type: ignore[arg-type]
+            if hasattr(bkg_obj, "kind") and getattr(bkg_obj, "kind") == "evt":
+                bkg_evt = bkg_obj
+            else:
+                raise ValueError(f"提供的 background 看起来不是 EVT：{background}")
+        else:
+            raise TypeError("background 需要 EventData 或事件文件路径")
+
+    bb_edges = np.asarray(txx_result.get("bb_edges_time", np.asarray([], dtype=float)), dtype=float).reshape(-1)
+    if bb_edges.size < 2:
+        raise ValueError("txx_result 缺少有效 bb_edges_time，无法绘图")
+
+    def _safe_float_any(val: Any, default: float = np.nan) -> float:
+        try:
+            return float(val)
+        except Exception:
+            return float(default)
+
+    def _event_timezero() -> float:
+        tz_evt = _safe_float_any(getattr(evt, "timezero", np.nan), np.nan)
+        if np.isfinite(tz_evt):
+            return tz_evt
+        meta = getattr(evt, "meta", None)
+        if meta is not None:
+            tz_evt = _safe_float_any(getattr(meta, "timezero", np.nan), np.nan)
+            if np.isfinite(tz_evt):
+                return tz_evt
+        hdr = getattr(evt, "header", None)
+        if isinstance(hdr, dict):
+            tz_evt = _safe_float_any(hdr.get("TIMEZERO", np.nan), np.nan)
+            if np.isfinite(tz_evt):
+                return tz_evt
+        return np.nan
+
+    def _time_scalar(t_in: Any) -> Any:
+        if AstroTime is not None and isinstance(t_in, AstroTime):
+            try:
+                if bool(getattr(t_in, "isscalar", True)):
+                    return t_in
+            except Exception:
+                return t_in
+            try:
+                if len(t_in) == 0:
+                    raise ValueError("timezero 为 Time 数组时不能为空")
+                return t_in[0]
+            except Exception:
+                return t_in
+        return t_in
+
+    evt_tz = _event_timezero()
+    evt_tz_obj = getattr(evt, "timezero_obj", None)
+
+    def _resolve_plot_timezero(value: Any) -> tuple[float, Optional[Any]]:
+        # 默认采用事件 timezero，使横轴与 time_rel 一致。
+        if value is None:
+            if np.isfinite(evt_tz):
+                return float(evt_tz), evt_tz_obj
+            return 0.0, None
+
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            return float(value), None
+
+        if AstroTime is not None and isinstance(value, AstroTime):
+            t0_obj = _time_scalar(value)
+            if (not np.isfinite(evt_tz)) or (evt_tz_obj is None):
+                raise ValueError("传入 astropy.time.Time 作为 timezero 时，事件对象需包含 timezero 与 timezero_obj")
+            dt_sec = float((t0_obj - evt_tz_obj).to_value("sec"))
+            return float(evt_tz + dt_sec), t0_obj
+
+        if AstroTimeDelta is not None and isinstance(value, AstroTimeDelta):
+            if not np.isfinite(evt_tz):
+                raise ValueError("传入 astropy.time.TimeDelta 作为 timezero 时，事件对象需包含可用 timezero")
+            dt_sec = _safe_float_any(value.to_value("sec"), np.nan)
+            if not np.isfinite(dt_sec):
+                raise ValueError("无法将 astropy.time.TimeDelta 转换为秒")
+            return float(evt_tz + dt_sec), evt_tz_obj
+
+        try:
+            return float(value), None
+        except Exception:
+            pass
+
+        if (evt_tz_obj is not None) and np.isfinite(evt_tz):
+            try:
+                dt_obj = value - evt_tz_obj
+                if hasattr(dt_obj, "to_value"):
+                    dt_sec = _safe_float_any(dt_obj.to_value("sec"), np.nan)
+                    if np.isfinite(dt_sec):
+                        return float(evt_tz + dt_sec), value
+                if hasattr(dt_obj, "sec"):
+                    dt_sec = _safe_float_any(dt_obj.sec, np.nan)
+                    if np.isfinite(dt_sec):
+                        return float(evt_tz + dt_sec), value
+            except Exception:
+                pass
+
+        raise TypeError("timezero 仅支持数值秒、astropy.time.Time 或可转换为秒偏移的 Time-like 对象")
+
+    tz_plot_abs, tz_plot_obj = _resolve_plot_timezero(timezero)
+
+    def _axis_label_from_timezero(tz_abs: float, tz_obj: Optional[Any]) -> str:
+        if tz_obj is not None:
+            try:
+                utc_str = None
+                if hasattr(tz_obj, "utc") and hasattr(getattr(tz_obj, "utc"), "isot"):
+                    utc_str = tz_obj.utc.isot
+                elif hasattr(tz_obj, "isot"):
+                    utc_str = tz_obj.isot
+                else:
+                    utc_str = str(tz_obj)
+                return f"Time since {utc_str} (UTC) (s)"
+            except Exception:
+                pass
+        if np.isfinite(tz_abs):
+            return f"Time - {tz_abs:.3f} (s)"
+        return "Time (s)"
+
+    x_label = _axis_label_from_timezero(tz_plot_abs, tz_plot_obj)
+
+    def _to_plot_x(arr: np.ndarray) -> np.ndarray:
+        return np.asarray(arr, dtype=float) - float(tz_plot_abs)
+
+    def _choose_event_time_axis(evt_obj: Any, edges_abs: np.ndarray) -> np.ndarray:
+        cands: list[np.ndarray] = []
+
+        t_raw = np.asarray(getattr(evt_obj, "time", np.asarray([], dtype=float)), dtype=float).reshape(-1)
+        if t_raw.size > 0:
+            t_raw = t_raw[np.isfinite(t_raw)]
+            if t_raw.size > 0:
+                cands.append(t_raw)
+
+        t_rel = np.asarray(getattr(evt_obj, "time_rel", np.asarray([], dtype=float)), dtype=float).reshape(-1)
+        tz_val = getattr(evt_obj, "timezero", None)
+        try:
+            tz = float(tz_val) if tz_val is not None else np.nan
+        except Exception:
+            tz = np.nan
+        if t_rel.size > 0 and np.isfinite(tz):
+            t_rel = t_rel[np.isfinite(t_rel)]
+            if t_rel.size > 0:
+                cands.append(t_rel + tz)
+
+        abs_attr = getattr(evt_obj, "absolute_time", None)
+        if abs_attr is not None:
+            try:
+                t_abs = np.asarray(abs_attr, dtype=float).reshape(-1)
+                t_abs = t_abs[np.isfinite(t_abs)]
+                if t_abs.size > 0:
+                    cands.append(t_abs)
+            except Exception:
+                pass
+
+        if not cands:
+            return np.asarray([], dtype=float)
+
+        lo = float(edges_abs[0])
+        hi = float(edges_abs[-1])
+        best = cands[0]
+        best_in = int(np.sum((best >= lo) & (best <= hi)))
+        for c in cands[1:]:
+            n_in = int(np.sum((c >= lo) & (c <= hi)))
+            if n_in > best_in:
+                best = c
+                best_in = n_in
+        return best
+
+    evt_time = _choose_event_time_axis(evt, bb_edges)
+    if evt_time.size == 0:
+        raise ValueError("事件数据 time 为空，无法绘制 Txx 结果")
+
+    def _fit_len(arr_in: Any, n: int, fill: float = 0.0) -> np.ndarray:
+        arr = np.asarray(arr_in, dtype=float).reshape(-1)
+        if arr.size == n:
+            return arr
+        if arr.size > n:
+            return arr[:n]
+        out_arr = np.full(n, fill, dtype=float)
+        if arr.size > 0:
+            out_arr[:arr.size] = arr
+        return out_arr
+
+    # 贝叶斯分块计数与模型背景计数（用于分块标注/SNR 与背景率估计）。
+    src_hist_bb, _ = np.histogram(evt_time, bins=bb_edges)
+    n_bb = max(bb_edges.size - 1, 0)
+    bkg_model_bb = _fit_len(txx_result.get("bb_block_bkg_model_counts", np.zeros(n_bb)), n_bb, fill=0.0)
+    bb_width = np.maximum(np.diff(bb_edges), 1e-12)
+    bb_center = 0.5 * (bb_edges[:-1] + bb_edges[1:])
+    bb_bkg_rate = bkg_model_bb / bb_width
+
+    def _estimate_bkg_counts_from_bb(edges_target: np.ndarray) -> np.ndarray:
+        out = np.zeros(max(edges_target.size - 1, 0), dtype=float)
+        if out.size == 0:
+            return out
+        l_bb = bb_edges[:-1]
+        r_bb = bb_edges[1:]
+        for i_bin, (a, b) in enumerate(zip(edges_target[:-1], edges_target[1:])):
+            overlap = np.minimum(float(b), r_bb) - np.maximum(float(a), l_bb)
+            overlap = np.maximum(overlap, 0.0)
+            out[i_bin] = float(np.sum(overlap * bb_bkg_rate))
+        return out
+
+    def _infer_lc_binsize() -> float:
+        v = txx_result.get("evt_binsize", np.nan)
+        try:
+            bs = float(v)
+            if np.isfinite(bs) and bs > 0.0:
+                return bs
+        except Exception:
+            pass
+
+        e_cum = np.asarray(txx_result.get("cumulative_edges_time", np.asarray([], dtype=float)), dtype=float).reshape(-1)
+        if e_cum.size >= 3:
+            d = np.diff(e_cum)
+            d = d[np.isfinite(d) & (d > 0.0)]
+            if d.size > 0:
+                med = float(np.median(d))
+                if med > 0.0:
+                    rel = float(np.std(d) / max(med, 1e-12))
+                    if rel < 0.05:
+                        return med
+        return np.nan
+
+    # 原始光变：优先使用固定 binsize 还原全时段 light curve。
+    bs_lc = _infer_lc_binsize()
+    if np.isfinite(bs_lc) and bs_lc > 0.0:
+        lc_edges = np.arange(float(bb_edges[0]), float(bb_edges[-1]) + bs_lc, bs_lc, dtype=float)
+        if lc_edges.size < 2:
+            lc_edges = np.asarray([float(bb_edges[0]), float(bb_edges[-1])], dtype=float)
+        elif lc_edges[-1] < float(bb_edges[-1]):
+            lc_edges = np.append(lc_edges, float(bb_edges[-1]))
+    else:
+        lc_edges = np.asarray(bb_edges, dtype=float)
+
+    src_hist_lc, _ = np.histogram(evt_time, bins=lc_edges)
+    n_lc = max(lc_edges.size - 1, 0)
+
+    bkg_model_lc_raw = np.asarray(txx_result.get("background_model_counts", np.asarray([], dtype=float)), dtype=float).reshape(-1)
+    if bkg_model_lc_raw.size == n_lc:
+        bkg_model_lc = bkg_model_lc_raw
+    else:
+        bkg_model_lc = _estimate_bkg_counts_from_bb(lc_edges)
+
+    bkg_hist_lc_raw = np.zeros(n_lc, dtype=float)
+    has_real_bkg = False
+    if bkg_evt is not None:
+        bkg_evt_time = _choose_event_time_axis(bkg_evt, bb_edges)
+        if bkg_evt_time.size > 0:
+            bkg_hist_lc_raw, _ = np.histogram(bkg_evt_time, bins=lc_edges)
+            has_real_bkg = True
+
+    alpha_eff = _safe_float_any(alpha, np.nan)
+    if (not np.isfinite(alpha_eff)) or (alpha_eff < 0.0):
+        alpha_eff = _safe_float_any(txx_result.get("alpha", np.nan), np.nan)
+    if (not np.isfinite(alpha_eff)) or (alpha_eff < 0.0):
+        sum_bkg_raw = float(np.sum(np.maximum(bkg_hist_lc_raw, 0.0))) if has_real_bkg else 0.0
+        sum_bkg_model = float(np.sum(np.maximum(bkg_model_lc, 0.0)))
+        if sum_bkg_raw > 0.0 and sum_bkg_model > 0.0:
+            alpha_eff = sum_bkg_model / sum_bkg_raw
+
+    if has_real_bkg:
+        if np.isfinite(alpha_eff) and alpha_eff >= 0.0:
+            bkg_counts_lc = bkg_hist_lc_raw.astype(float) * float(alpha_eff)
+            bkg_err_counts_lc = np.sqrt(np.maximum(bkg_hist_lc_raw.astype(float), 0.0)) * float(alpha_eff)
+            bkg_var_for_net = (float(alpha_eff) ** 2) * np.maximum(bkg_hist_lc_raw.astype(float), 0.0)
+            bkg_label_top = f"Scaled background (α={alpha_eff:.4f})"
+        else:
+            bkg_counts_lc = bkg_hist_lc_raw.astype(float)
+            bkg_err_counts_lc = np.sqrt(np.maximum(bkg_hist_lc_raw.astype(float), 0.0))
+            bkg_var_for_net = np.maximum(bkg_hist_lc_raw.astype(float), 0.0)
+            bkg_label_top = "Background (unscaled)"
+    else:
+        bkg_counts_lc = bkg_model_lc.astype(float)
+        bkg_err_counts_lc = np.sqrt(np.maximum(bkg_model_lc.astype(float), 0.0))
+        bkg_var_for_net = np.maximum(bkg_model_lc.astype(float), 0.0)
+        bkg_label_top = "Scaled background (model)"
+
+    lc_width = np.maximum(np.diff(lc_edges), 1e-12)
+    lc_center = 0.5 * (lc_edges[:-1] + lc_edges[1:])
+
+    src_err_counts_lc = np.sqrt(np.maximum(src_hist_lc.astype(float), 0.0))
+
+    src_rate_lc = src_hist_lc.astype(float) / lc_width
+    src_err_rate_lc = src_err_counts_lc / lc_width
+    net_rate_lc = (src_hist_lc.astype(float) - bkg_counts_lc) / lc_width
+    net_err_rate_lc = np.sqrt(np.maximum(src_hist_lc.astype(float), 0.0) + bkg_var_for_net) / lc_width
+
+    def _safe_float(key: str, default: float = np.nan) -> float:
+        val = txx_result.get(key, default)
+        try:
+            return float(val)
+        except Exception:
+            return float(default)
+
+    t100_start = _safe_float("t100_tstart", bb_edges[0])
+    t100_stop = _safe_float("t100_tstop", bb_edges[-1])
+    t90_start = _safe_float("t90_tstart")
+    t90_stop = _safe_float("t90_tstop")
+    t90_val = _safe_float("t90")
+
+    t90_err_raw = np.asarray(txx_result.get("t90_err", np.asarray([], dtype=float)), dtype=float).reshape(-1)
+    if t90_err_raw.size >= 2 and np.all(np.isfinite(t90_err_raw[:2])):
+        t90_err_lo = float(abs(t90_err_raw[0]))
+        t90_err_hi = float(abs(t90_err_raw[1]))
+    elif t90_err_raw.size == 1 and np.isfinite(t90_err_raw[0]):
+        t90_err_lo = float(abs(t90_err_raw[0]))
+        t90_err_hi = float(abs(t90_err_raw[0]))
+    else:
+        t90_err_lo = np.nan
+        t90_err_hi = np.nan
+
+    if np.isfinite(t90_val):
+        if np.isfinite(t90_err_lo) and np.isfinite(t90_err_hi):
+            t90_text = f"{t90_val:.1f} (-{t90_err_lo:.1f}/+{t90_err_hi:.1f}) s"
+        else:
+            t90_text = f"{t90_val:.1f} s"
+    else:
+        t90_text = "N/A"
+
+    snr_arr = _fit_len(txx_result.get("bb_block_snr", np.zeros(n_bb)), n_bb, fill=np.nan)
+    snr_thr = _safe_float("bb_snr_threshold")
+
+    if srcname is None:
+        srcname = None
+        meta = getattr(evt, "meta", None)
+        if meta is not None and getattr(meta, "object", None):
+            srcname = str(meta.object)
+        if srcname is None:
+            hdr = getattr(evt, "header", None)
+            if isinstance(hdr, dict):
+                obj_name = hdr.get("OBJECT")
+                if obj_name:
+                    srcname = str(obj_name)
+        if srcname is None:
+            evt_path = getattr(evt, "path", "")
+            srcname = Path(str(evt_path)).stem if str(evt_path) else "Unknown source"
+
+    x_bb_edges = _to_plot_x(bb_edges)
+    x_lc_edges = _to_plot_x(lc_edges)
+    x_lc_center = _to_plot_x(lc_center)
+    x_t100_start = _safe_float_any(t100_start - tz_plot_abs)
+    x_t100_stop = _safe_float_any(t100_stop - tz_plot_abs)
+    x_t90_start = _safe_float_any(t90_start - tz_plot_abs)
+    x_t90_stop = _safe_float_any(t90_stop - tz_plot_abs)
+
+    fig, (ax_top, ax_mid, ax_blocks) = plt.subplots(
+        3,
+        1,
+        figsize=figsize,
+        sharex=True,
+        constrained_layout=True,
+        gridspec_kw={"height_ratios": [2.25, 2.1, 0.72]},
+    )
+
+    err_src_color = "#2f6ea6"
+    err_bkg_color = "#6f6f6f"
+    err_net_color = "#d95f5f"
+
+    # 上面板：原始 Source vs Background（柱状 + 误差）
+    ax_top.bar(x_lc_center, src_hist_lc.astype(float), width=lc_width * 0.82, alpha=0.72, label="Source counts (real events)", color="steelblue")
+    ax_top.bar(x_lc_center, bkg_counts_lc, width=lc_width * 0.82, alpha=0.50, label=bkg_label_top, color="gray")
+    ax_top.errorbar(
+        x_lc_center,
+        src_hist_lc.astype(float),
+        yerr=src_err_counts_lc,
+        fmt="none",
+        ecolor=err_src_color,
+        elinewidth=1.0,
+        capsize=1.5,
+        alpha=0.75,
+    )
+    ax_top.errorbar(
+        x_lc_center,
+        bkg_counts_lc,
+        yerr=bkg_err_counts_lc,
+        fmt="none",
+        ecolor=err_bkg_color,
+        elinewidth=1.0,
+        capsize=1.5,
+        alpha=0.72,
+    )
+    ax_top.set_ylabel("Counts")
+    if title is not None:
+        top_title = str(title)
+    else:
+        top_title = f"{srcname} Duration Diagnostic" if srcname is not None else "Duration Diagnostic"
+    ax_top.set_title(top_title)
+    ax_top.legend(loc="upper right")
+    ax_top.grid(alpha=0.3)
+
+    if np.isfinite(bs_lc) and bs_lc > 0.0:
+        binsize_text = f"Bin size: {bs_lc:.3f} s"
+    else:
+        binsize_text = "Bin size: adaptive"
+
+    info_lines = [
+        f"Source: {srcname}",
+        f"Burst window: [{x_t100_start:.3f}, {x_t100_stop:.3f}] s",
+        binsize_text,
+    ]
+    if np.isfinite(t90_val):
+        info_lines.append(f"T90: {t90_text}")
+    ax_top.text(
+        0.01,
+        0.98,
+        "\n".join(info_lines),
+        transform=ax_top.transAxes,
+        va="top",
+        ha="left",
+        fontsize=9,
+        bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.9),
+    )
+
+    # 中间面板：原始 step 光变 + 误差 + 分块/SNR + T0/T100/T90
+    if src_rate_lc.size > 0:
+        ax_mid.step(x_lc_edges[:-1], src_rate_lc, where="post", color="steelblue", linewidth=1.1, label="Source rate")
+        ax_mid.hlines(src_rate_lc[-1], x_lc_edges[-2], x_lc_edges[-1], colors="steelblue", linewidth=1.1)
+        ax_mid.fill_between(x_lc_edges[:-1], 0.0, src_rate_lc, step="post", alpha=0.28, color="steelblue")
+    ax_mid.errorbar(
+        x_lc_center,
+        src_rate_lc,
+        yerr=src_err_rate_lc,
+        fmt="none",
+        ecolor=err_src_color,
+        elinewidth=0.95,
+        capsize=1.5,
+        alpha=0.76,
+    )
+    ax_mid.errorbar(
+        x_lc_center,
+        net_rate_lc,
+        yerr=net_err_rate_lc,
+        fmt="none",
+        ecolor=err_net_color,
+        elinewidth=0.95,
+        capsize=1.5,
+        alpha=0.74,
+    )
+
+    for e in x_bb_edges:
+        ax_mid.axvline(float(e), color="green", linestyle="-", linewidth=1.0, alpha=0.45, label="_nolegend_")
+
+    sig_mask = np.isfinite(snr_arr) & np.isfinite(snr_thr) & (snr_arr > snr_thr)
+    for i in range(n_bb):
+        if sig_mask[i]:
+            ax_mid.axvspan(float(x_bb_edges[i]), float(x_bb_edges[i + 1]), alpha=0.25, color="yellow", label="_nolegend_")
+
+    if np.isfinite(x_t100_start):
+        ax_mid.axvline(x_t100_start, color="blue", linestyle="--", linewidth=2.0, label=f"T100 start: {x_t100_start:.1f}s")
+    if np.isfinite(x_t100_stop):
+        ax_mid.axvline(x_t100_stop, color="blue", linestyle="--", linewidth=2.0, label=f"T100 end: {x_t100_stop:.1f}s")
+    if np.isfinite(x_t90_start) and np.isfinite(x_t90_stop) and (x_t90_stop > x_t90_start):
+        if np.isfinite(t90_val):
+            lab_t90 = f"T90 interval: {t90_text}"
+        else:
+            lab_t90 = "T90 interval"
+        ax_mid.axvspan(x_t90_start, x_t90_stop, alpha=0.20, color="orange", label=lab_t90)
+
+    title_bottom = "Light Curve with Bayesian Blocks and Duration"
+    ax_mid.set_ylabel("Rate (counts/s)")
+    ax_mid.set_title(title_bottom)
+    ax_mid.grid(True, alpha=0.3)
+
+    h_b, l_b = ax_mid.get_legend_handles_labels()
+    if h_b:
+        seen = set()
+        h_show = []
+        l_show = []
+        for h, l in zip(h_b, l_b):
+            if l == "_nolegend_" or l in seen:
+                continue
+            seen.add(l)
+            h_show.append(h)
+            l_show.append(l)
+        if h_show:
+            ax_mid.legend(h_show, l_show, loc="upper right", fontsize=9)
+
+    # 下面板：贝叶斯分块区间色带（独立子图）
+    sig_label_added = False
+    other_label_added = False
+    x_span = max(float(x_bb_edges[-1] - x_bb_edges[0]), 1e-9)
+    for i in range(n_bb):
+        is_sig = bool(sig_mask[i]) if i < sig_mask.size else False
+        if is_sig:
+            block_color = "#f4a261"
+            label = f"Significant blocks (Li-Ma > {snr_thr:.1f}σ)" if (np.isfinite(snr_thr) and not sig_label_added) else "_nolegend_"
+            sig_label_added = sig_label_added or np.isfinite(snr_thr)
+            edge_col = "#aa5f1d"
+            hatch_pat = "///"
+        else:
+            block_color = "#8fb9dd" if (i % 2 == 0) else "#bfd9ee"
+            label = "Non-significant Bayesian blocks" if not other_label_added else "_nolegend_"
+            other_label_added = True
+            edge_col = "#2c5374"
+            hatch_pat = None
+        ax_blocks.axvspan(
+            float(x_bb_edges[i]),
+            float(x_bb_edges[i + 1]),
+            ymin=0.08,
+            ymax=0.92,
+            facecolor=block_color,
+            alpha=0.94,
+            edgecolor=edge_col,
+            linewidth=1.2,
+            hatch=hatch_pat,
+            label=label,
+        )
+
+        x_left = float(x_bb_edges[i])
+        x_right = float(x_bb_edges[i + 1])
+        x_mid = 0.5 * (x_left + x_right)
+        block_w = max(x_right - x_left, 0.0)
+        snr_txt = f"{snr_arr[i]:.1f}σ" if (i < snr_arr.size and np.isfinite(snr_arr[i])) else "--"
+        txt = f"B{i+1}\n{snr_txt}"
+        rotate_txt = 90 if (block_w < 0.06 * x_span) else 0
+        ax_blocks.text(
+            x_mid,
+            0.5,
+            txt,
+            ha="center",
+            va="center",
+            fontsize=7,
+            color=("#7a2e00" if is_sig else "#16324a"),
+            rotation=rotate_txt,
+            alpha=0.95,
+            fontweight=("bold" if is_sig else "normal"),
+            clip_on=True,
+            zorder=5,
+        )
+
+    for e in x_bb_edges:
+        ax_blocks.axvline(float(e), color="#1f2937", linewidth=1.0, alpha=0.68, label="_nolegend_")
+
+    if np.isfinite(x_t100_start):
+        ax_blocks.axvline(x_t100_start, color="blue", linestyle="--", linewidth=1.6, alpha=0.9, label="_nolegend_")
+    if np.isfinite(x_t100_stop):
+        ax_blocks.axvline(x_t100_stop, color="blue", linestyle="--", linewidth=1.6, alpha=0.9, label="_nolegend_")
+    if np.isfinite(x_t90_start) and np.isfinite(x_t90_stop) and (x_t90_stop > x_t90_start):
+        ax_blocks.axvspan(x_t90_start, x_t90_stop, ymin=0.0, ymax=1.0, color="orange", alpha=0.16, label="_nolegend_")
+
+    ax_blocks.set_ylim(0.0, 1.0)
+    ax_blocks.set_yticks([])
+    ax_blocks.set_ylabel("BB")
+    ax_blocks.set_title("Bayesian Block Significance (Li-Ma)")
+    ax_blocks.grid(axis="x", alpha=0.25, linestyle="--")
+    ax_blocks.set_xlabel(x_label)
+
+    h_blk, l_blk = ax_blocks.get_legend_handles_labels()
+    if h_blk:
+        seen_blk = set()
+        h_show_blk = []
+        l_show_blk = []
+        for h, l in zip(h_blk, l_blk):
+            if l == "_nolegend_" or l in seen_blk:
+                continue
+            seen_blk.add(l)
+            h_show_blk.append(h)
+            l_show_blk.append(l)
+        if h_show_blk:
+            ax_blocks.legend(h_show_blk, l_show_blk, loc="upper right", fontsize=8)
+
+    if x_lc_edges.size >= 2:
+        x_lo = float(x_lc_edges[0])
+        x_hi = float(x_lc_edges[-1])
+        ax_mid.set_xlim(x_lo, x_hi)
+        ax_blocks.set_xlim(x_lo, x_hi)
+
+    if out is not None:
+        fig.savefig(str(out), dpi=150, bbox_inches="tight")
+
+    return fig, (ax_top, ax_mid)
+
+
 # ----------------------------
 # 统一路由：自动判断类型并绘制
 # ----------------------------
@@ -762,3 +1384,396 @@ def plot_ogip(
             return plot_spectrum(obj, **kwargs)
         return plot_lightcurve(obj, **kwargs)
     raise TypeError("plot_ogip 仅接受 PhaData/LightcurveData/路径/HDUList")
+
+
+
+
+
+
+
+def plot_xspec_origin(
+    plottype: str,srcname: str,
+    group_min: int,redshift: float,
+    modelname:str,instname:str, 
+    outputdir: Optional[Path],
+    output_format: str = "png",
+    device: str = "cps",
+    density: int = 300,
+    xlog: bool = True,
+    ylog: bool = True,
+    **kwargs
+) -> Optional[Path]:
+    """
+    使用自定义命令进行 XSPEC 绘图
+    
+    参数:
+        plottype: 绘图类型
+        output_path: 输出路径
+        output_format: 输出格式
+        device: XSPEC 设备
+        density: 转换分辨率
+        xlog, ylog: 对数坐标
+        **kwargs: 其他 PLT 命令 (如 title="xxx", xlabel="xxx" 等)
+        
+    返回:
+        输出文件路径
+    """
+    
+    
+    now_dir = Path.cwd()
+    
+    if outputdir is None:
+        outputdir = now_dir
+    else:
+        pass
+    os.chdir(outputdir)
+    # 构建 PS 文件路径
+    if redshift is not None:
+        if redshift != 0:
+            redshiftstr = 'True'
+        else:
+            redshiftstr = 'False'
+        ps_file = str(f"{srcname}_{instname}_{plottype}_{modelname}_redshift{redshiftstr}_groupmin{group_min}.ps")
+    else:
+        ps_file = str(f"{srcname}_{instname}_{plottype}_{modelname}_redshiftUnknown_groupmin{group_min}.ps")
+    xspec.Plot.device = f"{ps_file}/{device}"
+    
+    # 设置绘图参数
+    xspec.Plot.xAxis = "keV"
+    xspec.Plot.xLog = xlog
+    xspec.Plot.yLog = ylog
+    
+    # 构建自定义命令
+    commands = []
+    for key, value in kwargs.items():
+        if value is not None:
+            if key == "title":
+                commands.append(f'title "{value}"')
+            elif key == "xlabel":
+                commands.append(f'xlabel "{value}"')
+            elif key == "ylabel":
+                commands.append(f'ylabel "{value}"')
+            elif key == "label":
+                commands.append(value)  # 完整 label 命令
+    
+    if commands:
+        xspec.Plot.commands = tuple(commands)
+    
+    # 绘图
+    try:
+        xspec.Plot(plottype)
+    except Exception as e:
+        print(f"绘图失败: {e}")
+        return None
+    
+    # 转换格式
+    if output_format != "ps":
+        try:
+            output_file = _convert_ps(ps_file, output_format, density)
+
+            return output_file
+        except Exception as e:
+            raise RuntimeError(f"转换失败: {e}")
+    else:
+        return Path(ps_file)
+    
+
+    
+
+
+def _convert_ps(ps_file: str, output_format: str, density: int = 300) -> Path:
+    """使用 Pillow 转换 PS 文件"""
+
+    
+    ps_path = Path(ps_file)
+    output_file = ps_path.with_suffix(f".{output_format}")
+    
+    # 使用 Pillow 打开 PS 文件 (需要先通过 Ghostscript 转为 PDF/PNG)
+    # Pillow 依赖 ghostscript 来处理 PS/eps 文件
+    try:
+        # 方法 1: 直接用 Pillow 打开 (需要 ghostscript)
+        img = Image.open(ps_file)
+        
+        # 根据输出格式设置质量
+        if output_format.lower() in ['jpg', 'jpeg']:
+            img.save(output_file, "JPEG", quality=95)
+        elif output_format.lower() == 'png':
+            img.save(output_file, "PNG")
+        elif output_format.lower() == 'gif':
+            img.save(output_file, "GIF")
+        else:
+            img.save(output_file)
+        
+        return output_file
+    except Exception as e:
+        # 方法 2: 如果 Pillow 失败，尝试用 ghostscript 直接转换
+        raise RuntimeError(f"Pillow 转换失败: {e}")
+
+
+def _safe_xspec_plot_command(xspec_module, command: str) -> None:
+    try:
+        xspec_module.Plot(command)
+    except Exception:
+        if command != "eeufspec":
+            raise
+        xspec_module.Plot("eeuf")
+
+
+def _xspec_plot_groups(xspec_module) -> int:
+    try:
+        return max(1, int(xspec_module.AllData.nSpectra))
+    except Exception:
+        return 1
+
+
+def _xspec_plot_arrays(xspec_module, command: str, *, model: bool) -> list[dict[str, np.ndarray]]:
+    _safe_xspec_plot_command(xspec_module, command)
+    arrays = []
+    for group in range(1, _xspec_plot_groups(xspec_module) + 1):
+        item = {
+            "x": np.asarray(xspec_module.Plot.x(group), dtype=float),
+            "y": np.asarray(xspec_module.Plot.y(group), dtype=float),
+            "xerr": np.asarray(xspec_module.Plot.xErr(group), dtype=float),
+            "yerr": np.asarray(xspec_module.Plot.yErr(group), dtype=float),
+        }
+        if model:
+            try:
+                item["model"] = np.asarray(xspec_module.Plot.model(group), dtype=float)
+            except Exception:
+                item["model"] = np.asarray([], dtype=float)
+        arrays.append(item)
+    return arrays
+
+
+def _same_length_mask(*arrays: np.ndarray) -> np.ndarray:
+    if not arrays:
+        return np.asarray([], dtype=bool)
+    size = min(array.size for array in arrays)
+    if size == 0:
+        return np.asarray([], dtype=bool)
+    return np.ones(size, dtype=bool)
+
+
+def plotfit(
+    srcname: str,
+    instname: str,
+    group_min: int,
+    modelname: str,
+    redshift: float = 0.0,
+    plottype: str = "ldata_eeufspec_delchi",
+    outputdir: Optional[Path | str] = None,
+    backend: str = "matplotlib",
+    output_format: str = "png",
+    density: int = 300,
+    **kwargs
+) -> Tuple[Optional[Path], Optional[Figure]]:
+    """
+    XSPEC 光谱拟合结果绘图
+
+    参数:
+        srcname: 源名称
+        instname: 仪器名称
+        group_min: 分组最小计数
+        modelname: 模型名称
+        redshift: 红移（默认0.0）
+        plottype: 保留兼容参数；matplotlib 输出固定为 ldata + eeufspec + delchi 三联图
+        outputdir: 输出目录（默认当前目录）
+        backend: 绘图后端，'matplotlib'或'xspec'
+        output_format: 输出格式，'png'、'jpg'等
+        density: 输出分辨率（默认300）
+        **kwargs: 其他绘图参数
+
+    返回:
+        (输出文件路径, matplotlib Figure对象)
+
+    示例:
+        >>> path, fig = plotfit(
+        ...     srcname="WXT_test",
+        ...     instname="WXT",
+        ...     group_min=1,
+        ...     modelname="tbabs*ztbabs*cflux*powerlaw",
+        ...     redshift=5.47,
+        ...     outputdir="output"
+        ... )
+    """
+    import xspec
+
+    if outputdir is None:
+        outputdir = Path.cwd()
+    else:
+        outputdir = Path(outputdir)
+
+    outputdir.mkdir(parents=True, exist_ok=True)
+
+    redshiftstr = "True" if redshift and redshift != 0 else "False"
+    plot_tag = "ldata_eeufspec_delchi"
+    ps_file = outputdir / f"{srcname}_{instname}_{plot_tag}_{modelname}_redshift{redshiftstr}_groupmin{group_min}.ps"
+
+    if backend == "xspec":
+        xspec.Plot.device = f"{ps_file}/cps"
+        xspec.Plot.xAxis = "keV"
+        xspec.Plot.xLog = True
+        xspec.Plot.yLog = True
+
+        commands = []
+        if kwargs.get("title"):
+            commands.append(f'title "{kwargs["title"]}"')
+        if kwargs.get("xlabel"):
+            commands.append(f'xlabel "{kwargs["xlabel"]}"')
+        if kwargs.get("ylabel"):
+            commands.append(f'ylabel "{kwargs["ylabel"]}"')
+        if kwargs.get("label"):
+            commands.append(kwargs["label"])
+
+        if commands:
+            xspec.Plot.commands = tuple(commands)
+
+        try:
+            xspec.Plot("ldata", "eeufspec", "delchi")
+        except Exception:
+            xspec.Plot("ldata", "eeuf", "delchi")
+
+        if output_format != "ps":
+            try:
+                img = Image.open(str(ps_file))
+                output_file = ps_file.with_suffix(f".{output_format}")
+                if output_format.lower() in ["jpg", "jpeg"]:
+                    img.save(output_file, "JPEG", quality=95)
+                else:
+                    img.save(output_file, output_format.upper())
+                return output_file, None
+            except Exception as e:
+                raise RuntimeError(f"XSPEC绘图转换失败: {e}")
+
+        return ps_file, None
+
+    fig = plt.figure(figsize=(12, 10))
+    grid = fig.add_gridspec(3, 1, height_ratios=(3, 3, 2), hspace=0.12)
+    ax_ldata = fig.add_subplot(grid[0])
+    ax_eeuf = fig.add_subplot(grid[1], sharex=ax_ldata)
+    ax_delchi = fig.add_subplot(grid[2], sharex=ax_ldata)
+
+    xspec.Plot.device = "/null"
+    xspec.Plot.xAxis = "keV"
+    xspec.Plot.xLog = True
+    xspec.Plot.yLog = True
+    ldata = _xspec_plot_arrays(xspec, "ldata", model=True)
+    eeuf = _xspec_plot_arrays(xspec, "eeufspec", model=True)
+    delchi = _xspec_plot_arrays(xspec, "delchi", model=False)
+    n_groups = max(len(ldata), len(eeuf), len(delchi))
+
+    def plot_data_model(ax, groups, *, positive_y: bool) -> None:
+        for index, item in enumerate(groups, start=1):
+            x_vals = item["x"]
+            y_vals = item["y"]
+            x_errs = item["xerr"]
+            y_errs = item["yerr"]
+            model_y = item.get("model", np.asarray([], dtype=float))
+            mask = _same_length_mask(x_vals, y_vals, x_errs, y_errs, model_y)
+            size = mask.size
+            if size == 0:
+                continue
+            mask &= (
+                np.isfinite(x_vals[:size])
+                & np.isfinite(y_vals[:size])
+                & np.isfinite(x_errs[:size])
+                & np.isfinite(y_errs[:size])
+                & np.isfinite(model_y[:size])
+                & (x_vals[:size] > 0)
+            )
+            if positive_y:
+                mask &= (y_vals[:size] > 0) & (model_y[:size] > 0)
+            if not np.any(mask):
+                continue
+            data_label = f"Data {index}" if n_groups > 1 else "Data"
+            model_label = f"Model {index}" if n_groups > 1 else "Model"
+            line = ax.errorbar(
+                x_vals[:size][mask],
+                y_vals[:size][mask],
+                xerr=x_errs[:size][mask],
+                yerr=y_errs[:size][mask],
+                fmt="o",
+                markersize=5,
+                capsize=3,
+                elinewidth=1,
+                label=data_label,
+            )
+            ax.plot(
+                x_vals[:size][mask],
+                model_y[:size][mask],
+                linewidth=2,
+                color=line[0].get_color(),
+                label=model_label,
+            )
+
+    plot_data_model(ax_ldata, ldata, positive_y=True)
+    plot_data_model(ax_eeuf, eeuf, positive_y=True)
+    for index, item in enumerate(delchi, start=1):
+        x_vals = item["x"]
+        y_vals = item["y"]
+        x_errs = item["xerr"]
+        y_errs = item["yerr"]
+        mask = _same_length_mask(x_vals, y_vals, x_errs, y_errs)
+        size = mask.size
+        if size == 0:
+            continue
+        mask &= (
+            np.isfinite(x_vals[:size])
+            & np.isfinite(y_vals[:size])
+            & np.isfinite(x_errs[:size])
+            & np.isfinite(y_errs[:size])
+            & (x_vals[:size] > 0)
+        )
+        if np.any(mask):
+            label = f"Data {index}" if n_groups > 1 else None
+            ax_delchi.errorbar(
+                x_vals[:size][mask],
+                y_vals[:size][mask],
+                xerr=x_errs[:size][mask],
+                yerr=y_errs[:size][mask],
+                fmt="o",
+                markersize=5,
+                capsize=3,
+                elinewidth=1,
+                label=label,
+            )
+
+    title = kwargs.get("title")
+    if title is None:
+        title = f"{srcname} {instname}: {modelname}"
+        if redshift:
+            title += f" (z={redshift})"
+        try:
+            title += f"\ngroup min {group_min} {xspec.Fit.statMethod}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof}"
+        except Exception:
+            title += f"\ngroup min {group_min}"
+    ax_ldata.set_title(title)
+    ax_ldata.set_xscale("log")
+    ax_ldata.set_yscale("log")
+    ax_ldata.set_ylabel(r"ldata [ct s$^{-1}$ keV$^{-1}$]")
+    ax_ldata.grid(True, alpha=0.3)
+    ax_ldata.tick_params(labelbottom=False)
+    ax_ldata.legend(loc="best", fontsize=10)
+
+    ax_eeuf.set_xscale("log")
+    ax_eeuf.set_yscale("log")
+    ax_eeuf.set_ylabel(r"E$^2$N(E) [keV cm$^{-2}$ s$^{-1}$]")
+    ax_eeuf.grid(True, alpha=0.3)
+    ax_eeuf.tick_params(labelbottom=False)
+    ax_eeuf.legend(loc="best", fontsize=10)
+
+    ax_delchi.axhline(0, color="red", linestyle="--", linewidth=1.5)
+    ax_delchi.axhline(3, color="gray", linestyle=":", linewidth=1)
+    ax_delchi.axhline(-3, color="gray", linestyle=":", linewidth=1)
+    ax_delchi.set_xscale("log")
+    ax_delchi.set_xlabel("Energy (keV)")
+    ax_delchi.set_ylabel("(Data-Model)/Error")
+    ax_delchi.grid(True, alpha=0.3)
+    if n_groups > 1:
+        ax_delchi.legend(loc="best", fontsize=10)
+
+    output_file = None
+    if output_format:
+        output_file = outputdir / f"{srcname}_{instname}_{plot_tag}_{modelname}_redshift{redshiftstr}_groupmin{group_min}.{output_format}"
+        fig.savefig(output_file, dpi=density, bbox_inches="tight")
+    return output_file, fig

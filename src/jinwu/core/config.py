@@ -1,191 +1,213 @@
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
-from typing import Dict, Type, Optional, Tuple, List, Literal
-from astropy.units import Quantity
-_INSTRUMENT_REGISTRY: Dict[str, Type['InstrumentConfig']] = {}
+from __future__ import annotations
 
-def register_instrument(cls):
-    """装饰器：自动注册仪器"""
-    _INSTRUMENT_REGISTRY[cls.__name__] = cls
+from dataclasses import dataclass
+from typing import Any, ClassVar
+
+__all__ = [
+    "InstrumentConfig",
+    "register_instrument",
+    "instrument",
+    "FXT",
+    "WXT",
+    "BAT",
+    "GBM",
+    "UVOT",
+]
+
+
+_INSTRUMENT_REGISTRY: dict[str, type["InstrumentConfig"]] = {}
+
+
+def _registry_key(name: str) -> str:
+    return name.strip().upper().replace("-", "_").replace("/", "_")
+
+
+def register_instrument(cls: type["InstrumentConfig"]) -> type["InstrumentConfig"]:
+    """Register an instrument config class by class name and aliases."""
+    _INSTRUMENT_REGISTRY[_registry_key(cls.__name__)] = cls
+    for alias in getattr(cls, "aliases", ()):
+        _INSTRUMENT_REGISTRY[_registry_key(alias)] = cls
     return cls
 
-def instrument(name: str, **kwargs) -> 'InstrumentConfig':
-    """获取仪器实例"""
-    if name not in _INSTRUMENT_REGISTRY:
-        raise ValueError(
-            f"Unknown instrument: {name}\n"
-            f"Available: {list(_INSTRUMENT_REGISTRY.keys())}"
-        )
-    return _INSTRUMENT_REGISTRY[name](**kwargs)
 
-@dataclass
-class InstrumentConfig(ABC):
-    """仪器基类"""
-    
-    # ============ 基本信息 ============
+def instrument(name: str, **kwargs: Any) -> "InstrumentConfig":
+    """Build a registered instrument configuration."""
+    key = _registry_key(name)
+    if key not in _INSTRUMENT_REGISTRY:
+        available = ", ".join(sorted(_INSTRUMENT_REGISTRY))
+        raise ValueError(f"Unknown instrument: {name}. Available: {available}")
+    return _INSTRUMENT_REGISTRY[key](**kwargs)
+
+
+@dataclass(slots=True)
+class InstrumentConfig:
+    """Static instrument metadata used by data scanners and analysis defaults."""
+
     name: str
-    telescope: str
-    
-    # ============ 能量范围 ============
-    Emin_keV: float
-    Emax_keV: float
-    
-    # ============ 波段和位置 ============
-    band: Literal['Gamma', 'X', 'UV/Optical/IR'] 
-    place: Optional[Literal['space', 'ground']] 
-    
-    background_type: Literal[
-                            'temporal',           # 时间域（GBM polynomial fit）
-                            'spatial',            # 空间域（annulus/region）
-                            'detector_shadow',    # 探测器遮挡区（部分编码孔径仪器）
-                            'blank_sky',          # 空天区观测（Chandra、XMM）
-                            ]
+    mission: str
+    energy_range_keV: tuple[float, float]
+    scanner: str | None = None
+    modules: tuple[str, ...] = ()
+    detector_pattern: str | None = None
+    group_min_counts: int | None = None
+    band: str | None = None
+    place: str | None = "space"
+    background_type: str | None = None
+    stat_method: str | None = None
+    response_type: str | None = None
+    filtername: str | None = None
 
+    aliases: ClassVar[tuple[str, ...]] = ()
 
+    @property
+    def telescope(self) -> str:
+        """Backward-compatible alias for the mission name."""
+        return self.mission
 
-    # ============ 光学仪器滤光片 ============
-    
-    
-    # ============ 谱提取参数 ============
-    grouping_min_counts: int
-    srcregion_type: Literal['circle', 'box', 'ellipse', 'polygon']
-    bkgregion_type: Literal['annulus', 'circle', 'box', 'polygon']
-    stat_method: Literal['cstat', 'pgstat', 'wstat', 'chi']
-    response_type: Literal['rmf', 'rsp']
-    
+    @property
+    def Emin_keV(self) -> float:
+        return self.energy_range_keV[0]
 
-    effective_area: Optional[Quantity]
-    fov           : Optional[Quantity]
+    @property
+    def Emax_keV(self) -> float:
+        return self.energy_range_keV[1]
 
+    @property
+    def grouping_min_counts(self) -> int | None:
+        """Backward-compatible alias for the spectrum grouping default."""
+        return self.group_min_counts
 
-    filtername: Optional[str] = None
-    
-    
-
-# ============ 有子仪器/能段的仪器 ============
 
 @register_instrument
-class UVOT(InstrumentConfig):
-    """Swift UV/Optical Telescope - 多个滤光片"""
-    
-    # 定义所有可用的滤光片和对应的能段
-    FILTERS = {
-        'V': (2.3, 3.5),      # 能量范围 (eV)
-        'B': (2.5, 3.5),
-        'U': (3.0, 4.2),
-        'UVW1': (3.2, 4.5),
-        'UVM2': (4.0, 5.0),
-        'UVW2': (4.5, 6.0),
-        'White': (2.0, 6.0),
-    }
-    
-    def __init__(self, filter='V', **kwargs):
-        if filter not in self.FILTERS:
-            raise ValueError(f"Unknown filter: {filter}. Available: {list(self.FILTERS.keys())}")
-        
-        energy_range = self.FILTERS[filter]
-        
-        defaults = {
-            'name': f'UVOT_{filter}',
-            'telescope': 'Swift',
-            'energy_range': energy_range,
-            'effective_area': 150.0,
+class FXT(InstrumentConfig):
+    """Einstein Probe Follow-up X-ray Telescope."""
+
+    aliases = ("EP_FXT",)
+
+    def __init__(self, **kwargs: Any):
+        defaults: dict[str, Any] = {
+            "name": "FXT",
+            "mission": "EP",
+            "energy_range_keV": (0.3, 10.0),
+            "scanner": "fxt",
+            "modules": ("FXTA", "FXTB"),
+            "group_min_counts": 3,
+            "band": "X",
+            "background_type": "spatial",
+            "stat_method": "wstat",
+            "response_type": "rmf",
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
-        self.filter = filter
-    
-    def extract_spectrum(self, **kwargs):
-        return f"UVOT spectrum (filter: {self.filter})"
-    
-    @classmethod
-    def list_filters(cls):
-        """列出所有可用滤光片"""
-        return list(cls.FILTERS.keys())
+
+
+@register_instrument
+class WXT(InstrumentConfig):
+    """Einstein Probe Wide-field X-ray Telescope."""
+
+    aliases = ("EP_WXT",)
+
+    def __init__(self, **kwargs: Any):
+        defaults: dict[str, Any] = {
+            "name": "WXT",
+            "mission": "EP",
+            "energy_range_keV": (0.5, 4.0),
+            "scanner": "wxt",
+            "detector_pattern": r"CMOS\d+",
+            "group_min_counts": 3,
+            "band": "X",
+            "background_type": "spatial",
+            "stat_method": "wstat",
+            "response_type": "rmf",
+        }
+        defaults.update(kwargs)
+        super().__init__(**defaults)
+
+
+@register_instrument
+class BAT(InstrumentConfig):
+    """Swift Burst Alert Telescope."""
+
+    aliases = ("SWIFT_BAT",)
+
+    def __init__(self, **kwargs: Any):
+        defaults: dict[str, Any] = {
+            "name": "BAT",
+            "mission": "Swift",
+            "energy_range_keV": (15.0, 150.0),
+            "group_min_counts": 25,
+            "band": "Gamma",
+            "background_type": "detector_shadow",
+            "stat_method": "pgstat",
+            "response_type": "rsp",
+        }
+        defaults.update(kwargs)
+        super().__init__(**defaults)
+
 
 @register_instrument
 class GBM(InstrumentConfig):
-    """Fermi Gamma-ray Burst Monitor - 多个探测器"""
-    
-    # 定义所有探测器及其能段
-    DETECTORS = {
-        'NAI_1': (8.0, 1000.0),
-        'NAI_2': (8.0, 1000.0),
-        'NAI_3': (8.0, 1000.0),
-        'NAI_4': (8.0, 1000.0),
-        'NAI_5': (8.0, 1000.0),
-        'NAI_6': (8.0, 1000.0),
-        'BGO_1': (200.0, 40000.0),
-        'BGO_2': (200.0, 40000.0),
+    """Fermi Gamma-ray Burst Monitor detector config."""
+
+    aliases = ("FERMI_GBM",)
+    detectors = {
+        "NAI_1": (8.0, 1000.0),
+        "NAI_2": (8.0, 1000.0),
+        "NAI_3": (8.0, 1000.0),
+        "NAI_4": (8.0, 1000.0),
+        "NAI_5": (8.0, 1000.0),
+        "NAI_6": (8.0, 1000.0),
+        "BGO_1": (200.0, 40000.0),
+        "BGO_2": (200.0, 40000.0),
     }
-    
-    def __init__(self, detector='NAI_1', **kwargs):
-        if detector not in self.DETECTORS:
-            raise ValueError(
-                f"Unknown detector: {detector}\n"
-                f"Available: {list(self.DETECTORS.keys())}"
-            )
-        
-        energy_range = self.DETECTORS[detector]
-        
-        defaults = {
-            'name': f'GBM_{detector}',
-            'telescope': 'Fermi',
-            'energy_range': energy_range,
-            'effective_area': 100.0,
-            'grouping_min_counts': 25,
+
+    def __init__(self, detector: str = "NAI_1", **kwargs: Any):
+        detector = detector.upper()
+        if detector not in self.detectors:
+            choices = ", ".join(sorted(self.detectors))
+            raise ValueError(f"Unknown GBM detector: {detector}. Available: {choices}")
+        defaults: dict[str, Any] = {
+            "name": f"GBM_{detector}",
+            "mission": "Fermi",
+            "energy_range_keV": self.detectors[detector],
+            "group_min_counts": 25,
+            "band": "Gamma",
+            "background_type": "temporal",
+            "stat_method": "pgstat",
+            "response_type": "rsp",
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
         self.detector = detector
-        self.detector_type = 'NAI' if 'NAI' in detector else 'BGO'
-    
-    def extract_spectrum(self, **kwargs):
-        return f"GBM spectrum ({self.detector})"
-    
-    @classmethod
-    def list_detectors(cls):
-        """列出所有可用探测器"""
-        return list(cls.DETECTORS.keys())
-    
-    @classmethod
-    def get_nai_detectors(cls):
-        """获取所有 NaI 探测器"""
-        return [d for d in cls.DETECTORS.keys() if 'NAI' in d]
-    
-    @classmethod
-    def get_bgo_detectors(cls):
-        """获取所有 BGO 探测器"""
-        return [d for d in cls.DETECTORS.keys() if 'BGO' in d]
 
-# ============ 内置仪器 ============
 
 @register_instrument
-@dataclass
-class WXT(InstrumentConfig):
-    """EP/WXT 仪器"""
-    def __init__(self, **kwargs):
-        defaults = {
-            'name': 'WXT',
-            'telescope': 'Einstein Probe',
-            'energy_range': (0.5, 4.0),
-            'effective_area': 500.0
+class UVOT(InstrumentConfig):
+    """Swift UV/Optical Telescope filter config."""
+
+    aliases = ("SWIFT_UVOT",)
+    filters = {
+        "V": (0.0023, 0.0035),
+        "B": (0.0025, 0.0035),
+        "U": (0.0030, 0.0042),
+        "UVW1": (0.0032, 0.0045),
+        "UVM2": (0.0040, 0.0050),
+        "UVW2": (0.0045, 0.0060),
+        "WHITE": (0.0020, 0.0060),
+    }
+
+    def __init__(self, filter: str = "V", **kwargs: Any):
+        filter_key = filter.upper()
+        if filter_key not in self.filters:
+            choices = ", ".join(sorted(self.filters))
+            raise ValueError(f"Unknown UVOT filter: {filter}. Available: {choices}")
+        defaults: dict[str, Any] = {
+            "name": f"UVOT_{filter_key}",
+            "mission": "Swift",
+            "energy_range_keV": self.filters[filter_key],
+            "band": "UV/Optical/IR",
+            "background_type": "spatial",
+            "filtername": filter_key,
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
-    
-
-@register_instrument
-@dataclass
-class BAT(InstrumentConfig):
-    """Swift/BAT 仪器"""
-    def __init__(self, **kwargs):
-        defaults = {
-            'name': 'BAT',
-            'telescope': 'Swift',
-            'energy_range': (15.0, 150.0),
-            'effective_area': 5200.0
-        }
-        defaults.update(kwargs)
-        super().__init__(**defaults)
-    

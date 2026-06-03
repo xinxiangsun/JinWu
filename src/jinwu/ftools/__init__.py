@@ -29,6 +29,7 @@ from . import ftrbnrmf
 from . import ftselect
 from . import region
 from . import grppha
+from . import grppha_hsp
 from . import teldef
 from . import rmf_mapping
 from . import teldef_helpers
@@ -42,9 +43,9 @@ __all__ = [
     'ftselect',
     'region',
     'grppha',
+    'grppha_hsp',
     'teldef',
     'rmf_mapping',
     'teldef_helpers',
     'xselect_mdb',
 ]
-

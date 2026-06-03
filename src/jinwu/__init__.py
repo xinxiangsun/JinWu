@@ -63,9 +63,13 @@ if TYPE_CHECKING:
         physics,
     )
     from .core import time as time
+    from .core.time import Time, TimeDelta
     from .core import (
         netdata,
         readfits,
+        writefits,
+        write_pha,
+        PhaWriter,
         read_arf,
         read_rmf,
         read_pha,
@@ -129,8 +133,13 @@ _SUBPACKAGES = {
 }
 
 _CORE_EXPORTS = {
+    'Time',
+    'TimeDelta',
     'netdata',
     'readfits',
+    'writefits',
+    'write_pha',
+    'PhaWriter',
     'read_arf',
     'read_rmf',
     'read_pha',
@@ -147,6 +156,11 @@ _CORE_EXPORTS = {
 
 _HAS_DATA = find_spec('.data', __name__) is not None
 
+_TIME_EXPORTS = {
+    'Time',
+    'TimeDelta',
+}
+
 
 class _LazyTimeModule(types.ModuleType):
     _loaded: types.ModuleType | None = None
@@ -158,6 +172,8 @@ class _LazyTimeModule(types.ModuleType):
         return self._loaded
 
     def __getattr__(self, item: str):
+        if item.startswith('__') and item.endswith('__'):
+            raise AttributeError(item)
         return getattr(self._load(), item)
 
     def __dir__(self) -> list[str]:
@@ -183,8 +199,13 @@ __all__ = [
     'model',
     'physics',
     # Common utilities
+    'Time',
+    'TimeDelta',
     'netdata',
     'readfits',
+    'writefits',
+    'write_pha',
+    'PhaWriter',
     'read_arf',
     'read_rmf',
     'read_pha',
@@ -214,6 +235,12 @@ def __getattr__(name: str):
         mod = sys.modules[f'{__name__}.time']
         globals()[name] = mod
         return mod
+
+    if name in _TIME_EXPORTS:
+        mod = import_module('.core.time', __name__)
+        value = getattr(mod, name)
+        globals()[name] = value
+        return value
 
     if name in _SUBPACKAGES:
         mod = import_module(f'.{name}', __name__)

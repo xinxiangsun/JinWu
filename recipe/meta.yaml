@@ -1,9 +1,9 @@
 package:
   name: jinwu
-  version: "0.0.3"
+  version: "0.0.27"
 
 source:
-  url: https://pypi.io/packages/source/j/jinwu/jinwu-0.0.3.tar.gz
+  url: https://pypi.io/packages/source/j/jinwu/jinwu-0.0.27.tar.gz
   sha256: "0b2885dfd44fbaaa3ff5ba42fd3991e5e5e8d1f6927c4592e248f6bdf34534e9 "
 
 build:

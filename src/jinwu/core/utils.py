@@ -63,7 +63,6 @@ def generate_download_url(isot_time):
     return url
 
 
-
 def snr_li_ma(n_src, n_bkg, alpha_area_time):
     """
     Calculate the signal-to-noise ratio (SNR) using the Li & Ma formula.
@@ -83,10 +82,6 @@ def snr_li_ma(n_src, n_bkg, alpha_area_time):
     part2 = n_bkg*np.log((1+alpha_area_time)*n_bkg/(n_bkg+n_src))
     snr = np.sqrt(2 * (part1 + part2))
     return snr
-
-
-
-
 
 
 def extract_all_gz_recursive(root_path: Union[str, os.PathLike, Path], 
@@ -1028,6 +1023,321 @@ class RedshiftExtrapolator():
 
 
 
+
+
+def get_asym_err(param):
+    """获取XSPEC参数的非对称误差"""
+    try:
+        array = np.array(param.error[:2]) - param.values[0]
+        return abs(array[0]), abs(array[1])
+    except Exception as e:
+        raise RuntimeError(f"Error getting asymmetric error for parameter {param.name}: {e}")
+
+
+def flux_err_from_log10(lgflux, log_err_low, log_err_high):
+    """从对数通量误差计算线性通量误差"""
+    try:
+        if lgflux is None or log_err_low is None or log_err_high is None:
+            return None, None
+        err_low = 10.0 ** lgflux - 10.0 ** (lgflux - float(log_err_low))
+        err_high = 10.0 ** (lgflux + float(log_err_high)) - 10.0 ** lgflux
+        return err_low, err_high
+    except Exception:
+        return None, None
+
+
+def generate_xspec_result(model, spectrum) -> dict:
+    """
+    根据XSPEC模型和光谱自动生成结果字典
+    
+    参数:
+        model: XSPEC模型对象
+        spectrum: XSPEC光谱对象
+        
+    返回:
+        包含模型参数、flux、rate等信息的字典
+    """
+    _require_xspec()
+    import xspec
+    
+    lines = []
+    result = {}
+    result['model'] = model.expression
+    
+    result['parameters'] = {}
+    lines.append(f"Model: {model.expression}")
+    
+    processed_params = set()
+    
+    for comp_name in model.componentNames:
+        try:
+            comp = getattr(model, comp_name)
+            
+            for param_name in comp.parameterNames:
+                param_key = f"{comp_name}.{param_name}"
+                if param_key in processed_params:
+                    continue
+                processed_params.add(param_key)
+                
+                param = getattr(comp, param_name)
+                param_val = param.values[0]
+                
+                param_dict = {
+                    'value': param_val,
+                    'frozen': param.frozen
+                }
+                
+                if not param.frozen:
+                    err_lo, err_hi = get_asym_err(param)
+                    param_dict['error_lo'] = err_lo
+                    param_dict['error_hi'] = err_hi
+                    lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (-{err_lo:.4f}, +{err_hi:.4f})(1sigma error)")
+                else:
+                    lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (fixed)")
+                
+                result['parameters'][param_key] = param_dict
+                    
+        except Exception as e:
+            raise RuntimeError(f"Error processing component {comp_name}: {e}")
+    
+    emin = model.cflux.Emin.values[0] if hasattr(model, 'cflux') else None
+    emax = model.cflux.Emax.values[0] if hasattr(model, 'cflux') else None
+    xspec.AllModels.calcFlux(f"{emin} {emax}")
+    flux_erg = float(spectrum.flux[0])
+    flux_photons = float(spectrum.flux[3])
+    
+    result['flux_abs'] = {
+        'erg_cm2_s': flux_erg,
+        'photons_cm2_s': flux_photons
+    }
+    
+    lines.append(f"Absorbed Flux ({emin:.1f}-{emax:.1f} keV): {flux_erg:.4e} erg/cm²/s")
+    lines.append(f"Absorbed Photon Flux ({emin:.1f}-{emax:.1f} keV): {flux_photons:.4e} photons/cm²/s")
+    
+    try:
+        rate = float(spectrum.rate[0])
+        rate_err = float(spectrum.rate[1]) if len(spectrum.rate) > 1 else None
+    except Exception as e:
+        raise RuntimeError(f"Error extracting rate: {e}")        
+    
+    result['rate'] = {
+        'value': rate,
+        'error': rate_err
+    }
+    
+    if rate is not None:
+        if rate_err is not None:
+            lines.append(f"Rate: {rate:.4f} ± {rate_err:.4f} cts/s")
+        else:
+            lines.append(f"Rate: {rate:.4f} cts/s")
+    
+    exposure = spectrum.exposure if hasattr(spectrum, 'exposure') else None
+    
+    if rate is not None and rate > 0 and flux_erg > 0:
+        conv_factor = 10**model.cflux.lg10Flux.values[0] / rate
+    else:
+        conv_factor = None
+    photon_counts = rate * exposure if rate is not None and exposure is not None else None
+    result['conversion'] = {
+        'exposure_s': exposure,
+        'erg_per_count': conv_factor,
+        'counts': photon_counts
+    }
+    
+    if exposure is not None:
+        lines.append(f"Exposure: {exposure:.1f} s")
+    
+    if conv_factor is not None:
+        lines.append(f"Conversion factor: {conv_factor:.4e} erg/cm²/s per cts/s")
+    if photon_counts is not None:
+        lines.append(f"Total counts: {photon_counts:.2f} counts")
+    
+    statistic = xspec.Fit.statistic
+    dof = xspec.Fit.dof
+    stat_method = xspec.Fit.statMethod
+    
+    statdof = statistic / dof
+    
+    lines.append(f"Stat/dof: {stat_method}={statistic:.2f}/{dof}={statdof:.2f}")
+    lines.append(f"Null hypothesis probability: {xspec.Fit.nullhyp:.4f}")
+    
+    result['statistics'] = {
+        'method': stat_method,
+        'value': statistic,
+        'dof': dof,
+        'reduced': statdof,
+        'null_hypothesis_probability': xspec.Fit.nullhyp
+    }
+    
+    result['text'] = "\n".join(lines)
+    
+    return result
+
+
+def _parse_nhtot_response(html, coord_str=""):
+    """Parse the ASCII table from the nhtot HTML response.
+
+    Pure parsing function — no network I/O.  Separated for testability.
+
+    Parameters
+    ----------
+    html : str
+        Raw HTML response body from donhtot.php.
+    coord_str : str
+        Coordinate string for error messages only.
+
+    Returns
+    -------
+    dict
+        Always contains ``ok`` (bool).  On success (ok=True), also contains
+        ra, dec, ebv_mean/weighted, nhi_mean/weighted, nh2_mean/weighted,
+        nhtot_mean/weighted.  On failure (ok=False), contains ``error`` (str)
+        and all value fields set to None.
+    """
+    import re
+
+    _NONE = {
+        'ra': None, 'dec': None,
+        'ebv_mean': None, 'ebv_weighted': None,
+        'nhi_mean': None, 'nhi_weighted': None,
+        'nh2_mean': None, 'nh2_weighted': None,
+        'nhtot_mean': None, 'nhtot_weighted': None,
+    }
+
+    def _num(s):
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return None
+
+    lines = html.split('\n')
+
+    # Locate data row between the first and second +===+ separator rows.
+    # The data row is the first line after the opening === that contains
+    # both a pipe and a celestial coordinate prefix (J or B).
+    data_line = None
+    after_header = False
+    for line in lines:
+        if '+===' in line:
+            if not after_header:
+                after_header = True   # opening === row, data follows
+            else:
+                break                 # closing === row, stop
+        elif after_header and '|' in line:
+            stripped = line.strip()
+            # Confirm this looks like a data row: starts with J/B prefix
+            # (possibly after an optional leading | from old-style tables)
+            if stripped and re.match(r'^\|?\s*[JB]\s', stripped):
+                data_line = line
+                break
+
+    if data_line is None:
+        return {**_NONE, 'ok': False,
+                'error': f'No data row found for {coord_str}'}
+
+    # Split on | and drop empty fields (fix: leading/trailing | robustness)
+    fields = [f.strip() for f in data_line.split('|') if f.strip()]
+
+    if len(fields) < 9:
+        return {**_NONE, 'ok': False,
+                'error': f'Expected >=9 fields, got {len(fields)} for {coord_str}'}
+
+    # Parse position from fields[0] (fix: strict prefix removal)
+    pos = fields[0]
+    ra_str, dec_str = None, None
+    if pos:
+        pos_clean = pos
+        for prefix in ('J ', 'B '):
+            if pos_clean.startswith(prefix):
+                pos_clean = pos_clean[len(prefix):]
+                break
+        parts = pos_clean.split(',')
+        if len(parts) == 2:
+            ra_str, dec_str = parts[0].strip(), parts[1].strip()
+
+    return {
+        'ok': True,
+        'ra': ra_str,
+        'dec': dec_str,
+        'ebv_mean': _num(fields[1]),
+        'ebv_weighted': _num(fields[2]),
+        'nhi_mean': _num(fields[3]),
+        'nhi_weighted': _num(fields[4]),
+        'nh2_mean': _num(fields[5]),
+        'nh2_weighted': _num(fields[6]),
+        'nhtot_mean': _num(fields[7]),
+        'nhtot_weighted': _num(fields[8]),
+    }
+
+
+def nhtot(ra, dec, equinox=2000):
+    """
+    Query the Swift UKSSDC nhtot service for Galactic hydrogen column density
+    using the method of Willingale et al. (2013, MNRAS, 431, 394).
+
+    Parameters
+    ----------
+    ra : float or str
+        Right Ascension in decimal degrees (e.g. 159.386) or sexagesimal
+        (e.g. "10:37:32.6").
+    dec : float or str
+        Declination in decimal degrees (e.g. 56.171) or sexagesimal
+        (e.g. "+56:10:15.6").
+    equinox : int
+        Equinox: 2000 for J2000, 1950 for B1950.
+
+    Returns
+    -------
+    dict
+        Keys: ok (bool), ra (str), dec (str), ebv_mean (float),
+        ebv_weighted (float), nhi_mean (float), nhi_weighted (float),
+        nh2_mean (float), nh2_weighted (float), nhtot_mean (float),
+        nhtot_weighted (float).  All NH in atoms cm⁻², E(B-V) in mag.
+        On failure, ok=False, error (str) set, and all value fields None.
+        On success, ok=True.
+
+    Examples
+    --------
+    >>> result = nhtot(159.386, 56.171)
+    >>> print(result['nhtot_weighted'])
+    5.26e+19
+
+    >>> result = nhtot("10:30:00", "+50:00:00")
+    """
+    import urllib.request
+    import urllib.parse
+
+    coord_str = f"{ra} {dec}"
+
+    params = urllib.parse.urlencode({
+        'Coords': coord_str,
+        'equinox': str(equinox),
+        'ascii': '1',
+        'jsOn': '1',
+        'obname': '',
+        'MAX_FILE_SIZE': '1000000',
+    }).encode('ascii')
+
+    url = "https://www.swift.ac.uk/analysis/nhtot/donhtot.php"
+
+    try:
+        req = urllib.request.Request(url, data=params)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            html = resp.read().decode('utf-8', errors='replace')
+    except Exception as e:
+        return {
+            'ok': False, 'error': str(e),
+            'ra': None, 'dec': None,
+            'ebv_mean': None, 'ebv_weighted': None,
+            'nhi_mean': None, 'nhi_weighted': None,
+            'nh2_mean': None, 'nh2_weighted': None,
+            'nhtot_mean': None, 'nhtot_weighted': None,
+        }
+
+    result = _parse_nhtot_response(html, coord_str)
+    if not result.get('ok'):
+        print(f"nhtot: parse failed for {coord_str}: {result.get('error', 'unknown')}")
+    return result
 
 
 class HydroDynamics:

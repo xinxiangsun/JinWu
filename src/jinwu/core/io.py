@@ -261,13 +261,15 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
     rows_info: list[Dict[str, Any]] = []
 
     def _as_float(v: Any) -> Optional[float]:
+        if v is None:
+            return None
         try:
-            return float(v)
-        except Exception:
-            try:
-                return float(v[0])
-            except Exception:
+            arr = np.asarray(v)
+            if arr.size == 0:
                 return None
+            return float(arr.reshape(-1)[0])
+        except Exception:
+            return None
 
     for i in range(nrows):
         shape_val = ''
@@ -278,11 +280,8 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
                 shape_val = ''
         comp_val = None
         if component_col and component_col in colnames:
-            try:
-                comp_val = int(data[component_col][i])
-            except Exception:
-                tmp = _as_float(data[component_col][i])
-                comp_val = int(tmp) if tmp is not None else None
+            tmp = _as_float(data[component_col][i])
+            comp_val = int(tmp) if tmp is not None else None
         area = None
         if (shape_val == 'CIRCLE') or (shape_col is None and r_col is not None and (rin_col is None or rout_col is None)):
             rv = data[r_col][i] if r_col else None
@@ -295,8 +294,9 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
             if rin is None and rout is None and r_col:
                 rv = data[r_col][i]
                 try:
-                    rin = float(rv[0])
-                    rout = float(rv[1])
+                    rv_arr = np.asarray(rv).reshape(-1)
+                    rin = _as_float(rv_arr[0]) if rv_arr.size >= 1 else None
+                    rout = _as_float(rv_arr[1]) if rv_arr.size >= 2 else None
                 except Exception:
                     rin = None
                     rout = None
@@ -467,14 +467,28 @@ class OgipPhaReader:
             ds = hs.data
             spectrum_columns = tuple(getattr(ds.columns, 'names', ()) or ())
             channels = np.asarray(ds["CHANNEL"], int)
-            counts = np.asarray(ds["COUNTS"], float)
+            rate = np.asarray(ds["RATE"], float) if "RATE" in spectrum_columns else None
+            counts = np.asarray(ds["COUNTS"], float) if "COUNTS" in spectrum_columns else None
             stat_err = np.asarray(ds["STAT_ERR"], float) if "STAT_ERR" in spectrum_columns else None
             header_map = cast(Any, hs.header)
             exposure = float(header_map.get("EXPOSURE", header_map.get("EXPTIME", np.nan)))
+            if counts is None:
+                if rate is None:
+                    raise ValueError("PHA SPECTRUM lacks both COUNTS and RATE columns")
+                if np.isfinite(exposure) and exposure > 0:
+                    counts = np.asarray(rate, float) * float(exposure)
+                else:
+                    counts = np.asarray(rate, float)
             backscal = float(header_map.get("BACKSCAL")) if "BACKSCAL" in header_map else None
             areascal = float(header_map.get("AREASCAL")) if "AREASCAL" in header_map else None
             quality = np.asarray(ds["QUALITY"], int) if "QUALITY" in spectrum_columns else None
             grouping = np.asarray(ds["GROUPING"], int) if "GROUPING" in spectrum_columns else None
+            raw_spectrum_columns: Dict[str, np.ndarray] = {}
+            for cn in spectrum_columns:
+                try:
+                    raw_spectrum_columns[cn] = np.asarray(ds[cn])
+                except Exception:
+                    continue
 
             ebounds = None
             ebounds_columns: tuple[str, ...] = ()
@@ -509,6 +523,7 @@ class OgipPhaReader:
             path=self.path,
             channels=channels,
             counts=counts,
+            rate=rate,
             stat_err=stat_err,
             exposure=exposure,
             backscal=backscal,
@@ -518,6 +533,7 @@ class OgipPhaReader:
             quality=quality,
             grouping=grouping,
             ebounds=ebounds,
+            raw_spectrum_columns=raw_spectrum_columns,
             columns=columns,
             header=header,
             meta=meta,
@@ -585,6 +601,7 @@ class OgipLightcurveReader:
                     timezero_raw = 0.0
             time_offset = float(time_raw[0]) if len(time_raw) > 0 else 0.0
             time = time_raw - time_offset
+            time_rel = time
             timezero = timezero_raw + time_offset
             telescop = None
             primary_header = dict(cast(Any, h[0]).header) if len(h) > 0 else {}
@@ -705,6 +722,8 @@ class OgipLightcurveReader:
             self._data = LightcurveData(
                 path=self.path,
                 time=time,
+                time_raw=time_raw,
+                time_rel=time_rel,
                 timezero=timezero,
                 timezero_obj=timezero_obj,
                 dt=dt,
@@ -787,6 +806,7 @@ class OgipEventReader:
                     timezero_raw = 0.0
             time_offset = float(time_raw[0]) if len(time_raw) > 0 else 0.0
             time = time_raw - time_offset
+            time_rel = time
             timezero = timezero_raw + time_offset
             telescop = None
             primary_header = dict(cast(Any, h[0]).header) if len(h) > 0 else {}
@@ -865,6 +885,8 @@ class OgipEventReader:
         self._data = EventData(
             path=self.path,
             time=time,
+            time_raw=time_raw,
+            time_rel=time_rel,
             timezero=timezero,
             timezero_obj=timezero_obj,
             telescop=telescop,
@@ -912,6 +934,313 @@ class LightcurveReader(OgipLightcurveReader):
 
 
 OgipData = Union[ArfData, RmfData, PhaData, LightcurveData, EventData]
+OgipWritableData = Union[ArfData, RmfData, PhaData, LightcurveData, EventData]
+
+
+def _normalize_grouping_to_flags(grouping: np.ndarray) -> np.ndarray:
+    g = np.asarray(grouping, dtype=int)
+    if g.size == 0:
+        return g
+    nz = g[g != 0]
+    if nz.size == 0:
+        return g
+    if np.all(np.isin(nz, [-1, 1])):
+        return g
+    out = np.zeros_like(g)
+    prev_gid = None
+    for i, gid in enumerate(g):
+        if gid <= 0:
+            continue
+        if prev_gid != int(gid):
+            out[i] = 1
+            prev_gid = int(gid)
+        else:
+            out[i] = -1
+    return out
+
+
+class PhaWriter:
+    def __init__(self, data: PhaData, outpath: str | Path):
+        self.data = data
+        self.outpath = Path(outpath)
+
+    def write(self, *, overwrite: bool = False) -> Path:
+        outp = self.outpath
+        if outp.exists() and not overwrite:
+            raise FileExistsError(str(outp))
+
+        pha = self.data
+        cols: list[fits.Column] = []
+
+        channels = np.asarray(pha.channels, dtype=int)
+        counts = np.asarray(pha.counts, dtype=float)
+        cols.append(fits.Column(name='CHANNEL', format='J', array=channels))
+        cols.append(fits.Column(name='COUNTS', format='E', array=counts))
+
+        if getattr(pha, 'rate', None) is not None:
+            cols.append(fits.Column(name='RATE', format='E', array=np.asarray(pha.rate, dtype=float)))
+        if pha.stat_err is not None:
+            cols.append(fits.Column(name='STAT_ERR', format='E', array=np.asarray(pha.stat_err, dtype=float)))
+        if pha.quality is not None:
+            cols.append(fits.Column(name='QUALITY', format='J', array=np.asarray(pha.quality, dtype=int)))
+        if pha.grouping is not None:
+            g = _normalize_grouping_to_flags(np.asarray(pha.grouping, dtype=int))
+            cols.append(fits.Column(name='GROUPING', format='J', array=g))
+
+        hdu_spec = fits.BinTableHDU.from_columns(cols, name='SPECTRUM')
+        hdr = hdu_spec.header
+        hdr['EXTNAME'] = 'SPECTRUM'
+        hdr['HDUCLASS'] = 'OGIP'
+        hdr['HDUCLAS1'] = 'SPECTRUM'
+        hdr['CHANTYPE'] = str(getattr(pha.header, 'get', lambda *_: None)('CHANTYPE') or 'PI') if pha.header is not None else 'PI'
+
+        if pha.meta is not None and getattr(pha.meta, 'telescop', None) is not None:
+            hdr['TELESCOP'] = str(pha.meta.telescop)
+        elif pha.header is not None and 'TELESCOP' in pha.header:
+            hdr['TELESCOP'] = str(pha.header['TELESCOP'])
+        if pha.meta is not None and getattr(pha.meta, 'instrume', None) is not None:
+            hdr['INSTRUME'] = str(pha.meta.instrume)
+        elif pha.header is not None and 'INSTRUME' in pha.header:
+            hdr['INSTRUME'] = str(pha.header['INSTRUME'])
+
+        if pha.exposure is not None:
+            hdr['EXPOSURE'] = float(pha.exposure)
+        if pha.backscal is not None:
+            hdr['BACKSCAL'] = float(pha.backscal)
+        if pha.areascal is not None:
+            hdr['AREASCAL'] = float(pha.areascal)
+        if getattr(pha, 'respfile', None) is not None:
+            hdr['RESPFILE'] = str(pha.respfile)
+        if getattr(pha, 'ancrfile', None) is not None:
+            hdr['ANCRFILE'] = str(pha.ancrfile)
+
+        if pha.header is not None:
+            for k, v in dict(pha.header).items():
+                key = str(k).upper()
+                if key in hdr:
+                    continue
+                if key in {'SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND'}:
+                    continue
+                try:
+                    hdr[key] = v
+                except Exception:
+                    continue
+
+        prih = fits.PrimaryHDU()
+        if pha.header is not None:
+            for key in ('TELESCOP', 'INSTRUME', 'OBS_ID', 'OBJECT'):
+                if key in pha.header:
+                    try:
+                        prih.header[key] = pha.header[key]
+                    except Exception:
+                        pass
+        if pha.meta is not None:
+            if getattr(pha.meta, 'tstart', None) is not None:
+                prih.header['TSTART'] = float(pha.meta.tstart)
+            if getattr(pha.meta, 'tstop', None) is not None:
+                prih.header['TSTOP'] = float(pha.meta.tstop)
+
+        hdul = fits.HDUList([prih, hdu_spec])
+
+        if getattr(pha, 'ebounds', None) is not None:
+            ebounds = pha.ebounds
+            if ebounds is not None and len(ebounds) == 3:
+                ch_eb, emin, emax = ebounds
+                cols_eb = [
+                    fits.Column(name='CHANNEL', format='J', array=np.asarray(ch_eb, dtype=int)),
+                    fits.Column(name='E_MIN', format='E', array=np.asarray(emin, dtype=float)),
+                    fits.Column(name='E_MAX', format='E', array=np.asarray(emax, dtype=float)),
+                ]
+                hdul.append(fits.BinTableHDU.from_columns(cols_eb, name='EBOUNDS'))
+
+        hdul.writeto(outp, overwrite=overwrite)
+        return outp
+
+
+class ArfWriter:
+    def __init__(self, data: ArfData, outpath: str | Path):
+        self.data = data
+        self.outpath = Path(outpath)
+
+    def write(self, *, overwrite: bool = False) -> Path:
+        outp = self.outpath
+        if outp.exists() and not overwrite:
+            raise FileExistsError(str(outp))
+        arf = self.data
+        cols = [
+            fits.Column(name='ENERG_LO', format='E', array=np.asarray(arf.energ_lo, dtype=float)),
+            fits.Column(name='ENERG_HI', format='E', array=np.asarray(arf.energ_hi, dtype=float)),
+            fits.Column(name='SPECRESP', format='E', array=np.asarray(arf.specresp, dtype=float)),
+        ]
+        hdu = fits.BinTableHDU.from_columns(cols, name='SPECRESP')
+        hdu.header['EXTNAME'] = 'SPECRESP'
+        hdu.header['HDUCLASS'] = 'OGIP'
+        hdu.header['HDUCLAS1'] = 'RESPONSE'
+        hdu.header['HDUCLAS2'] = 'SPECRESP'
+        if arf.header is not None:
+            for key in ('TELESCOP', 'INSTRUME', 'DETNAM', 'FILTER'):
+                if key in arf.header:
+                    try:
+                        hdu.header[key] = arf.header[key]
+                    except Exception:
+                        pass
+        prih = fits.PrimaryHDU()
+        hdul = fits.HDUList([prih, hdu])
+        hdul.writeto(outp, overwrite=overwrite)
+        return outp
+
+
+class RmfWriter:
+    def __init__(self, data: RmfData, outpath: str | Path):
+        self.data = data
+        self.outpath = Path(outpath)
+
+    def write(self, *, overwrite: bool = False) -> Path:
+        outp = self.outpath
+        if outp.exists() and not overwrite:
+            raise FileExistsError(str(outp))
+        rmf = self.data
+
+        def _vla_array(values: np.ndarray | list[Any] | tuple[Any, ...] | None, dtype: Any) -> np.ndarray:
+            if values is None:
+                return np.asarray([], dtype=object)
+            seq = np.asarray(values, dtype=object)
+            out: list[np.ndarray] = []
+            for item in seq:
+                if item is None:
+                    out.append(np.asarray([], dtype=dtype))
+                else:
+                    out.append(np.atleast_1d(np.asarray(item, dtype=dtype)))
+            return np.asarray(out, dtype=object)
+
+        cols: list[fits.Column] = [
+            fits.Column(name='ENERG_LO', format='E', array=np.asarray(rmf.energ_lo, dtype=float)),
+            fits.Column(name='ENERG_HI', format='E', array=np.asarray(rmf.energ_hi, dtype=float)),
+        ]
+        if rmf.n_grp is not None:
+            cols.append(fits.Column(name='N_GRP', format='J', array=np.asarray(rmf.n_grp, dtype=int)))
+        if rmf.f_chan is not None:
+            cols.append(fits.Column(name='F_CHAN', format='PJ()', array=_vla_array(rmf.f_chan, int)))
+        if rmf.n_chan is not None:
+            cols.append(fits.Column(name='N_CHAN', format='PJ()', array=_vla_array(rmf.n_chan, int)))
+        cols.append(fits.Column(name='MATRIX', format='PE()', array=_vla_array(rmf.matrix, float)))
+
+        hdu_mat = fits.BinTableHDU.from_columns(cols, name='MATRIX')
+        hdu_mat.header['EXTNAME'] = 'MATRIX'
+        hdu_mat.header['HDUCLASS'] = 'OGIP'
+        hdu_mat.header['HDUCLAS1'] = 'RESPONSE'
+        hdu_mat.header['HDUCLAS2'] = 'RSP_MATRIX'
+
+        prih = fits.PrimaryHDU()
+        hdul = fits.HDUList([prih, hdu_mat])
+
+        if rmf.channel is not None and rmf.e_min is not None and rmf.e_max is not None:
+            cols_eb = [
+                fits.Column(name='CHANNEL', format='J', array=np.asarray(rmf.channel, dtype=int)),
+                fits.Column(name='E_MIN', format='E', array=np.asarray(rmf.e_min, dtype=float)),
+                fits.Column(name='E_MAX', format='E', array=np.asarray(rmf.e_max, dtype=float)),
+            ]
+            hdul.append(fits.BinTableHDU.from_columns(cols_eb, name='EBOUNDS'))
+
+        hdul.writeto(outp, overwrite=overwrite)
+        return outp
+
+
+class LightcurveWriter:
+    def __init__(self, data: LightcurveData, outpath: str | Path):
+        self.data = data
+        self.outpath = Path(outpath)
+
+    def write(self, *, overwrite: bool = False) -> Path:
+        outp = self.outpath
+        if outp.exists() and not overwrite:
+            raise FileExistsError(str(outp))
+        lc = self.data
+        t = np.asarray(lc.time if lc.time is not None else np.asarray([], dtype=float), dtype=float)
+        cols = [fits.Column(name='TIME', format='D', array=t)]
+        if lc.rate is not None:
+            cols.append(fits.Column(name='RATE', format='E', array=np.asarray(lc.rate, dtype=float)))
+            if lc.rate_err is not None:
+                cols.append(fits.Column(name='ERROR', format='E', array=np.asarray(lc.rate_err, dtype=float)))
+        elif lc.counts is not None:
+            cols.append(fits.Column(name='COUNTS', format='E', array=np.asarray(lc.counts, dtype=float)))
+            if lc.counts_err is not None:
+                cols.append(fits.Column(name='ERROR', format='E', array=np.asarray(lc.counts_err, dtype=float)))
+        if lc.fracexp is not None:
+            cols.append(fits.Column(name='FRACEXP', format='E', array=np.asarray(lc.fracexp, dtype=float)))
+        if lc.quality is not None:
+            cols.append(fits.Column(name='QUALITY', format='J', array=np.asarray(lc.quality, dtype=int)))
+
+        hdu = fits.BinTableHDU.from_columns(cols, name='LIGHTCURVE')
+        hdu.header['EXTNAME'] = 'LIGHTCURVE'
+        if lc.exposure is not None:
+            hdu.header['EXPOSURE'] = float(lc.exposure)
+        if lc.meta is not None and getattr(lc.meta, 'telescop', None) is not None:
+            hdu.header['TELESCOP'] = str(lc.meta.telescop)
+        if lc.meta is not None and getattr(lc.meta, 'instrume', None) is not None:
+            hdu.header['INSTRUME'] = str(lc.meta.instrume)
+
+        prih = fits.PrimaryHDU()
+        hdul = fits.HDUList([prih, hdu])
+
+        if lc.gti_start is not None and lc.gti_stop is not None:
+            cols_g = [
+                fits.Column(name='START', format='D', array=np.asarray(lc.gti_start, dtype=float)),
+                fits.Column(name='STOP', format='D', array=np.asarray(lc.gti_stop, dtype=float)),
+            ]
+            hdul.append(fits.BinTableHDU.from_columns(cols_g, name='GTI'))
+
+        hdul.writeto(outp, overwrite=overwrite)
+        return outp
+
+
+class EventWriter:
+    def __init__(self, data: EventData, outpath: str | Path):
+        self.data = data
+        self.outpath = Path(outpath)
+
+    def write(self, *, overwrite: bool = False) -> Path:
+        outp = self.outpath
+        if outp.exists() and not overwrite:
+            raise FileExistsError(str(outp))
+        ev = self.data
+        cols: list[fits.Column] = [fits.Column(name='TIME', format='D', array=np.asarray(ev.time, dtype=float))]
+        if ev.pi is not None:
+            cols.append(fits.Column(name='PI', format='J', array=np.asarray(ev.pi, dtype=int)))
+        if ev.channel is not None:
+            cols.append(fits.Column(name='CHANNEL', format='J', array=np.asarray(ev.channel, dtype=int)))
+        if ev.x is not None:
+            cols.append(fits.Column(name='X', format='E', array=np.asarray(ev.x, dtype=float)))
+        if ev.y is not None:
+            cols.append(fits.Column(name='Y', format='E', array=np.asarray(ev.y, dtype=float)))
+        if ev.energy is not None:
+            cols.append(fits.Column(name='ENERGY', format='E', array=np.asarray(ev.energy, dtype=float)))
+
+        hdu_evt = fits.BinTableHDU.from_columns(cols, name='EVENTS')
+        hdu_evt.header['EXTNAME'] = 'EVENTS'
+        if ev.header is not None:
+            for k, v in dict(ev.header).items():
+                key = str(k).upper()
+                if key in hdu_evt.header:
+                    continue
+                if key in {'XTENSION', 'BITPIX', 'NAXIS'}:
+                    continue
+                try:
+                    hdu_evt.header[key] = v
+                except Exception:
+                    continue
+        prih = fits.PrimaryHDU()
+        hdul = fits.HDUList([prih, hdu_evt])
+
+        if ev.gti_start is not None and ev.gti_stop is not None:
+            cols_g = [
+                fits.Column(name='START', format='D', array=np.asarray(ev.gti_start, dtype=float)),
+                fits.Column(name='STOP', format='D', array=np.asarray(ev.gti_stop, dtype=float)),
+            ]
+            hdul.append(fits.BinTableHDU.from_columns(cols_g, name='GTI'))
+
+        hdul.writeto(outp, overwrite=overwrite)
+        return outp
 
 
 def guess_ogip_kind(path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt']:
@@ -1009,6 +1338,64 @@ def read_evt(path) -> EventData:
     return OgipEventReader(path).read()
 
 
+def write_pha(data: PhaData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    return PhaWriter(data, outpath).write(overwrite=overwrite)
+
+
+def write_arf(data: ArfData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    return ArfWriter(data, outpath).write(overwrite=overwrite)
+
+
+def write_rmf(data: RmfData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    return RmfWriter(data, outpath).write(overwrite=overwrite)
+
+
+def write_lc(data: LightcurveData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    return LightcurveWriter(data, outpath).write(overwrite=overwrite)
+
+
+def write_evt(data: EventData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    return EventWriter(data, outpath).write(overwrite=overwrite)
+
+
+@overload
+def writefits(data: PhaData, outpath: str | Path, kind: Literal['pha'], *, overwrite: bool = ...) -> Path: ...
+
+
+@overload
+def writefits(data: PhaData, outpath: str | Path, kind: None = ..., *, overwrite: bool = ...) -> Path: ...
+
+
+@overload
+def writefits(data: OgipWritableData, outpath: str | Path, kind: Literal['arf', 'rmf', 'lc', 'evt'], *, overwrite: bool = ...) -> Path: ...
+
+
+def writefits(
+    data: OgipWritableData,
+    outpath: str | Path,
+    kind: Optional[Literal['arf', 'rmf', 'pha', 'lc', 'evt']] = None,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    k = kind
+    if k is None:
+        if isinstance(data, PhaData):
+            k = 'pha'
+        else:
+            k = cast(Optional[Literal['arf', 'rmf', 'pha', 'lc', 'evt']], getattr(data, 'kind', None))
+    if k == 'pha':
+        return write_pha(cast(PhaData, data), outpath, overwrite=overwrite)
+    if k == 'arf':
+        return write_arf(cast(ArfData, data), outpath, overwrite=overwrite)
+    if k == 'rmf':
+        return write_rmf(cast(RmfData, data), outpath, overwrite=overwrite)
+    if k == 'lc':
+        return write_lc(cast(LightcurveData, data), outpath, overwrite=overwrite)
+    if k == 'evt':
+        return write_evt(cast(EventData, data), outpath, overwrite=overwrite)
+    raise ValueError(f"Unknown writefits kind: {k!r}")
+
+
 __all__ = [
     "OgipArfReader",
     "OgipRmfReader",
@@ -1029,4 +1416,15 @@ __all__ = [
     "read_pha",
     "read_lc",
     "read_evt",
+    "PhaWriter",
+    "ArfWriter",
+    "RmfWriter",
+    "LightcurveWriter",
+    "EventWriter",
+    "write_arf",
+    "write_rmf",
+    "write_lc",
+    "write_evt",
+    "write_pha",
+    "writefits",
 ]

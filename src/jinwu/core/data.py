@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional, Tuple, Union, cast
 
@@ -9,18 +10,106 @@ from .base import ArfBase, RmfBase, PhaBase, LightcurveDataBase, EventDataBase, 
 from .ogip import OgipFitsBase, ValidationReport
 
 
+def _normalize_gti(gti: Any) -> np.ndarray:
+    arr = np.asarray(gti, dtype=float)
+    if arr.size == 0:
+        return np.asarray([], dtype=float).reshape(0, 2)
+    arr = arr.reshape(-1, 2)
+    good = np.isfinite(arr[:, 0]) & np.isfinite(arr[:, 1]) & (arr[:, 1] > arr[:, 0])
+    arr = arr[good]
+    if arr.size == 0:
+        return np.asarray([], dtype=float).reshape(0, 2)
+    order = np.argsort(arr[:, 0])
+    return arr[order]
+
+
+def _merge_gti(gti: np.ndarray) -> np.ndarray:
+    arr = _normalize_gti(gti)
+    if arr.shape[0] <= 1:
+        return arr
+    merged: list[list[float]] = [[float(arr[0, 0]), float(arr[0, 1])]]
+    for s, e in arr[1:]:
+        ls, le = merged[-1]
+        if float(s) <= le:
+            if float(e) > le:
+                merged[-1][1] = float(e)
+        else:
+            merged.append([float(s), float(e)])
+    return np.asarray(merged, dtype=float)
+
+
+def _create_gti_mask_fallback(time: Any, gti: Any, dt: Optional[float] = None) -> np.ndarray:
+    t = np.asarray(time, dtype=float).reshape(-1)
+    mask = np.zeros(t.shape, dtype=bool)
+    g = _normalize_gti(gti)
+    if t.size == 0 or g.size == 0:
+        return mask
+
+    dt_val = None
+    if dt is not None:
+        try:
+            dt_f = float(dt)
+            if np.isfinite(dt_f) and dt_f > 0:
+                dt_val = dt_f
+        except Exception:
+            dt_val = None
+
+    if dt_val is None:
+        for s, e in g:
+            mask |= (t >= float(s)) & (t < float(e))
+    else:
+        t1 = t + dt_val
+        for s, e in g:
+            # bin 与 GTI 有重叠即保留
+            mask |= (t1 > float(s)) & (t < float(e))
+    return mask
+
+
+def _create_gti_mask(time: Any, gti: Any, dt: Optional[float] = None) -> np.ndarray:
+    try:
+        mod = importlib.import_module('stingray.gti')
+        sr_create_gti_mask = getattr(mod, 'create_gti_mask')
+        return np.asarray(sr_create_gti_mask(time, gti, dt=dt), dtype=bool)
+    except Exception:
+        return _create_gti_mask_fallback(time, gti, dt=dt)
+
+
+def _join_gtis_fallback(gti_a: Any, gti_b: Any) -> np.ndarray:
+    a = _normalize_gti(gti_a)
+    b = _normalize_gti(gti_b)
+    if a.size == 0 and b.size == 0:
+        return np.asarray([], dtype=float).reshape(0, 2)
+    if a.size == 0:
+        return b
+    if b.size == 0:
+        return a
+    return _merge_gti(np.vstack([a, b]))
+
+
+def _join_gtis(gti_a: Any, gti_b: Any) -> np.ndarray:
+    try:
+        mod = importlib.import_module('stingray.gti')
+        sr_join_gtis = getattr(mod, 'join_gtis')
+        joined = np.asarray(sr_join_gtis(np.asarray(gti_a), np.asarray(gti_b)), dtype=float)
+        if joined.size == 0:
+            return np.asarray([], dtype=float).reshape(0, 2)
+        return joined.reshape(-1, 2)
+    except Exception:
+        return _join_gtis_fallback(gti_a, gti_b)
+
+
 def _validate_time_series_like(obj: Any) -> ValidationReport:
     rpt = OgipFitsBase.validate(obj)
     for k in obj.REQUIRED_KEYS:
-        if k not in obj.header:
-            rpt.add('WARN', 'MISSING_KEY', f"Required key '{k}' not found (OGIP-93-003).")
+        if not obj._has_key_ci(k):
+            lvl = 'ERROR' if k in getattr(obj, 'CRITICAL_KEYS', ()) else 'WARN'
+            rpt.add(lvl, 'MISSING_KEY', f"Required key '{k}' not found (OGIP-93-003).")
     cols = getattr(obj, 'columns', ()) or ()
     colset = {c.upper() for c in cols}
     for group in obj.REQUIRED_COLUMNS_ANY:
         if not any(c.upper() in colset for c in group):
             rpt.add('ERROR', 'MISSING_COLUMN', f"Missing required column group: {group}")
-    hdr = obj.header or {}
-    if not (('MJDREF' in hdr) or (('MJDREFI' in hdr) or ('MJDREFF' in hdr))):
+    if not (obj._has_key_ci('MJDREF') or obj._has_any_key_ci(['MJDREFI', 'MJDREFF'])):
         rpt.add('WARN', 'MISSING_MJDREF', 'MJDREF / (MJDREFI+MJDREFF) not found in header; absolute times may be ambiguous.')
     try:
         timeunit = obj.get_keyword_ci('TIMEUNIT')
@@ -231,13 +320,15 @@ class PhaData(PhaBase):
     def validate(self) -> ValidationReport:  # type: ignore[override]
         rpt = OgipFitsBase.validate(self)
         for k in self.REQUIRED_KEYS:
-            if k not in self.header:
+            if not self._has_key_ci(k):
                 rpt.add('WARN', 'MISSING_KEY', f"Required key '{k}' not found (OGIP-92-007).")
         colset = {c.upper() for c in self.columns}
-        for c in self.REQUIRED_COLUMNS:
+        for c in ['CHANNEL']:
             if c not in colset:
                 rpt.add('ERROR', 'MISSING_COLUMN', f"PHA missing column {c}")
-        exp_val = self.header.get('EXPOSURE', self.header.get('EXPTIME', None))
+        if not any(c in colset for c in ('COUNTS', 'RATE')):
+            rpt.add('ERROR', 'MISSING_COLUMN', "PHA missing one of COUNTS/RATE")
+        exp_val = self.get_keyword_ci('EXPOSURE', self.get_keyword_ci('EXPTIME', None))
         if exp_val is not None:
             try:
                 if float(exp_val) <= 0:
@@ -249,6 +340,8 @@ class PhaData(PhaBase):
 
     @property
     def count_rate(self) -> Optional[np.ndarray]:
+        if self.rate is not None:
+            return np.asarray(self.rate, dtype=float)
         if self.exposure and self.exposure > 0:
             return self.counts / self.exposure
         return None
@@ -313,6 +406,10 @@ class LightcurveData(LightcurveDataBase):
             rpt.add('ERROR', 'MISSING_COLUMN', "Lightcurve missing RATE/COUNTS column")
         if self.time is None or len(self.time) == 0:
             rpt.add('ERROR', 'MISSING_TIME', "time array is empty or None")
+        if self.time_raw is not None and self.time is not None and len(self.time_raw) != len(self.time):
+            rpt.add('ERROR', 'LENGTH_MISMATCH', f"time_raw ({len(self.time_raw)}) and time ({len(self.time)}) length mismatch")
+        if self.time_rel is not None and self.time is not None and len(self.time_rel) != len(self.time):
+            rpt.add('ERROR', 'LENGTH_MISMATCH', f"time_rel ({len(self.time_rel)}) and time ({len(self.time)}) length mismatch")
         if self.value is None or len(self.value) == 0:
             rpt.add('ERROR', 'MISSING_VALUE', "value array is empty or None")
         if self.time is not None and self.value is not None and len(self.time) != len(self.value):
@@ -345,9 +442,10 @@ class LightcurveData(LightcurveDataBase):
 
     @property
     def absolute_time(self) -> np.ndarray:
-        if self.time is None:
+        tref = self.time_rel if self.time_rel is not None else self.time
+        if tref is None:
             return np.asarray([], dtype=float)
-        return np.asarray(self.time, dtype=float) + float(self.timezero)
+        return np.asarray(tref, dtype=float) + float(self.timezero)
 
     @property
     def gti(self) -> Optional[list[tuple[float, float]]]:
@@ -358,7 +456,7 @@ class LightcurveData(LightcurveDataBase):
     def get_time_object(self, index: Optional[int] = None) -> Optional[Any]:
         if self.timezero_obj is None:
             return None
-        from astropy.time import TimeDelta
+        from .time import TimeDelta
 
         absolute_times = self.absolute_time
         dt = TimeDelta(absolute_times[index], format='sec') if index is not None else TimeDelta(absolute_times, format='sec')
@@ -452,23 +550,21 @@ class LightcurveData(LightcurveDataBase):
     def apply_gti(self, inplace: bool = False) -> 'LightcurveData':
         if self.gti is None:
             return self if inplace else self._copy()
-        from stingray.gti import create_gti_mask
 
         gti_arr = np.array(self.gti)
         bin_lo, _, _ = self._resolve_bin_geometry()
-        mask = create_gti_mask(bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+        mask = _create_gti_mask(bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
         return self.apply_mask(np.asarray(mask, dtype=bool), inplace=inplace)
 
     def split_by_gti(self, min_points: int = 1) -> list['LightcurveData']:
         if self.gti is None or len(self.gti) == 0:
             return [self]
-        from stingray.gti import create_gti_mask
 
         result = []
         for start, stop in self.gti:
             gti_arr = np.array([[start, stop]])
             bin_lo, _, _ = self._resolve_bin_geometry()
-            mask = create_gti_mask(bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
+            mask = _create_gti_mask(bin_lo, gti_arr, dt=self.dt if isinstance(self.dt, float) else None)
             mask = np.asarray(mask, dtype=bool)
             if np.sum(mask) < min_points:
                 continue
@@ -558,9 +654,7 @@ class LightcurveData(LightcurveDataBase):
         new_counts_err = np.concatenate([first_lc.counts_err, second_lc.counts_err]) if (first_lc.counts_err is not None and second_lc.counts_err is not None) else None
         new_rate_err = np.concatenate([first_lc.rate_err, second_lc.rate_err]) if (first_lc.rate_err is not None and second_lc.rate_err is not None) else None
         if first_lc.gti is not None and second_lc.gti is not None:
-            from stingray.gti import join_gtis
-
-            new_gti = join_gtis(np.array(first_lc.gti), np.array(second_lc.gti))
+            new_gti = _join_gtis(np.array(first_lc.gti), np.array(second_lc.gti))
             new_gti_start = new_gti[:, 0]
             new_gti_stop = new_gti[:, 1]
         else:
@@ -689,7 +783,8 @@ class EventData(EventDataBase):
 
     @property
     def absolute_time(self) -> np.ndarray:
-        return self.time + self.timezero
+        tref = self.time_rel if self.time_rel.size > 0 else self.time
+        return np.asarray(tref, dtype=float) + float(self.timezero)
 
     @property
     def gti_exposure(self) -> Optional[float]:
@@ -870,6 +965,15 @@ class EventData(EventDataBase):
         if show_grid:
             ax.grid(alpha=0.3, ls='--')
         return ax
+
+    def timescale(
+        self,
+        *,
+        background: Optional[Union['EventDataBase', str, Path]] = None,
+        alpha: Optional[float] = None,
+    ) -> Any:
+        """创建独立的 timescale 分析器。"""
+        return timescale(self, background=background, alpha=alpha)
 
     def slice(
         self,
@@ -1122,10 +1226,338 @@ class EventData(EventDataBase):
             return read_evt(self.path)
         raise ValueError('No original events available to clear all')
 
+
+EventLike = Union[EventDataBase, str, Path]
+
+
+class timescale:
+    """事件时标分析器（独立于 EventData.plot）。
+
+    负责调用 `ops.txx` 计算时标，并通过 `plot.plot_event_txx` 可视化。
+    """
+
+    def __init__(
+        self,
+        source: EventLike,
+        *,
+        background: Optional[EventLike] = None,
+        alpha: Optional[float] = None,
+        timezero: Optional[Any] = None,
+    ) -> None:
+        self.source = source
+        self.background = background
+        self.alpha = alpha
+        self.timezero = timezero
+        self.result: Optional[Dict[str, Any]] = None
+        self.summary_text: Optional[str] = None
+
+    _COMMON_RESULT_KEYS = {
+        't100',
+        't100_err',
+        't100_value',
+        't100_tstart',
+        't100_tstop',
+        't90',
+        't90_err',
+        't90_value',
+        't90_tstart',
+        't90_tstop',
+        't50',
+        't50_err',
+        't50_value',
+        't50_tstart',
+        't50_tstop',
+    }
+
+    _VALUE_ERR_PACK_KEYS = {'t50', 't90', 't100'}
+
+    @staticmethod
+    def _as_err_low_high(err_any: Any) -> Dict[str, float]:
+        err = np.asarray(err_any, dtype=float).reshape(-1)
+        if err.size >= 2 and np.all(np.isfinite(err[:2])):
+            return {
+                'low': float(abs(err[0])),
+                'high': float(abs(err[1])),
+            }
+        if err.size == 1 and np.isfinite(err[0]):
+            e = float(abs(err[0]))
+            return {
+                'low': e,
+                'high': e,
+            }
+        return {
+            'low': float('nan'),
+            'high': float('nan'),
+        }
+
+    def __getattr__(self, name: str) -> Any:
+        # 允许直接访问 result 字典中的字段。
+        # 对 t50/t90/t100，默认返回 value + err_low/err_high 的组合输出。
+        res = self.result
+        if isinstance(res, dict):
+            if name.endswith('_value'):
+                base = name[:-6]
+                if base in self._VALUE_ERR_PACK_KEYS and (base in res):
+                    return res[base]
+
+            if name in self._VALUE_ERR_PACK_KEYS and (name in res):
+                err_pair = self._as_err_low_high(
+                    res.get(f'{name}_err', np.asarray([], dtype=float))
+                )
+                return {
+                    'value': res[name],
+                    'err_low': err_pair['low'],
+                    'err_high': err_pair['high'],
+                    'err': {
+                        'low': err_pair['low'],
+                        'high': err_pair['high'],
+                    },
+                }
+
+            if name in res:
+                return res[name]
+
+        if name in self._COMMON_RESULT_KEYS:
+            raise AttributeError(
+                f"timescale.{name} 需要先运行 compute() 或 plot() 后再访问"
+            )
+
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def __dir__(self) -> list[str]:
+        # 在自动补全中展示当前 result 可直接访问的字段。
+        names = set(super().__dir__())
+        res = self.result
+        if isinstance(res, dict):
+            names.update(
+                k for k in res.keys() if isinstance(k, str) and k.isidentifier()
+            )
+            names.update(
+                f'{k}_value'
+                for k in self._VALUE_ERR_PACK_KEYS
+                if k in res
+            )
+        return sorted(names)
+
+    @staticmethod
+    def _safe_float(val: Any, default: float = np.nan) -> float:
+        try:
+            out = float(val)
+            if np.isfinite(out):
+                return out
+        except Exception:
+            pass
+        return float(default)
+
+    def _resolve_timezero_seconds(self) -> float:
+        tz = self.timezero
+        if tz is None:
+            return np.nan
+
+        tz_num = self._safe_float(tz, np.nan)
+        if np.isfinite(tz_num):
+            return tz_num
+
+        # 尝试将 astropy.time.Time 转换到事件时间标尺（秒）。
+        if hasattr(tz, 'mjd'):
+            src = self.source
+            src_tz = self._safe_float(getattr(src, 'timezero', np.nan), np.nan)
+            src_tz_obj = getattr(src, 'timezero_obj', None)
+
+            # 当 source 是路径时，读取事件头以获得 timezero/timezero_obj 作为锚点。
+            if ((not np.isfinite(src_tz)) or (src_tz_obj is None)) and isinstance(src, (str, Path)):
+                try:
+                    from .io import read_evt
+
+                    src_evt = read_evt(src)
+                    src_tz = self._safe_float(getattr(src_evt, 'timezero', np.nan), np.nan)
+                    src_tz_obj = getattr(src_evt, 'timezero_obj', None)
+                except Exception:
+                    pass
+
+            if np.isfinite(src_tz) and (src_tz_obj is not None):
+                # 优先走 Time 差值到秒，避免不同 Time 格式直接读 mjd 带来的边界误差。
+                try:
+                    dt = tz - src_tz_obj
+                    if hasattr(dt, 'to_value'):
+                        dt_sec = self._safe_float(dt.to_value('sec'), np.nan)
+                        if np.isfinite(dt_sec):
+                            return src_tz + dt_sec
+                    if hasattr(dt, 'sec'):
+                        dt_sec = self._safe_float(dt.sec, np.nan)
+                        if np.isfinite(dt_sec):
+                            return src_tz + dt_sec
+                except Exception:
+                    pass
+
+                # 兜底：mjd 差值。
+                mjd_ref = self._safe_float(getattr(src_tz_obj, 'mjd', np.nan), np.nan)
+                mjd_val = self._safe_float(getattr(tz, 'mjd', np.nan), np.nan)
+                if np.isfinite(mjd_ref) and np.isfinite(mjd_val):
+                    return src_tz + (mjd_val - mjd_ref) * 86400.0
+
+        return np.nan
+
+    @staticmethod
+    def _as_asym_text(value: float, err_any: Any) -> str:
+        err = np.asarray(err_any, dtype=float).reshape(-1)
+        if err.size >= 2 and np.all(np.isfinite(err[:2])):
+            lo = float(abs(err[0]))
+            hi = float(abs(err[1]))
+            return f'{value:.1f} (-{lo:.1f}/+{hi:.1f})'
+        if err.size == 1 and np.isfinite(err[0]):
+            e = float(abs(err[0]))
+            return f'{value:.1f} (-{e:.1f}/+{e:.1f})'
+        return f'{value:.1f}'
+
+    def _format_txx_line(self, res: Dict[str, Any], key: str, *, tz_ref: float) -> str:
+        val = self._safe_float(res.get(key, np.nan), np.nan)
+        if not np.isfinite(val):
+            return f'{key.upper()}: N/A'
+
+        main = self._as_asym_text(val, res.get(f'{key}_err', np.asarray([], dtype=float)))
+        line = f'{key.upper()}: {main} s'
+
+        t_start = self._safe_float(res.get(f'{key}_tstart', np.nan), np.nan)
+        t_stop = self._safe_float(res.get(f'{key}_tstop', np.nan), np.nan)
+        if np.isfinite(t_start) and np.isfinite(t_stop):
+            if np.isfinite(tz_ref):
+                rs = t_start - tz_ref
+                re = t_stop - tz_ref
+                line += f'  [{rs:.1f}, {re:.1f}] s rel. timezero'
+            else:
+                line += f'  [{t_start:.1f}, {t_stop:.1f}] s'
+        return line
+
+    def _build_summary_text(self, res: Dict[str, Any]) -> str:
+        tz_ref = self._resolve_timezero_seconds()
+        lines = ['Timescale summary']
+
+        tz_obj = self.timezero
+        tz_line: Optional[str] = None
+        if tz_obj is not None:
+            try:
+                
+                tz_line = f'timezero = {tz_obj.utc.isot}'
+            except Exception as e:
+                raise ValueError(f'无法解析 timezero 对象为utc格式：{e}')
+
+        if tz_line is None and np.isfinite(tz_ref):
+            tz_line = f'timezero = {tz_ref:.6f} s (output uses relative boundaries)'
+
+        if tz_line is not None:
+            lines.append(tz_line)
+
+        lines.append(self._format_txx_line(res, 't100', tz_ref=tz_ref))
+        lines.append(self._format_txx_line(res, 't90', tz_ref=tz_ref))
+        lines.append(self._format_txx_line(res, 't50', tz_ref=tz_ref))
+        return '\n'.join(lines)
+
+    def summary(self, result: Optional[Dict[str, Any]] = None) -> str:
+        res = self.result if result is None else result
+        if res is None:
+            raise ValueError('timescale.summary 需要先运行 compute，或传入 result')
+        text = self._build_summary_text(cast(Dict[str, Any], res))
+        self.summary_text = text
+        return text
+
+    def compute(
+        self,
+        *,
+        background: Optional[EventLike] = None,
+        alpha: Optional[float] = None,
+        **txx_kwargs: Any,
+    ) -> Dict[str, Any]:
+        """调用 `ops.txx` 计算时标结果。"""
+        from .ops import txx as _txx
+
+        bkg = self.background if background is None else background
+        if bkg is None:
+            raise ValueError('timescale.compute 需要提供 background（EventData 或路径）')
+
+        alpha_eff = self.alpha if alpha is None else alpha
+        run_kwargs = dict(txx_kwargs)
+        if alpha_eff is not None:
+            run_kwargs['alpha'] = float(alpha_eff)
+
+        res = cast(Dict[str, Any], _txx(self.source, background=bkg, **run_kwargs))
+
+        # 记录用户用于计算的固定分箱宽度，便于绘图时恢复原始 light curve。
+        if 'evt_binsize' in run_kwargs:
+            try:
+                bs = float(run_kwargs['evt_binsize'])
+                if np.isfinite(bs) and bs > 0.0:
+                    res.setdefault('evt_binsize', bs)
+            except Exception:
+                pass
+
+        self.background = bkg
+        if alpha_eff is not None:
+            self.alpha = float(alpha_eff)
+        self.result = res
+        self.summary_text = self._build_summary_text(res)
+        print(self.summary_text)
+        return res
+
+    def plot(
+        self,
+        result: Optional[Dict[str, Any]] = None,
+        *,
+        srcname: Optional[str] = None,
+        title: Optional[str] = None,
+        figsize: Tuple[float, float] = (10.5, 8.2),
+        out: Optional[Union[str, Path]] = None,
+        binsize: Optional[float] = None,
+        background: Optional[EventLike] = None,
+        alpha: Optional[float] = None,
+        **txx_kwargs: Any,
+    ):
+        """绘制时标诊断图；若无 result 则内部先 compute。
+
+        参数
+        - binsize: 直方图分箱宽度（秒）。等价于传入 `evt_binsize` 给 `compute/ops.txx`。
+          这样可以在不显式调用 `compute` 的情况下直接 `plot(..., binsize=...)`。
+        """
+        from .plot import plot_event_txx
+
+        run_kwargs = dict(txx_kwargs)
+        if 'timezero' in run_kwargs:
+            raise ValueError('请在 timescale 初始化时设置 timezero，不要在 plot 中传入')
+        if binsize is not None:
+            if 'evt_binsize' in run_kwargs:
+                raise ValueError('请只设置一个分箱参数：binsize 或 evt_binsize')
+            run_kwargs['evt_binsize'] = float(binsize)
+
+        if result is None:
+            if self.result is not None and background is None and alpha is None and not run_kwargs:
+                result_eff = self.result
+            else:
+                result_eff = self.compute(background=background, alpha=alpha, **run_kwargs)
+        else:
+            result_eff = cast(Dict[str, Any], result)
+            self.result = result_eff
+
+        bkg_eff = self.background if background is None else background
+        alpha_eff = self.alpha if alpha is None else alpha
+
+        fig, axes = plot_event_txx(
+            self.source,
+            result_eff,
+            background=bkg_eff,
+            alpha=alpha_eff,
+            srcname=srcname,
+            title=title,
+            figsize=figsize,
+            out=out,
+            timezero=self.timezero,
+        )
+        return fig, axes, result_eff
+
 __all__ = [
     'ArfData',
     'RmfData',
     'PhaData',
     'LightcurveData',
     'EventData',
+    'timescale',
 ]

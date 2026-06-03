@@ -20,10 +20,9 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 
 import numpy as np
-from astropy.io import fits
 
 from ..core.data import PhaData
-from ..core.io import read_pha
+from ..core.io import read_pha, write_pha as write_pha_core
 
 __all__ = [
     'compute_grouping_by_min_counts', 'read_groupfile', 'grppha', 'write_grouped_pha',
@@ -33,8 +32,9 @@ __all__ = [
 def compute_grouping_by_min_counts(counts: np.ndarray, min_counts: float) -> np.ndarray:
     """Compute grouping array given per-channel `counts` and `min_counts`.
 
-    Returns an integer array `grouping` of same length as `counts`, where
-    grouping[i] is the group id (1-based) that channel i belongs to.
+    Returns an OGIP-style integer array `grouping` of same length as `counts`, where
+    `1` marks the start of a group, `-1` marks continuation in the same group,
+    and `0` means channel ignored (not produced by this function).
 
     Algorithm: greedy left-to-right accumulate counts until >= min_counts,
     then start a new group. The last group may have < min_counts.
@@ -44,14 +44,16 @@ def compute_grouping_by_min_counts(counts: np.ndarray, min_counts: float) -> np.
     grouping = np.zeros(n, dtype=int)
     if n == 0:
         return grouping
-    gid = 1
     acc = 0.0
+    is_new_group = True
     for i in range(n):
         acc += float(counts[i])
-        grouping[i] = gid
+        grouping[i] = 1 if is_new_group else -1
         if acc >= float(min_counts) and i < n - 1:
-            gid += 1
             acc = 0.0
+            is_new_group = True
+        else:
+            is_new_group = False
     return grouping
 
 
@@ -82,59 +84,67 @@ def read_groupfile(path: str | Path) -> List[Tuple[int, int]]:
 
 
 def _grouping_from_ranges(channels: np.ndarray, ranges: List[Tuple[int, int]]) -> np.ndarray:
-    """Create grouping array from explicit ranges; channels outside any range get 0."""
+    """Create OGIP-style grouping flags from explicit ranges; channels outside ranges get 0."""
     ch = np.asarray(channels, dtype=int)
     g = np.zeros(ch.size, dtype=int)
-    gid = 1
     for a, b in ranges:
         mask = (ch >= int(a)) & (ch <= int(b))
-        g[mask] = gid
-        gid += 1
+        idx = np.where(mask)[0]
+        if idx.size == 0:
+            continue
+        g[idx] = -1
+        g[idx[0]] = 1
     return g
 
 
+def _group_flags_to_ids(grouping: np.ndarray) -> np.ndarray:
+    """Convert grouping (OGIP flags or legacy gid encoding) to 1-based group IDs."""
+    g = np.asarray(grouping, dtype=int)
+    if g.size == 0:
+        return g
+    nz = g[g != 0]
+    if nz.size == 0:
+        return np.zeros_like(g)
+    is_flag = np.all(np.isin(nz, [-1, 1]))
+    out = np.zeros_like(g)
+    if is_flag:
+        gid = 0
+        for i, val in enumerate(g):
+            if val == 0:
+                out[i] = 0
+            elif val == 1:
+                gid += 1
+                out[i] = gid
+            elif val == -1:
+                out[i] = gid if gid > 0 else 0
+        return out
+    # legacy group-id encoding already
+    return np.where(g > 0, g, 0)
+
+
 def write_grouped_pha(pha: PhaData, outpath: str | Path, grouping: np.ndarray, *, overwrite: bool = False) -> Path:
-    """Write a new PHA file containing GROUPING column (aligned with channels).
-
-    Columns: CHANNEL, COUNTS, STAT_ERR (if present), GROUPING.
-    Primary header copies some meta if available.
-    """
-    outp = Path(outpath)
-    if outp.exists() and not overwrite:
-        raise FileExistsError(str(outp))
-
-    ch = np.asarray(pha.channels, dtype=int)
-    cnt = np.asarray(pha.counts, dtype=float)
-    cols = [fits.Column(name='CHANNEL', format='J', array=ch),
-            fits.Column(name='COUNTS', format='E', array=cnt)]
-    if pha.stat_err is not None:
-        cols.append(fits.Column(name='STAT_ERR', format='E', array=np.asarray(pha.stat_err, dtype=float)))
-    cols.append(fits.Column(name='GROUPING', format='J', array=np.asarray(grouping, dtype=int)))
-
-    hdu_spec = fits.BinTableHDU.from_columns(cols, name='SPECTRUM')
-    # attach some keys
-    hdr = hdu_spec.header
-    hdr['EXPOSURE'] = float(pha.exposure) if pha.exposure is not None else 0.0
-    hdr['EXTNAME'] = 'SPECTRUM'
-
-    prih = fits.PrimaryHDU()
-    try:
-        if pha.meta is not None:
-            m = pha.meta
-            if getattr(m, 'instrume', None):
-                prih.header['INSTRUME'] = m.instrume
-            if getattr(m, 'telescop', None):
-                prih.header['TELESCOP'] = m.telescop
-            if getattr(m, 'tstart', None) is not None:
-                prih.header['TSTART'] = float(m.tstart)
-            if getattr(m, 'tstop', None) is not None:
-                prih.header['TSTOP'] = float(m.tstop)
-    except Exception:
-        pass
-
-    hdul = fits.HDUList([prih, hdu_spec])
-    hdul.writeto(outp, overwrite=overwrite)
-    return outp
+    """Write grouped PHA by delegating to unified `core.io.write_pha`."""
+    grouped = PhaData(
+        path=pha.path,
+        channels=pha.channels,
+        counts=pha.counts,
+        rate=pha.rate,
+        stat_err=pha.stat_err,
+        exposure=pha.exposure,
+        backscal=pha.backscal,
+        areascal=pha.areascal,
+        respfile=pha.respfile,
+        ancrfile=pha.ancrfile,
+        quality=pha.quality,
+        grouping=np.asarray(grouping, dtype=int),
+        ebounds=pha.ebounds,
+        raw_spectrum_columns=pha.raw_spectrum_columns,
+        header=pha.header,
+        meta=pha.meta,
+        headers_dump=pha.headers_dump,
+        columns=pha.columns,
+    )
+    return write_pha_core(grouped, outpath, overwrite=overwrite)
 
 
 def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_counts: Optional[float] = None,
@@ -181,12 +191,13 @@ def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_count
         return newpha
 
     # rebin: collapse channels into groups
-    gids = np.unique(grouping[grouping > 0])
+    gid_arr = _group_flags_to_ids(grouping)
+    gids = np.unique(gid_arr[gid_arr > 0])
     new_channels = []
     new_counts = []
     new_stat = []
     for gid in gids:
-        mask = grouping == int(gid)
+        mask = gid_arr == int(gid)
         if not np.any(mask):
             continue
         new_channels.append(int(ch[mask][0]))
@@ -200,18 +211,6 @@ def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_count
                      ebounds=None, header=pha.header, meta=pha.meta, headers_dump=pha.headers_dump, columns=('CHANNEL','COUNTS'))
 
     if outfile is not None:
-        # write rebinned spectrum: simple BinTable with CHANNEL/COUNTS/STAT_ERR
-        outp = Path(outfile)
-        if outp.exists() and not overwrite:
-            raise FileExistsError(str(outp))
-        cols = [fits.Column(name='CHANNEL', format='J', array=newpha.channels),
-                fits.Column(name='COUNTS', format='E', array=newpha.counts)]
-        if newpha.stat_err is not None:
-            cols.append(fits.Column(name='STAT_ERR', format='E', array=newpha.stat_err))
-        hdu_spec = fits.BinTableHDU.from_columns(cols, name='SPECTRUM')
-        hdu_spec.header['EXPOSURE'] = float(newpha.exposure) if newpha.exposure is not None else 0.0
-        prih = fits.PrimaryHDU()
-        hdul = fits.HDUList([prih, hdu_spec])
-        hdul.writeto(outp, overwrite=overwrite)
+        write_pha_core(newpha, outfile, overwrite=overwrite)
 
     return newpha

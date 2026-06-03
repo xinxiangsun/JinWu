@@ -1,42 +1,69 @@
-# Ignore Python bytecode cache directories
+# === Python ===
 __pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+*.egg
 
-# Ignore Visual Studio Code directories and settings
-.vscode/
+# === Build & Distribution ===
+build/
+dist/
+*.whl
+*.tar.gz
 
-# Ignore JetBrains IDE project files
-.idea/
-
-# Environment variables file
-.env
-
-# Python virtual environments
+# === Virtual Environments ===
 venv/
 env/
 .venv/
 .pyenv/
 
-# Byte-compiled Python files
-*.py[cod]
+# === Sphinx Documentation ===
+docs/_build/
+docs/api/
+docs/api.rst.automodapi/
+docs/**/*.automodapi
 
-# Log files
-*.log
+# === Testing & Coverage ===
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.prof
 
-# Jupyter Notebook checkpoints
+# === Jupyter ===
 .ipynb_checkpoints/
 
-# macOS Finder metadata files
-.DS_Store
+# === IDE ===
+.vscode/
+.idea/
 
-# macOS resource fork files
+# === macOS ===
+.DS_Store
 .AppleDouble
 .LSOverride
-
-# Icon file
 Icon?
-
-# Thumbnails
 ._*
+
+# === Environment ===
+.env
+
+# === Logs ===
+*.log
+
+# === External Dependencies ===
+external_sources/
+test/data/
+
+# === AI Coding Agents ===
+.codex/
+.agents/
+AGENTS.md
+CLAUDE.md
+.cursorrules
+.windsurfrules
+
 
 # Files that might appear on external disk drives
 .Spotlight-V100

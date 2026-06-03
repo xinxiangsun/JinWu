@@ -22,7 +22,6 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-	from . import file as file
 	from . import heasoft as heasoft
 	from . import plot as plot
 	from . import time as time
@@ -33,12 +32,14 @@ if TYPE_CHECKING:
 		HduHeader, FitsHeaderDump, OgipMeta,
 		ArfBase, RmfBase, PhaBase, LightcurveDataBase, EventDataBase,
 	)
-	from .data import ArfData, RmfData, PhaData, LightcurveData, EventData
+	from .data import ArfData, RmfData, PhaData, LightcurveData, EventData, timescale
 	from .datasets import LightcurveDataset, SpectrumDataset, JointDataset, netdata
 	from .io import (
 		OgipArfReader, OgipRmfReader, OgipPhaReader, OgipLightcurveReader, OgipEventReader,
 		ArfReader, RmfReader, RspReader, LightcurveReader,
+		PhaWriter, ArfWriter, RmfWriter, LightcurveWriter, EventWriter,
 		OgipData, guess_ogip_kind, readfits, read_arf, read_rmf, read_pha, read_lc, read_evt,
+		write_arf, write_rmf, write_pha, write_lc, write_evt, writefits,
 		band_from_arf_bins, channel_mask_from_ebounds,
 	)
 	from .ops import (
@@ -52,7 +53,7 @@ except PackageNotFoundError:  # pragma: no cover - during editable installs
 	__version__ = "0.0.13"
 
 _MODULE_EXPORTS = {
-	'file', 'heasoft', 'plot', 'time', 'ops', 'io', 'redshift',
+	'heasoft', 'plot', 'time', 'ops', 'io', 'redshift',
 }
 
 _BASE_EXPORTS = {
@@ -62,13 +63,15 @@ _BASE_EXPORTS = {
 }
 
 _DATA_EXPORTS = {
-	'ArfData', 'RmfData', 'PhaData', 'LightcurveData', 'EventData',
+	'ArfData', 'RmfData', 'PhaData', 'LightcurveData', 'EventData', 'timescale',
 }
 
 _IO_EXPORTS = {
 	'OgipArfReader', 'OgipRmfReader', 'OgipPhaReader', 'OgipLightcurveReader', 'OgipEventReader',
 	'ArfReader', 'RmfReader', 'RspReader', 'LightcurveReader',
+	'PhaWriter', 'ArfWriter', 'RmfWriter', 'LightcurveWriter', 'EventWriter',
 	'OgipData', 'guess_ogip_kind', 'readfits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
+	'write_arf', 'write_rmf', 'write_pha', 'write_lc', 'write_evt', 'writefits',
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
 }
 
@@ -82,9 +85,9 @@ _DATASET_EXPORTS = {
 
 __all__ = [
 	# Submodules
-	'file', 'heasoft', 'plot', 'time', 'ops', 'io',
+	'heasoft', 'plot', 'time', 'ops', 'io',
 	# Data containers
-	'EnergyBand', 'ChannelBand', 'RegionArea', 'RegionAreaSet', 'HduHeader', 'FitsHeaderDump', 'OgipMeta', 'ArfBase', 'RmfBase', 'PhaBase', 'ArfData', 'RmfData', 'PhaData', 'LightcurveDataBase', 'LightcurveData', 'EventDataBase', 'EventData',
+	'EnergyBand', 'ChannelBand', 'RegionArea', 'RegionAreaSet', 'HduHeader', 'FitsHeaderDump', 'OgipMeta', 'ArfBase', 'RmfBase', 'PhaBase', 'ArfData', 'RmfData', 'PhaData', 'LightcurveDataBase', 'LightcurveData', 'EventDataBase', 'EventData', 'timescale',
 	# Dataset containers
 	'LightcurveDataset', 'SpectrumDataset', 'JointDataset',
 	# Readers
@@ -94,7 +97,9 @@ __all__ = [
 	# Utilities
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
 	# Unified helpers
+	'PhaWriter', 'ArfWriter', 'RmfWriter', 'LightcurveWriter', 'EventWriter',
 	'OgipData', 'guess_ogip_kind', 'readfits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
+	'write_arf', 'write_rmf', 'write_pha', 'write_lc', 'write_evt', 'writefits',
 	# Operations
 	'slice_lightcurve', 'rebin_lightcurve', 'slice_pha', 'rebin_pha', 'slice_events', 'rebin_events_to_lightcurve',
 	# Dataset helper
