@@ -1,0 +1,165 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.RmfData.rst:2
+msgid "RmfData"
+msgstr ""
+
+#: jinwu.core.data.RmfData:1 of
+msgid "Concrete RMF data class with local behavior implementation."
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`REQUIRED_COLUMNS_ARF <jinwu.core.RmfData.REQUIRED_COLUMNS_ARF>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ""
+":py:obj:`REQUIRED_COLUMNS_RMF_MIN "
+"<jinwu.core.RmfData.REQUIRED_COLUMNS_RMF_MIN>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`REQUIRED_KEYS_ANY <jinwu.core.RmfData.REQUIRED_KEYS_ANY>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`channel <jinwu.core.RmfData.channel>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`columns <jinwu.core.RmfData.columns>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`dense_matrix <jinwu.core.RmfData.dense_matrix>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`e_max <jinwu.core.RmfData.e_max>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`e_min <jinwu.core.RmfData.e_min>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`energ_hi <jinwu.core.RmfData.energ_hi>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`energ_lo <jinwu.core.RmfData.energ_lo>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`f_chan <jinwu.core.RmfData.f_chan>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`header <jinwu.core.RmfData.header>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`headers_dump <jinwu.core.RmfData.headers_dump>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`kind <jinwu.core.RmfData.kind>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`matrix <jinwu.core.RmfData.matrix>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`meta <jinwu.core.RmfData.meta>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`n_chan <jinwu.core.RmfData.n_chan>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`n_grp <jinwu.core.RmfData.n_grp>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`path <jinwu.core.RmfData.path>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:33:<autosummary>:1
+msgid ":py:obj:`validation <jinwu.core.RmfData.validation>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:35
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+msgid ""
+":py:obj:`get_keyword_ci <jinwu.core.RmfData.get_keyword_ci>`\\ "
+"\\(key\\[\\, default\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+#: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:1 of
+msgid "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+msgid ""
+":py:obj:`plot <jinwu.core.RmfData.plot>`\\ \\(\\[ax\\, kind\\, row\\, "
+"yscale\\, cmap\\, title\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+msgid ":py:obj:`rebin <jinwu.core.RmfData.rebin>`\\ \\(factor\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+msgid ":py:obj:`rebuild_dense <jinwu.core.RmfData.rebuild_dense>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+msgid ":py:obj:`validate <jinwu.core.RmfData.validate>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:43:<autosummary>:1
+#: jinwu.core.data.RmfData.validate:1 of
+msgid "通用层：仅检查路径与 header 存在性。子类会扩展。"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:45
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.core.RmfData.rst:68
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:3 of
+msgid "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
+msgstr ""
+

@@ -1,0 +1,125 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:2
+msgid "LightcurveDataset"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:1 of
+msgid "光变曲线容器类（支持多条曲线统一绘图）"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:4
+#: jinwu.core.datasets.LightcurveDataset.plot:4 of
+msgid "参数"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:5 of
+msgid "data"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:-1 of
+msgid "List[LightcurveData] | LightcurveData"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:6 of
+msgid "单个或多个光变曲线"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:7 of
+msgid "labels"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:-1 of
+msgid "List[str] | str | None, optional"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:8 of
+msgid "每条曲线的标签"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset:11 of
+msgid "示例"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:15:<autosummary>:1
+msgid ":py:obj:`data <jinwu.core.LightcurveDataset.data>`"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:15:<autosummary>:1
+msgid ":py:obj:`labels <jinwu.core.LightcurveDataset.labels>`"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:17
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`plot <jinwu.core.LightcurveDataset.plot>`\\ \\(\\*\\[\\, ax\\, "
+"ykind\\, multiband\\, colors\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:21:<autosummary>:1
+#: jinwu.core.datasets.LightcurveDataset.plot:1 of
+msgid "绘制光变曲线"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:23
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.core.LightcurveDataset.rst:28
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:5 of
+msgid "multiband"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:-1 of
+msgid "bool | 'auto', default='auto'"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:6 of
+msgid "True: 多子图模式；False: 叠加模式；'auto': 自动选择"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:7 of
+msgid "colors"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:-1 of
+msgid "list[str], optional"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:8 of
+msgid "每条曲线的颜色"
+msgstr ""
+
+#: jinwu.core.datasets.LightcurveDataset.plot:9 of
+msgid "其他参数传递给 plot_lightcurve"
+msgstr ""
+

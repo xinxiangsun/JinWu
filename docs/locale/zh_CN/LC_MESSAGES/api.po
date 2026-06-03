@@ -1,0 +1,1008 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api.rst:2
+msgid "API Reference"
+msgstr ""
+
+#: ../../api.rst:4
+msgid ""
+"This page documents the public API of JinWu, auto-generated from "
+"docstrings."
+msgstr ""
+
+#: ../../api.rst:7
+msgid "Core Package"
+msgstr ""
+
+#: ../../api.rst:11
+msgid "jinwu.core Package"
+msgstr ""
+
+#: jinwu.core:2 of
+msgid "autohea.core"
+msgstr ""
+
+#: jinwu.core:4 of
+msgid "Core utilities for OGIP FITS IO and helpers."
+msgstr ""
+
+#: jinwu.core:6 of
+msgid ""
+"This package layer exposes: - Submodules such as `file`, `heasoft`, "
+"`plot`, `time`. - Numpy-first OGIP readers in `core.file` for "
+"ARF/RMF/PHA/LC/EVT, returning"
+msgstr ""
+
+#: jinwu.core:9 of
+msgid "concrete dataclasses with `kind` and `path` fields."
+msgstr ""
+
+#: jinwu.core:12 of
+msgid "Typical usage"
+msgstr ""
+
+#: jinwu.core:13 of
+msgid ""
+"from autohea.core import readfits, guess_ogip_kind from autohea.core "
+"import read_arf, read_pha, OgipPhaReader from autohea.core import "
+"band_from_arf_bins, ChannelBand"
+msgstr ""
+
+#: ../../api.rst:16 ../../api.rst:47 ../../api.rst:71 ../../api.rst:112
+#: ../../api.rst:237
+msgid "Functions"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`band_from_arf_bins <jinwu.core.band_from_arf_bins>`\\ "
+"\\(arf\\_path\\[\\, bin\\_lo\\, bin\\_hi\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`channel_mask_from_ebounds "
+"<jinwu.core.channel_mask_from_ebounds>`\\ \\(ebounds\\, band\\[\\, "
+"...\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`guess_ogip_kind <jinwu.core.guess_ogip_kind>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`readfits <jinwu.core.readfits>`\\ \\(...\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`read_arf <jinwu.core.read_arf>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`read_rmf <jinwu.core.read_rmf>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`read_pha <jinwu.core.read_pha>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`read_lc <jinwu.core.read_lc>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ":py:obj:`read_evt <jinwu.core.read_evt>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`write_arf <jinwu.core.write_arf>`\\ \\(data\\, outpath\\, "
+"\\*\\[\\, overwrite\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`write_rmf <jinwu.core.write_rmf>`\\ \\(data\\, outpath\\, "
+"\\*\\[\\, overwrite\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`write_pha <jinwu.core.write_pha>`\\ \\(data\\, outpath\\, "
+"\\*\\[\\, overwrite\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`write_lc <jinwu.core.write_lc>`\\ \\(data\\, outpath\\, "
+"\\*\\[\\, overwrite\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`write_evt <jinwu.core.write_evt>`\\ \\(data\\, outpath\\, "
+"\\*\\[\\, overwrite\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`writefits <jinwu.core.writefits>`\\ \\(\\-\\> \\~pathlib.Path  "
+"\\-\\> \\~pathlib.Path\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`slice_lightcurve <jinwu.core.slice_lightcurve>`\\ \\(lc\\[\\, "
+"tmin\\, tmax\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid "按时间范围筛选光变曲线，返回新实例。"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`rebin_lightcurve <jinwu.core.rebin_lightcurve>`\\ \\(lc\\, "
+"binsize\\[\\, method\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid "光变曲线时间重采样（rebinning）。"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`slice_pha <jinwu.core.slice_pha>`\\ \\(pha\\, \\*\\[\\, emin\\, "
+"emax\\, ch\\_lo\\, ch\\_hi\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid "按能量或道范围筛选 PHA，返回新实例。"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`rebin_pha <jinwu.core.rebin_pha>`\\ \\(pha\\, \\*\\[\\, "
+"factor\\, min\\_counts\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid "道聚合（rebinning）：按固定因子或最小计数阈值合并道。"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`slice_events <jinwu.core.slice_events>`\\ \\(evt\\[\\, tmin\\, "
+"tmax\\, pi\\_min\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid "按时间和/或能量范围筛选事件，返回新实例。"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`rebin_events_to_lightcurve "
+"<jinwu.core.rebin_events_to_lightcurve>`\\ \\(evt\\, binsize\\, \\*\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid "从事件数据生成分 bin 光变曲线。"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1
+msgid ""
+":py:obj:`netdata <jinwu.core.netdata>`\\ \\(source\\[\\, background\\, "
+"ratio\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api.rst:21:<autosummary>:1 ../../api.rst:242:<autosummary>:1
+#: ../../api.rst:52:<autosummary>:1
+msgid "计算净光变曲线（源 - 背景）"
+msgstr ""
+
+#: ../../api.rst:23 ../../api.rst:54 ../../api.rst:78 ../../api.rst:95
+#: ../../api.rst:119 ../../api.rst:136 ../../api.rst:163 ../../api.rst:180
+msgid "Classes"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`EnergyBand <jinwu.core.EnergyBand>`\\ \\(emin\\, emin\\_unit\\, "
+"emax\\, emax\\_unit\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`ChannelBand <jinwu.core.ChannelBand>`\\ \\(ch\\_lo\\, ch\\_hi\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`RegionArea <jinwu.core.RegionArea>`\\ \\(role\\, shape\\, "
+"area\\, component\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`RegionAreaSet <jinwu.core.RegionAreaSet>`\\ \\(src\\, bkg\\, "
+"unk\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`HduHeader <jinwu.core.HduHeader>`\\ \\(name\\, ver\\, header\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`FitsHeaderDump <jinwu.core.FitsHeaderDump>`\\ \\(primary\\, "
+"extensions\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`OgipMeta <jinwu.core.OgipMeta>`\\ \\(telescop\\, instrume\\, "
+"detnam\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`ArfBase <jinwu.core.ArfBase>`\\ \\(path\\, header\\, Any\\]\\, "
+"meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Pure field-only base dataclass for ARF response data."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`RmfBase <jinwu.core.RmfBase>`\\ \\(path\\, header\\, Any\\]\\, "
+"meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Pure field-only base dataclass for RMF response data."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`PhaBase <jinwu.core.PhaBase>`\\ \\(path\\, header\\, Any\\]\\, "
+"meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Pure field-only base dataclass for PHA spectrum data."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`ArfData <jinwu.core.ArfData>`\\ \\(path\\, header\\, Any\\]\\, "
+"meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Concrete ARF data class with local behavior implementation."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`RmfData <jinwu.core.RmfData>`\\ \\(path\\, header\\, Any\\]\\, "
+"meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Concrete RMF data class with local behavior implementation."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`PhaData <jinwu.core.PhaData>`\\ \\(path\\, header\\, Any\\]\\, "
+"meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Concrete PHA data class with local behavior implementation."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`LightcurveDataBase <jinwu.core.LightcurveDataBase>`\\ \\(path\\,"
+" header\\, meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Pure field-only base dataclass for lightcurve data."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`LightcurveData <jinwu.core.LightcurveData>`\\ \\(path\\, "
+"header\\, meta\\, headers\\_dump\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Concrete lightcurve data class with local behavior implementation."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`EventDataBase <jinwu.core.EventDataBase>`\\ \\(path\\, header\\,"
+" Any\\]\\, meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Pure field-only base dataclass for event data."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`EventData <jinwu.core.EventData>`\\ \\(path\\, header\\, "
+"Any\\]\\, meta\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "Concrete event data class with local behavior implementation."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`timescale <jinwu.core.timescale>`\\ \\(source\\, \\*\\[\\, "
+"background\\, alpha\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid "事件时标分析器（独立于 EventData.plot）。"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`LightcurveDataset <jinwu.core.LightcurveDataset>`\\ "
+"\\(data\\[\\, labels\\]\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1 ../../api.rst:60:<autosummary>:1
+msgid "光变曲线容器类（支持多条曲线统一绘图）"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`SpectrumDataset <jinwu.core.SpectrumDataset>`\\ \\(data\\[\\, "
+"label\\, background\\]\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1 ../../api.rst:60:<autosummary>:1
+msgid "High-level spectral dataset container."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`JointDataset <jinwu.core.JointDataset>`\\ \\(lightcurves\\, "
+"spectra\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1 ../../api.rst:60:<autosummary>:1
+msgid "A simple container for multiple datasets."
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`OgipArfReader <jinwu.core.OgipArfReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`OgipRmfReader <jinwu.core.OgipRmfReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`OgipPhaReader <jinwu.core.OgipPhaReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`OgipLightcurveReader <jinwu.core.OgipLightcurveReader>`\\ "
+"\\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`OgipEventReader <jinwu.core.OgipEventReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`ArfReader <jinwu.core.ArfReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`RmfReader <jinwu.core.RmfReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`RspReader <jinwu.core.RspReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`LightcurveReader <jinwu.core.LightcurveReader>`\\ \\(path\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`PhaWriter <jinwu.core.PhaWriter>`\\ \\(data\\, outpath\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`ArfWriter <jinwu.core.ArfWriter>`\\ \\(data\\, outpath\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`RmfWriter <jinwu.core.RmfWriter>`\\ \\(data\\, outpath\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ""
+":py:obj:`LightcurveWriter <jinwu.core.LightcurveWriter>`\\ \\(data\\, "
+"outpath\\)"
+msgstr ""
+
+#: ../../api.rst:28:<autosummary>:1
+msgid ":py:obj:`EventWriter <jinwu.core.EventWriter>`\\ \\(data\\, outpath\\)"
+msgstr ""
+
+#: ../../api.rst:30
+msgid "Variables"
+msgstr ""
+
+#: ../../api.rst:36:<autosummary>:1
+msgid ":py:obj:`OgipData <jinwu.core.OgipData>`"
+msgstr ""
+
+#: ../../api.rst:36:<autosummary>:1
+msgid ":py:obj:`__version__ <jinwu.core.__version__>`"
+msgstr ""
+
+#: ../../api.rst:36:<autosummary>:1
+msgid "str(object='') -> str str(bytes_or_buffer[, encoding[, errors]]) -> str"
+msgstr ""
+
+#: ../../api.rst:38
+msgid "Datasets & Net Data"
+msgstr ""
+
+#: ../../api.rst:42
+msgid "jinwu.core.datasets Module"
+msgstr ""
+
+#: jinwu.core.datasets:1 of
+msgid "High-level dataset containers."
+msgstr ""
+
+#: jinwu.core.datasets:3 of
+msgid ""
+"These classes wrap lower-level OGIP data structures (e.g. LightcurveData,"
+" PhaData, EventData) and provide a uniform, higher-level interface for "
+"selection, slicing, merging, and background handling."
+msgstr ""
+
+#: jinwu.core.datasets:7 of
+msgid ""
+"The API is intentionally minimal at this stage and can be extended as "
+"more concrete analysis needs arise."
+msgstr ""
+
+#: ../../api.rst:52:<autosummary>:1
+msgid ""
+":py:obj:`netdata <jinwu.core.datasets.netdata>`\\ \\(source\\[\\, "
+"background\\, ratio\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api.rst:60:<autosummary>:1
+msgid ""
+":py:obj:`LightcurveDataset <jinwu.core.datasets.LightcurveDataset>`\\ "
+"\\(data\\[\\, labels\\]\\)"
+msgstr ""
+
+#: ../../api.rst:60:<autosummary>:1
+msgid ""
+":py:obj:`SpectrumDataset <jinwu.core.datasets.SpectrumDataset>`\\ "
+"\\(data\\[\\, label\\, background\\]\\)"
+msgstr ""
+
+#: ../../api.rst:60:<autosummary>:1
+msgid ""
+":py:obj:`JointDataset <jinwu.core.datasets.JointDataset>`\\ "
+"\\(lightcurves\\, spectra\\)"
+msgstr ""
+
+#: ../../api.rst:62
+msgid "Lightcurve Analysis"
+msgstr ""
+
+#: ../../api.rst:66
+msgid "jinwu.lightcurve Package"
+msgstr ""
+
+#: jinwu.lightcurve:1 of
+msgid "Light-curve evaluation and trigger decision utilities."
+msgstr ""
+
+#: jinwu.lightcurve:3 of
+msgid ""
+"This module provides tools for light-curve analysis including: - SNR "
+"evaluation using Li & Ma statistics - Bayesian blocks and peak detection "
+"- Trigger decision logic (sliding, head, cumulative) - Light-curve "
+"synthesis and fake data generation"
+msgstr ""
+
+#: jinwu.lightcurve:9 of
+msgid "Main Classes:"
+msgstr ""
+
+#: jinwu.lightcurve:10 of
+msgid "LightcurveSNREvaluator: Compute SNR against time windows"
+msgstr ""
+
+#: jinwu.lightcurve:11 of
+msgid "TriggerDecider: Determine trigger decisions"
+msgstr ""
+
+#: jinwu.lightcurve:12 of
+msgid "LightcurveFaker: Generate synthetic light curves"
+msgstr ""
+
+#: jinwu.lightcurve:14 of
+msgid "Functions:"
+msgstr ""
+
+#: jinwu.lightcurve:15 of
+msgid "li_ma_snr: Compute Li & Ma SNR statistic"
+msgstr ""
+
+#: jinwu.background:8 jinwu.ftools:17 jinwu.lightcurve:17 jinwu.model:9
+#: jinwu.physics:7 jinwu.response:10 jinwu.spectrum:8 of
+msgid "Example:"
+msgstr ""
+
+#: ../../api.rst:76:<autosummary>:1
+msgid ""
+":py:obj:`li_ma_snr <jinwu.lightcurve.li_ma_snr>`\\ \\(n\\_on\\, "
+"n\\_off\\, alpha\\)"
+msgstr ""
+
+#: ../../api.rst:76:<autosummary>:1
+msgid "Compute Li & Ma significance (Eq."
+msgstr ""
+
+#: ../../api.rst:84:<autosummary>:1
+msgid ""
+":py:obj:`LightcurveSNREvaluator "
+"<jinwu.lightcurve.LightcurveSNREvaluator>`\\ \\(time\\, counts\\, dt\\, "
+"...\\)"
+msgstr ""
+
+#: ../../api.rst:84:<autosummary>:1
+msgid "Evaluate whether a given lightcurve can reach a target SNR after T0."
+msgstr ""
+
+#: ../../api.rst:84:<autosummary>:1
+msgid ""
+":py:obj:`TriggerDecider <jinwu.lightcurve.TriggerDecider>`\\ \\(time\\, "
+"counts\\, dt\\, bg\\)"
+msgstr ""
+
+#: ../../api.rst:84:<autosummary>:1
+msgid "Decide triggerability from a counts lightcurve or event times."
+msgstr ""
+
+#: ../../api.rst:84:<autosummary>:1
+msgid ""
+":py:obj:`BackgroundSimple <jinwu.lightcurve.BackgroundSimple>`\\ "
+"\\(area\\_ratio\\, t\\_off\\_ref\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:84:<autosummary>:1
+msgid "Minimal background config for Li&Ma."
+msgstr ""
+
+#: ../../api.rst:86
+msgid "Background Modeling"
+msgstr ""
+
+#: ../../api.rst:90
+msgid "jinwu.background Package"
+msgstr ""
+
+#: jinwu.background:1 of
+msgid "Background modeling and priors for X-ray spectral fitting."
+msgstr ""
+
+#: jinwu.background:3 of
+msgid ""
+"This module provides: - BackgroundPrior: Prior distributions for "
+"background parameters - BackgroundCountsPosterior: Posterior computation "
+"from observed counts - BackgroundSpectralPrior: Spectral priors for "
+"background modeling"
+msgstr ""
+
+#: ../../api.rst:101:<autosummary>:1
+msgid ""
+":py:obj:`BackgroundPrior <jinwu.background.BackgroundPrior>`\\ "
+"\\(n\\_off\\_prior\\, t\\_off\\, area\\_ratio\\)"
+msgstr ""
+
+#: ../../api.rst:101:<autosummary>:1
+msgid "Background prior based on OFF-region total counts over a known exposure."
+msgstr ""
+
+#: ../../api.rst:101:<autosummary>:1
+msgid ""
+":py:obj:`BackgroundCountsPosterior "
+"<jinwu.background.BackgroundCountsPosterior>`\\ \\(a\\_total\\, b\\, "
+"area\\_ratio\\)"
+msgstr ""
+
+#: ../../api.rst:101:<autosummary>:1
+msgid "背景区域计数后验（聚合到选择能段之后）。"
+msgstr ""
+
+#: ../../api.rst:101:<autosummary>:1
+msgid ""
+":py:obj:`BackgroundSpectralPrior "
+"<jinwu.background.BackgroundSpectralPrior>`\\ \\(a0\\, b0\\, "
+"area\\_ratio\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:101:<autosummary>:1
+msgid ""
+"考虑能谱的背景先验：对所选能道逐道建立 Gamma 先验 λ_k ~ Gamma(a0_k, b0)， 其中 b0=t_ref（FITS "
+"中的总参考曝光），a0_k 是把“计/厘米^2”乘以 OFF 区域有效面积后、 在 t_ref 内的 OFF "
+"区域先验计数（可理解为先验的等效观测计数）。"
+msgstr ""
+
+#: ../../api.rst:103
+msgid "Spectral Analysis"
+msgstr ""
+
+#: ../../api.rst:107
+msgid "jinwu.spectrum Package"
+msgstr ""
+
+#: jinwu.spectrum:1 of
+msgid "Spectrum generation and synthesis utilities."
+msgstr ""
+
+#: jinwu.spectrum:3 of
+msgid ""
+"This module provides: - XspecKFactory: XSPEC-based spectrum synthesis "
+"factory - XspecSession: XSPEC wrapper for fakeit and model evaluation - "
+"KConfig: Configuration for spectral K (rate/flux) calculations"
+msgstr ""
+
+#: ../../api.rst:117:<autosummary>:1
+msgid ""
+":py:obj:`prepare_background_for_fakeit "
+"<jinwu.spectrum.prepare_background_for_fakeit>`\\ \\(src\\_pha\\, "
+"bkg\\_pha\\)"
+msgstr ""
+
+#: ../../api.rst:117:<autosummary>:1
+msgid ""
+"基于源/背景 PHA 的 BACKSCAL 比值，生成供 fakeit 使用的背景文件。 Create a background PHA for "
+"fakeit by setting BACKSCAL := BACKSCAL_src / BACKSCAL_bkg."
+msgstr ""
+
+#: ../../api.rst:125:<autosummary>:1
+msgid ""
+":py:obj:`KConfig <jinwu.spectrum.KConfig>`\\ \\(arf\\, rmf\\, "
+"background\\, model\\, params\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:125:<autosummary>:1
+msgid "K 计算所需的不可变配置对象。 Immutable config for K computation."
+msgstr ""
+
+#: ../../api.rst:125:<autosummary>:1
+msgid ":py:obj:`XspecSession <jinwu.spectrum.XspecSession>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api.rst:125:<autosummary>:1
+msgid "一个轻量的 XSPEC 会话，提供 K 计算能力。 A lightweight XSPEC session that can compute K."
+msgstr ""
+
+#: ../../api.rst:125:<autosummary>:1
+msgid ":py:obj:`XspecKFactory <jinwu.spectrum.XspecKFactory>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api.rst:125:<autosummary>:1
+msgid "K 计算工厂 + 缓存。"
+msgstr ""
+
+#: ../../api.rst:127
+msgid "Response Matrix Utilities"
+msgstr ""
+
+#: ../../api.rst:131
+msgid "jinwu.response Package"
+msgstr ""
+
+#: jinwu.response:1 of
+msgid "Response matrix and effective area utilities."
+msgstr ""
+
+#: jinwu.response:3 of
+msgid ""
+"This module provides: - contgbmrsp: Continuous (unbinned) GBM response "
+"function"
+msgstr ""
+
+#: jinwu.fermi:6 jinwu.response:6 of
+msgid "Submodules:"
+msgstr ""
+
+#: jinwu.response:7 of
+msgid "gbm: GBM-specific response handling"
+msgstr ""
+
+#: jinwu.response:8 of
+msgid "basic: Basic response utilities"
+msgstr ""
+
+#: ../../api.rst:142:<autosummary>:1
+msgid ""
+":py:obj:`contgbmrsp <jinwu.response.contgbmrsp>`\\ \\(ra\\, dec\\, "
+"start\\_time\\, end\\_time\\, ...\\)"
+msgstr ""
+
+#: ../../api.rst:142:<autosummary>:1
+msgid ""
+"用来生成连续观测的 GBM 响应文件，针对非触发情形。 需要通过网页安装的 GBM 响应生成的 Perl "
+"程序，并且所有的数据应该满足特定的文件目录格式。                 赤经，单位是度，天文坐标系下的坐标。"
+"                  赤纬，单位是度，天文坐标系下的坐标。                         开始时间, Fermi "
+"MET 时间，以秒为单位。                       结束时间, Fermi MET 时间，以秒为单位。"
+"                           探测器代号列表。         生成用于执行 GBM 响应生成的 Perl "
+"脚本的命令字符串。         执行生成的命令字符串，并打印输出或错误信息。                  获取赤经。"
+"                   获取赤纬。                          获取开始时间(Fermi MET)。"
+"                        获取结束时间(Fermi MET)。                           "
+"获取从探测器代号派生的探测器编号。                            获取探测器代号。                 "
+"设置赤经。                  设置赤纬。                           设置探测器代号。"
+"                     设置开始时间(Fermi MET)。                   设置结束时间(Fermi "
+"MET)。"
+msgstr ""
+
+#: ../../api.rst:144
+msgid "Timing Analysis"
+msgstr ""
+
+#: ../../api.rst:148
+msgid "jinwu.timing Package"
+msgstr ""
+
+#: jinwu.timing:1 of
+msgid "Timing analysis utilities."
+msgstr ""
+
+#: jinwu.timing:3 of
+msgid ""
+"This module provides timing-related analysis tools for high-energy "
+"astrophysics."
+msgstr ""
+
+#: ../../api.rst:154
+msgid "Model Components"
+msgstr ""
+
+#: ../../api.rst:158
+msgid "jinwu.model Package"
+msgstr ""
+
+#: jinwu.model:1 of
+msgid "Spectral and temporal model components with XSPEC-inspired architecture."
+msgstr ""
+
+#: jinwu.model:3 of
+msgid ""
+"This module provides: - ModelBase: Abstract base class for all model "
+"components - AdditiveModel: Models that produce spectra to be summed - "
+"MultiplicativeModel: Models that modify spectra (absorption, etc.) - "
+"ConvolutionModel: Models that convolve input spectra"
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid ":py:obj:`ModelBase <jinwu.model.ModelBase>`\\ \\(\\[name\\, params\\]\\)"
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid "Common base class for all spectral model components."
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid ""
+":py:obj:`AdditiveModel <jinwu.model.AdditiveModel>`\\ \\(\\[name\\, "
+"params\\]\\)"
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid "Additive component: returns a spectrum to be summed."
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid ""
+":py:obj:`MultiplicativeModel <jinwu.model.MultiplicativeModel>`\\ "
+"\\(\\[name\\, params\\]\\)"
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid "Multiplicative component: returns a transmission factor."
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid ""
+":py:obj:`ConvolutionModel <jinwu.model.ConvolutionModel>`\\ \\(\\[name\\,"
+" params\\]\\)"
+msgstr ""
+
+#: ../../api.rst:169:<autosummary>:1
+msgid "Convolution component: transforms an input spectrum."
+msgstr ""
+
+#: ../../api.rst:171
+msgid "Physics Utilities"
+msgstr ""
+
+#: ../../api.rst:175
+msgid "jinwu.physics Package"
+msgstr ""
+
+#: jinwu.physics:1 of
+msgid "Physics models and utilities for astrophysics."
+msgstr ""
+
+#: jinwu.physics:3 of
+msgid ""
+"This module provides: - GeneralRelativity: GR effects (redshift, Doppler,"
+" etc.) - Radiation: Radiation transfer and related utilities"
+msgstr ""
+
+#: ../../api.rst:186:<autosummary>:1
+msgid ":py:obj:`GeneralRelativity <jinwu.physics.GeneralRelativity>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api.rst:186:<autosummary>:1
+msgid "基础相对论/多普勒与辐射变换工具类"
+msgstr ""
+
+#: ../../api.rst:188
+msgid "ftools (Pure-Python HEASOFT Equivalents)"
+msgstr ""
+
+#: ../../api.rst:192
+msgid "jinwu.ftools Package"
+msgstr ""
+
+#: jinwu.ftools:1 of
+msgid "Lightweight Pure-Python HEASOFT ftools equivalents."
+msgstr ""
+
+#: jinwu.ftools:3 of
+msgid ""
+"This package provides minimal Pure-Python implementations of common "
+"HEASOFT ftools functionality, designed to work within JinWu without "
+"external Fortran/C dependencies."
+msgstr ""
+
+#: jinwu.ftools:6 of
+msgid "Modules:"
+msgstr ""
+
+#: jinwu.ftools:7 of
+msgid "fextract: Extract events into PHA spectra (fextract equivalent)"
+msgstr ""
+
+#: jinwu.ftools:8 of
+msgid "ftgrouppha: Group PHA by minimum counts (ftgrouppha equivalent)"
+msgstr ""
+
+#: jinwu.ftools:9 of
+msgid "ftrbnpha: Rebin PHA to desired channel count (ftrbnpha equivalent)"
+msgstr ""
+
+#: jinwu.ftools:10 of
+msgid "ftrbnrmf: Rebin ARF/RMF to new energy bins (ftrbnrmf equivalent)"
+msgstr ""
+
+#: jinwu.ftools:11 of
+msgid "ftselect: Simple expression filtering for event tables"
+msgstr ""
+
+#: jinwu.ftools:12 of
+msgid "region: DS9 region parsing and point-in-region filtering"
+msgstr ""
+
+#: jinwu.ftools:13 of
+msgid "grppha: Minimal grppha-like grouping"
+msgstr ""
+
+#: jinwu.ftools:14 of
+msgid "teldef: Teldef parsing and coordinate transformations"
+msgstr ""
+
+#: jinwu.ftools:15 of
+msgid "rmf_mapping: RMF to energy mapping"
+msgstr ""
+
+#: ../../api.rst:198
+msgid "Einstein Probe"
+msgstr ""
+
+#: ../../api.rst:202
+msgid "jinwu.ep Package"
+msgstr ""
+
+#: jinwu.ep:1 of
+msgid "Einstein Probe (EP) mission-specific utilities."
+msgstr ""
+
+#: jinwu.ep:3 of
+msgid ""
+"This module provides mission-specific helpers for Einstein Probe "
+"observations."
+msgstr ""
+
+#: ../../api.rst:208
+msgid "Fermi/GBM"
+msgstr ""
+
+#: ../../api.rst:212
+msgid "jinwu.fermi Package"
+msgstr ""
+
+#: jinwu.fermi:1 of
+msgid "Fermi mission utilities."
+msgstr ""
+
+#: jinwu.fermi:3 of
+msgid ""
+"This module provides mission-specific helpers for Fermi observations, "
+"including GBM (Gamma-ray Burst Monitor) support."
+msgstr ""
+
+#: jinwu.fermi:7 of
+msgid "gbm: GBM-specific observation handling"
+msgstr ""
+
+#: ../../api.rst:218
+msgid "Swift"
+msgstr ""
+
+#: ../../api.rst:222
+msgid "jinwu.swift Package"
+msgstr ""
+
+#: ../../api.rst:228
+msgid "Application Layer"
+msgstr ""
+
+#: ../../api.rst:232
+msgid "jinwu.application Package"
+msgstr ""
+
+#: ../../api.rst:242:<autosummary>:1
+msgid ""
+":py:obj:`netdata <jinwu.application.netdata>`\\ \\(source\\[\\, "
+"background\\, ratio\\, ...\\]\\)"
+msgstr ""
+

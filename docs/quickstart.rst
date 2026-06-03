@@ -1,106 +1,90 @@
+Quick Start Guide
+=================
 
-Quickstart
-==========
+.. admonition:: Prerequisites
+   :class: important
 
-Prerequisites
--------------
+   JinWu's spectral fitting relies on **HEASoft + XSPEC + model data**.
+   The recommended way is via conda, but any working HEASoft installation works:
 
-JinWu requires Python 3.11+ and several standard scientific Python packages
-(numpy, scipy, astropy).  Some optional features need additional dependencies:
+   .. code-block:: bash
 
-- **XSPEC / PyXspec** — for spectral fitting (requires HEASoft installation)
-- **swiftbat** — for Swift/BAT data processing
-- **batanalysis** — for BAT survey data analysis
+      conda create -n hea -c https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/conda \\
+          heasoft xspec xspec-data
+      conda activate hea
+      pip install jinwu
 
-Basic Usage
------------
+   If HEASoft is already installed outside conda, use:
 
-Reading Data
-~~~~~~~~~~~~
+   .. code-block:: python
 
-JinWu can read standard OGIP FITS files and mission-specific data products:
+      from jinwu.core.heasoft import HeasoftEnvManager
+      HeasoftEnvManager().init_heasoft()
 
-.. code-block:: python
+This guide walks through common JinWu workflows.
 
-    from jinwu.core.data import read_arf, read_pha, read_lightcurve
+Reading OGIP FITS Files
+-----------------------
 
-    # Read an ARF (auxiliary response file)
-    arf = read_arf("path/to/swtmkarf_ex.img")
-
-    # Read a PHA spectrum
-    pha = read_pha("path/to/swtpo_ex.pi")
-
-    # Read a light curve
-    lc = read_lightcurve("path/to/swtmbrxlc_ex.lc")
-
-Each reader returns a dataclass with validated fields — no need to manually
-parse FITS headers.
-
-Galactic NH
-~~~~~~~~~~~
-
-The ``nhtot`` function (Willingale et al. 2013) retrieves the total Galactic
-hydrogen column density — including both atomic (HI) and molecular (H₂)
-components — for use in XSPEC absorption models:
+JinWu provides a unified interface for reading standard OGIP FITS files:
 
 .. code-block:: python
 
-    from jinwu.core.utils import nhtot
+   import jinwu as jw
 
-    result = nhtot(ra=159.386, dec=56.171)
-    print(result["nhtot_weighted"])   # NH,tot in atoms cm⁻²
-    print(result["ebv_weighted"])     # E(B-V) in magnitudes
+   # Read a PHA spectrum file
+   pha = jw.read_pha("source.pha")
+   print(f"Exposure: {pha.exposure} s")
+   print(f"Channels: {len(pha.channels)}")
 
-For ``tbabs`` in XSPEC, always use ``nhtot_weighted`` (not HEASoft's ``nh``,
-which gives HI only).
+   # Read a lightcurve
+   lc = jw.read_lc("lightcurve.fits")
+   print(f"Time range: {lc.time.min():.1f} – {lc.time.max():.1f} s")
 
-Light-curve Fitting
-~~~~~~~~~~~~~~~~~~~
+   # Read ARF and RMF
+   arf = jw.read_arf("source.arf")
+   rmf = jw.read_rmf("source.rmf")
 
-.. code-block:: python
+   # Use the generic readfits to auto-detect type
+   data = jw.readfits("mystery.fits")
+   print(f"Detected: {data.kind}")
 
-    from jinwu.core.fit import LightcurveFitter
-    from jinwu.core.data import LightcurveData
-
-    # Load data
-    lc = LightcurveData.from_fits("lightcurve.fits")
-
-    # Fit a broken power-law
-    fitter = LightcurveFitter(lc, model="broken_powerlaw")
-    result = fitter.fit()
-    print(result)
-
-Spectral Analysis
-~~~~~~~~~~~~~~~~~
+Working with Energy Bands
+-------------------------
 
 .. code-block:: python
 
-    from jinwu.core.fit import run_xspec_fit
+   from jinwu.core import EnergyBand, ChannelBand
 
-    result = run_xspec_fit(
-        pha="spectrum.pi",
-        model="tbabs*ztbabs*powerlaw",
-        nh_gal=0.0313,
-        z=4.045,
-    )
-    print(f"Γ = {result['Gamma']:.2f} ± {result['Gamma_err']:.2f}")
-    print(f"NH,intr = {result['NH_intr']:.2e} cm⁻²")
+   # Define an energy band
+   soft_band = EnergyBand(0.3, 2.0, unit="keV")
+   hard_band = EnergyBand(2.0, 10.0, unit="keV")
 
-Upper Limits
-~~~~~~~~~~~~
+   # Convert to channel indices from an ARF
+   arf = jw.read_arf("source.arf")
+   ch_soft = ChannelBand.from_energy_band(soft_band, arf)
+   ch_hard = ChannelBand.from_energy_band(hard_band, arf)
+
+Computing Net Data
+------------------
+
+The :func:`jinwu.netdata` function computes net (background-subtracted)
+count rates and errors with proper uncertainty propagation:
 
 .. code-block:: python
 
-    from jinwu.core.upperlimit import UpperLimit
-
-    ul = UpperLimit(delta_fit_stat=2.706)  # 90% CL
-    result = ul.from_chain("chain.fits", param_index=4)
-    print(f"90% upper limit: {result.limit:.2e}")
+   net, net_err = jw.netdata(
+       src=src_counts,
+       bkg=bkg_counts,
+       exposure=1000.0,
+       backscale=0.1,     # BKG / SRC area ratio
+   )
+   snr = net / net_err
+   print(f"S/N = {snr:.1f}")
 
 Next Steps
 ----------
 
-- :doc:`usage/spectral` — detailed spectral fitting guide
-- :doc:`usage/lightcurve` — light-curve analysis
-- :doc:`usage/upperlimits` — upper limit methods
-- :doc:`api` — full API reference
+* See :doc:`api` for the complete API reference.
+* Check the `GitHub repository <https://github.com/xinxiangsun/jinwu>`_
+  for examples and issue tracking.

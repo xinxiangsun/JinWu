@@ -1,0 +1,165 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:2
+msgid "TriggerDecider"
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:1 of
+msgid "Decide triggerability from a counts lightcurve or event times."
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:4 of
+msgid "Core checks"
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:5 of
+msgid ""
+"sliding_window(window=1200): scan max Li&Ma SNR over all windows of size "
+"window."
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:6 of
+msgid "head_window(window=1200): Li&Ma SNR of the first window only."
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:7 of
+msgid ""
+"cumulative_from_t0(target=7): if head window fails, grow cumulatively "
+"from T0 (by default first non-zero bin) and check if SNR reaches target."
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:11 of
+msgid "Inputs"
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:12 of
+msgid ""
+"time : 1D array of bin left edges or centers (monotonic increasing) "
+"counts : 1D array of ON-region counts per bin (non-negative) dt : float "
+"bin width in seconds (assumed constant) bg : BackgroundSimple with "
+"(n_off_ref, t_off_ref, area_ratio)"
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:18 of
+msgid "Notes"
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider:19 of
+msgid ""
+"This class does not alter the counts (no Poissonization). Future MC can "
+"be added by drawing per-bin ON counts around an expectation and reusing "
+"the same APIs."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:10
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+":py:obj:`cumulative_from_t0 "
+"<jinwu.lightcurve.TriggerDecider.cumulative_from_t0>`\\ \\(\\*\\[\\, "
+"target\\, t0\\_mode\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid "Grow cumulatively from T0 and search for the first time SNR>=target."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+":py:obj:`decide <jinwu.lightcurve.TriggerDecider.decide>`\\ \\(\\*\\[\\, "
+"window\\, target\\, step\\, t0\\_mode\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+"Two-step decision: 1) Sliding `window` SNR anywhere >= target? If yes, "
+"trigger."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+":py:obj:`from_counts <jinwu.lightcurve.TriggerDecider.from_counts>`\\ "
+"\\(time\\, counts\\, dt\\, bg\\)"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+":py:obj:`from_events <jinwu.lightcurve.TriggerDecider.from_events>`\\ "
+"\\(events\\, \\*\\, dt\\, bg\\[\\, t\\_start\\, t\\_end\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid "Bin photon arrival times into counts per bin of width dt."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+":py:obj:`head_window <jinwu.lightcurve.TriggerDecider.head_window>`\\ "
+"\\(\\*\\[\\, window\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+#: jinwu.lightcurve.trigger.TriggerDecider.head_window:1 of
+msgid "SNR of the first `window` seconds from the series start."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+msgid ""
+":py:obj:`sliding_window "
+"<jinwu.lightcurve.TriggerDecider.sliding_window>`\\ \\(\\*\\[\\, "
+"window\\, step\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
+#: jinwu.lightcurve.trigger.TriggerDecider.sliding_window:1 of
+msgid ""
+"Scan all windows of size `window` (seconds) and return whether SNR>=7 is "
+"achieved, with diagnostic info."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.TriggerDecider.rst:21
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider.cumulative_from_t0:1 of
+msgid ""
+"Grow cumulatively from T0 and search for the first time SNR>=target. If "
+"max_window is given, only search within [T0, T0+max_window)."
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider.decide:1 of
+msgid ""
+"Two-step decision: 1) Sliding `window` SNR anywhere >= target? If yes, "
+"trigger. 2) Head `window` SNR >= target? If yes, trigger. 3) Else grow "
+"cumulatively from T0 until reach target or series ends. Returns a dict "
+"with decision and diagnostics."
+msgstr ""
+
+#: jinwu.lightcurve.trigger.TriggerDecider.from_events:1 of
+msgid ""
+"Bin photon arrival times into counts per bin of width dt. If "
+"t_start/t_end are not given, they are inferred from min/max events with "
+"one bin padding on the right edge."
+msgstr ""
+

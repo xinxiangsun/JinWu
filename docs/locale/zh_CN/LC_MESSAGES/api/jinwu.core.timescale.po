@@ -1,0 +1,75 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.timescale.rst:2
+msgid "timescale"
+msgstr ""
+
+#: jinwu.core.data.timescale:1 of
+msgid "事件时标分析器（独立于 EventData.plot）。"
+msgstr ""
+
+#: jinwu.core.data.timescale:3 of
+msgid "负责调用 `ops.txx` 计算时标，并通过 `plot.plot_event_txx` 可视化。"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:10
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
+msgid ""
+":py:obj:`compute <jinwu.core.timescale.compute>`\\ \\(\\*\\[\\, "
+"background\\, alpha\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
+#: jinwu.core.data.timescale.compute:1 of
+msgid "调用 `ops.txx` 计算时标结果。"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
+msgid ""
+":py:obj:`plot <jinwu.core.timescale.plot>`\\ \\(\\[result\\, srcname\\, "
+"title\\, figsize\\, out\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
+#: jinwu.core.data.timescale.plot:1 of
+msgid "绘制时标诊断图；若无 result 则内部先 compute。"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
+msgid ":py:obj:`summary <jinwu.core.timescale.summary>`\\ \\(\\[result\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.timescale.rst:18
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.core.data.timescale.plot:3 of
+msgid "参数 - binsize: 直方图分箱宽度（秒）。等价于传入 `evt_binsize` 给 `compute/ops.txx`。"
+msgstr ""
+
+#: jinwu.core.data.timescale.plot:5 of
+msgid "这样可以在不显式调用 `compute` 的情况下直接 `plot(..., binsize=...)`。"
+msgstr ""
+

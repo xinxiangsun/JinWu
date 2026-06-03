@@ -1,0 +1,76 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.spectrum.KConfig.rst:2
+msgid "KConfig"
+msgstr ""
+
+#: jinwu.spectrum.specfake.KConfig:1 of
+msgid "K 计算所需的不可变配置对象。 Immutable config for K computation."
+msgstr ""
+
+#: jinwu.spectrum.specfake.KConfig:4 of
+msgid ""
+"字段 | Fields - arf/rmf/background: 路径字符串 | file paths - model/params: "
+"XSPEC 模型与参数 | XSPEC model and parameter values - band: (emin, emax) [keV]"
+" 能段 | energy band in keV - exposure/back_exposure: 源/背景曝光秒数 | "
+"source/background exposure (s) - xspec_abund/xspec_xsect/xspec_cosmo: "
+"XSPEC 环境常量 | XSPEC globals - allow_prompting: 是否允许 XSPEC 交互提示 | whether "
+"to allow XSPEC prompting"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:14:<autosummary>:1
+msgid ":py:obj:`allow_prompting <jinwu.spectrum.KConfig.allow_prompting>`"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:16
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:20:<autosummary>:1
+msgid ":py:obj:`key <jinwu.spectrum.KConfig.key>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:20:<autosummary>:1
+#: jinwu.spectrum.specfake.KConfig.key:1 of
+msgid "将配置编码为缓存键（SHA256）。 Encode configuration into a cache key (SHA256)."
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:22
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.KConfig.rst:26
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.spectrum.specfake.KConfig.key:4 of
+msgid "说明 | Notes - 数值保留有限精度，避免浮点噪声导致缓存抖动；"
+msgstr ""
+
+#: jinwu.spectrum.specfake.KConfig.key:6 of
+msgid "Use limited precision for floats to avoid cache churn from tiny diffs."
+msgstr ""
+

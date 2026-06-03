@@ -1,5 +1,17 @@
-
 /* JinWu custom styles */
-.wy-nav-content {
-    max-width: 1200px !important;
+
+/* Slightly tighter code blocks */
+pre {
+    padding: 1em;
+    border-radius: 4px;
+}
+
+/* Better API signature readability */
+dt.sig {
+    margin-bottom: 0.5em;
+}
+
+/* Make module/subpackage names stand out */
+.py.class, .py.function, .py.method, .py.module {
+    margin-bottom: 1em;
 }

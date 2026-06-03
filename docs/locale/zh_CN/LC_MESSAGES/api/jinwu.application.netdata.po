@@ -1,0 +1,126 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.application.netdata.rst:2
+msgid "netdata"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:1 of
+msgid "计算净光变曲线（源 - 背景）"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:3 of
+msgid ""
+"这是核心的背景减除函数，支持 LightcurveData 和未来的 PhaData。 所有减法操作（包括 `src - "
+"bkg`）最终都调用此函数。"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:7 of
+msgid "参数"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:8 of
+msgid "source"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:-1 of
+msgid "LightcurveData | OgipData"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:9 of
+msgid "源光变曲线"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:10 of
+msgid "background"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:-1 of
+msgid "LightcurveData | OgipData | None"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:11 of
+msgid "背景光变曲线"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:12 of
+msgid "ratio"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:-1 of
+msgid "float, optional"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:13 of
+msgid "源背景缩放比例（None 则自动计算）"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:14 of
+msgid "use_exposure_weighted_ratio"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:-1 of
+msgid "bool, default=True"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:15 of
+msgid "自动计算时是否使用 (区域面积×曝光时间) 比值"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:16 of
+msgid "offset"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:-1 of
+msgid "float, default=0.0"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:17 of
+msgid "额外计数偏移（在计数空间减去）"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:20 of
+msgid "返回"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:21 of
+msgid "LightcurveData"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:22 of
+msgid "净光变曲线（若无背景则返回源本身）"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:25 of
+msgid "示例"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:31 of
+msgid "说明"
+msgstr ""
+
+#: jinwu.core.datasets.netdata:32 of
+msgid ""
+"算法流程： 1. 确定 ratio（自动或手动） 2. 对齐时间轴（若需要 rebin 背景） 3. 转换到计数空间（使用 "
+"bin_exposure） 4. 执行减法：net = src - ratio * bkg - offset 5. 误差传播：err² = "
+"src_err² + (ratio * bkg_err)² 6. 转回原始单位（rate/counts） 7. 零曝光 bin 标记为 NaN"
+msgstr ""
+

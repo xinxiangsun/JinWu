@@ -1,0 +1,48 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.spectrum.prepare_background_for_fakeit.rst:2
+msgid "prepare_background_for_fakeit"
+msgstr ""
+
+#: jinwu.spectrum.specfake.prepare_background_for_fakeit:1 of
+msgid ""
+"基于源/背景 PHA 的 BACKSCAL 比值，生成供 fakeit 使用的背景文件。 Create a background PHA for "
+"fakeit by setting BACKSCAL := BACKSCAL_src / BACKSCAL_bkg."
+msgstr ""
+
+#: jinwu.spectrum.specfake.prepare_background_for_fakeit:4 of
+msgid ""
+"行为 | Behavior - 读取源文件与背景文件的 BACKSCAL；若为列（Type II），取第一行或广播更新。 - "
+"在背景文件的拷贝上，仅更新 BACKSCAL，其余关键字/数据保持不变（附加 HISTORY）。 - 输出文件名默认在原背景文件名后追加 "
+"\"_for_fakeit\"，保留原始扩展名（.pha/.pi/.fits/.fit 等），并与原文件位于同一目录。"
+msgstr ""
+
+#: jinwu.spectrum.specfake.prepare_background_for_fakeit:9 of
+msgid ""
+"参数 | Params - src_pha: 源 PHA 路径（Path 或 str）。 - bkg_pha: 背景 PHA 路径（Path 或 "
+"str）。 - out_path: 可选输出路径（Path 或 str）；不提供时自动拼接后缀。"
+msgstr ""
+
+#: jinwu.spectrum.specfake.prepare_background_for_fakeit:14 of
+msgid "返回 | Returns - 新背景文件的路径（Path）。"
+msgstr ""
+

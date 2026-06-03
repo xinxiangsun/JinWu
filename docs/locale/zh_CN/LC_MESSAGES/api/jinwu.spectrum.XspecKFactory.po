@@ -1,0 +1,85 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:2
+msgid "XspecKFactory"
+msgstr ""
+
+#: jinwu.spectrum.specfake.XspecKFactory:1 of
+msgid "K 计算工厂 + 缓存。"
+msgstr ""
+
+#: jinwu.spectrum.specfake.XspecKFactory:3 of
+msgid ""
+"get_K(...): 返回 K，如缓存未命中则调用 XSPEC 计算并存入缓存。 Return K; compute via XSPEC if "
+"cache miss, then store."
+msgstr ""
+
+#: jinwu.spectrum.specfake.XspecKFactory:5 of
+msgid ""
+"get_K_with_values(...): 返回 (K, rate, flux) 元组。 Return (K, rate, flux) "
+"tuple."
+msgstr ""
+
+#: jinwu.spectrum.specfake.XspecKFactory:7 of
+msgid "clear(): 清空缓存。 Clear the cache."
+msgstr ""
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:10
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:16:<autosummary>:1
+msgid ":py:obj:`clear <jinwu.spectrum.XspecKFactory.clear>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:16:<autosummary>:1
+msgid ""
+":py:obj:`get_K <jinwu.spectrum.XspecKFactory.get_K>`\\ \\(\\*\\, arf\\, "
+"rmf\\, background\\, model\\, ...\\[\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:16:<autosummary>:1
+msgid ""
+":py:obj:`get_K_with_values "
+"<jinwu.spectrum.XspecKFactory.get_K_with_values>`\\ \\(\\*\\, arf\\, "
+"rmf\\, background\\, ...\\)"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:16:<autosummary>:1
+#: jinwu.spectrum.specfake.XspecKFactory.get_K_with_values:1 of
+msgid "返回 (K, rate, flux) 元组"
+msgstr ""
+
+#: ../../api/jinwu.spectrum.XspecKFactory.rst:18
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.spectrum.specfake.XspecKFactory.get_K_with_values:3 of
+msgid "参数与 get_K 相同"
+msgstr ""
+
+#: jinwu.spectrum.specfake.XspecKFactory.get_K_with_values:5 of
+msgid ""
+"返回： - K: rate/flux 转化因子 [cts/(erg/cm²)] - rate: 带内计数率 [cts/s] - flux: "
+"带内能通量 [erg/cm²/s]"
+msgstr ""
+

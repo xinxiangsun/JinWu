@@ -41,7 +41,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/xinxiangsun/jinwu"
 Repository = "https://github.com/xinxiangsun/jinwu"
-Documentation = "https://github.com/xinxiangsun/jinwu/blob/master/README.md"
+Documentation = "https://jinwu.readthedocs.io"
 
 [project.optional-dependencies]
 docs = [

@@ -1,0 +1,130 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../index.rst:14
+msgid "Contents"
+msgstr ""
+
+#: ../../index.rst:3
+msgid "JinWu Documentation"
+msgstr ""
+
+#: ../../index.rst:5
+msgid ""
+"**Joint Inference for high-energy transient light-curve & spectral "
+"analysis with Unifying physical modeling.**"
+msgstr ""
+
+#: ../../index.rst:8
+msgid ""
+"JinWu (金乌) is a comprehensive Python toolkit for X-ray and gamma-ray "
+"astrophysics, bringing together spectral and temporal analysis with "
+"unified physical modeling.  Named after the mythical three-legged golden "
+"crow dwelling in the sun — a fitting symbol for a package that shines "
+"light on the most energetic transients in the Universe."
+msgstr ""
+
+#: ../../index.rst:30
+msgid "Key Features"
+msgstr ""
+
+#: ../../index.rst:32
+msgid ""
+"**OGIP FITS I/O** — Read and write ARF, RMF, PHA, lightcurve, and event "
+"files"
+msgstr ""
+
+#: ../../index.rst:33
+msgid ""
+"**Lightcurve & Spectral Analysis** — Background modeling, trigger "
+"evaluation, XSPEC-inspired components"
+msgstr ""
+
+#: ../../index.rst:34
+msgid ""
+"**Multi-mission Support** — Einstein Probe (EP), Fermi/GBM, Swift/BAT, "
+"and more"
+msgstr ""
+
+#: ../../index.rst:35
+msgid ""
+"**Unified Physical Modeling** — Consistent framework across bands and "
+"messengers"
+msgstr ""
+
+#: ../../index.rst:36
+msgid ""
+"**Pure-Python ftools** — HEASOFT-compatible tools written entirely in "
+"Python"
+msgstr ""
+
+#: ../../index.rst:37
+msgid ""
+"**Upper Limit Computation** — Bayesian & frequentist upper limits for "
+"faint transients"
+msgstr ""
+
+#: ../../index.rst:40
+msgid "Installation"
+msgstr ""
+
+#: ../../index.rst:42
+msgid ""
+"JinWu's spectral fitting and XSPEC integration depend on "
+"**HEASoft/PyXspec** and XSPEC model data.  We recommend installing these "
+"via the HEASARC conda channel, though any working HEASoft installation is"
+" fine."
+msgstr ""
+
+#: ../../index.rst:57
+msgid ""
+"If you already have HEASoft installed outside conda (e.g. from source), "
+"JinWu can still use it — call "
+":class:`jinwu.core.heasoft.HeasoftEnvManager` to initialize the "
+"environment:"
+msgstr ""
+
+#: ../../index.rst:67
+msgid "For development:"
+msgstr ""
+
+#: ../../index.rst:78
+msgid ""
+"The ``HeasoftEnvManager`` also works in Jupyter notebooks — use "
+":meth:`HeasoftEnvManager.init_heasoft_in_notebook`."
+msgstr ""
+
+#: ../../index.rst:82
+msgid "Quick Start"
+msgstr ""
+
+#: ../../index.rst:100
+msgid "Indices and tables"
+msgstr ""
+
+#: ../../index.rst:102
+msgid ":ref:`genindex`"
+msgstr ""
+
+#: ../../index.rst:103
+msgid ":ref:`modindex`"
+msgstr ""
+

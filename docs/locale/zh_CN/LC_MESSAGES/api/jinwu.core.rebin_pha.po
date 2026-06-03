@@ -1,0 +1,49 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.rebin_pha.rst:2
+msgid "rebin_pha"
+msgstr ""
+
+#: jinwu.core.ops.rebin_pha:1 of
+msgid "道聚合（rebinning）：按固定因子或最小计数阈值合并道。"
+msgstr ""
+
+#: jinwu.core.ops.rebin_pha:3 of
+msgid ""
+"参数 - pha: 输入 PHA 数据 - factor: 固定聚合因子（如 2 表示两两合并）；与 min_counts 互斥 - "
+"min_counts: 基于最小计数阈值聚合（调用 grppha 的方法）；若既未提供 factor 也未提供 min_counts，"
+msgstr ""
+
+#: jinwu.core.ops.rebin_pha:7 of
+msgid "将使用 pha.grouping 若存在，否则默认 factor=1（不聚合）"
+msgstr ""
+
+#: jinwu.core.ops.rebin_pha:9 of
+msgid "返回 - 新实例，channels/counts 长度取决于聚合方式"
+msgstr ""
+
+#: jinwu.core.ops.rebin_pha:12 of
+msgid ""
+"English Rebin PHA by grouping channels (fixed factor, min counts, or "
+"existing grouping); returns new instance."
+msgstr ""
+

@@ -1,0 +1,80 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.model.ModelBase.rst:2
+msgid "ModelBase"
+msgstr ""
+
+#: jinwu.model.modelbase.ModelBase:1 of
+msgid "Common base class for all spectral model components."
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:14:<autosummary>:1
+msgid ":py:obj:`param_names <jinwu.model.ModelBase.param_names>`"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:16
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
+msgid ""
+":py:obj:`__call__ <jinwu.model.ModelBase.__call__>`\\ \\(\\*args\\, "
+"\\*\\*kwargs\\)"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
+#: jinwu.model.modelbase.ModelBase.__call__:1 of
+msgid "Call self as a function."
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
+msgid ""
+":py:obj:`evaluate <jinwu.model.ModelBase.evaluate>`\\ \\(\\*args\\, "
+"\\*\\*kwargs\\)"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
+msgid "Return model output."
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
+msgid ""
+":py:obj:`set_params <jinwu.model.ModelBase.set_params>`\\ "
+"\\(\\*\\*kwargs\\)"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:24
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.model.ModelBase.rst:28
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.model.modelbase.ModelBase.evaluate:1 of
+msgid "Return model output. Subclasses define the signature."
+msgstr ""
+

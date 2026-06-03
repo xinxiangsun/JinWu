@@ -1,0 +1,89 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.OgipMeta.rst:2
+msgid "OgipMeta"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`binsize <jinwu.core.OgipMeta.binsize>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`dateobs <jinwu.core.OgipMeta.dateobs>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`detnam <jinwu.core.OgipMeta.detnam>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`instrume <jinwu.core.OgipMeta.instrume>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`mjdref <jinwu.core.OgipMeta.mjdref>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`object <jinwu.core.OgipMeta.object>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`obs_id <jinwu.core.OgipMeta.obs_id>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`telescop <jinwu.core.OgipMeta.telescop>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`timesys <jinwu.core.OgipMeta.timesys>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`timeunit <jinwu.core.OgipMeta.timeunit>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`timezero <jinwu.core.OgipMeta.timezero>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`trefpos <jinwu.core.OgipMeta.trefpos>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`tstart <jinwu.core.OgipMeta.tstart>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
+msgid ":py:obj:`tstop <jinwu.core.OgipMeta.tstop>`"
+msgstr ""
+
+#: ../../api/jinwu.core.OgipMeta.rst:29
+msgid "Attributes Documentation"
+msgstr ""
+

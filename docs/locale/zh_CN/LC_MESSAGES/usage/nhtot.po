@@ -1,0 +1,78 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../usage/nhtot.rst:3
+msgid "Galactic NH (nhtot)"
+msgstr ""
+
+#: ../../usage/nhtot.rst:7
+msgid ""
+"This page is a work in progress.  See :func:`jinwu.core.utils.nhtot` for "
+"the complete API."
+msgstr ""
+
+#: ../../usage/nhtot.rst:10
+msgid ""
+"The ``nhtot`` function queries the Swift UKSSDC nhtot web service to "
+"obtain the **total** Galactic hydrogen column density using the method of"
+" Willingale et al. (2013, MNRAS, 431, 394)."
+msgstr ""
+
+#: ../../usage/nhtot.rst:14
+msgid ""
+"This includes: - **NHI** — atomic hydrogen (from 21-cm surveys) - **NH₂**"
+" — molecular hydrogen (estimated from dust reddening E(B-V)) - **NH,tot**"
+" = NHI + 2×NH₂"
+msgstr ""
+
+#: ../../usage/nhtot.rst:20
+msgid "Why nhtot?"
+msgstr ""
+
+#: ../../usage/nhtot.rst:22
+msgid ""
+"HEASoft's ``nh`` tool returns NHI **only** (from the HI4PI map). At low "
+"Galactic latitudes (|b| < 20°), molecular hydrogen contributes "
+"significantly, and using NHI-only values in ``tbabs`` (which assumes 20% "
+"molecular fraction) systematically underestimates Galactic absorption."
+msgstr ""
+
+#: ../../usage/nhtot.rst:27
+msgid ""
+"The Swift community (including Valan et al. 2023) uses ``nhtot`` for the "
+"Galactic component of X-ray spectral fitting."
+msgstr ""
+
+#: ../../usage/nhtot.rst:31
+msgid "Usage"
+msgstr ""
+
+#: ../../usage/nhtot.rst:51
+msgid "Reference"
+msgstr ""
+
+#: ../../usage/nhtot.rst:53
+msgid ""
+"Willingale, R., Starling, R. L. C., Beardmore, A. P., Tanvir, N. R., & "
+"O'Brien, P. T. 2013, MNRAS, 431, 394 (`arXiv:1303.0843 "
+"<https://arxiv.org/abs/1303.0843>`_)"
+msgstr ""
+

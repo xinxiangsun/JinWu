@@ -1,0 +1,148 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:2
+msgid "BackgroundPrior"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior:1 of
+msgid "Background prior based on OFF-region total counts over a known exposure."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior:5 of
+msgid "Total counts observed in the OFF region during t_off seconds."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior of
+msgid "type"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior:7
+#: jinwu.background.backprior.BackgroundPrior:13
+#: jinwu.background.backprior.BackgroundPrior:19 of
+msgid "float"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior:11 of
+msgid "Exposure time in the OFF region corresponding to n_off_prior (seconds)."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior:17 of
+msgid "A_on / A_off. The Li&Ma alpha uses alpha = area_ratio * (t_on / t_off)."
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:10
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
+msgid ":py:obj:`alpha <jinwu.background.BackgroundPrior.alpha>`\\ \\(t\\_on\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
+msgid ""
+":py:obj:`from_epwxt_background "
+"<jinwu.background.BackgroundPrior.from_epwxt_background>`\\ "
+"\\(fits\\_path\\, \\*\\[\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:1 of
+msgid ""
+"Construct BackgroundPrior from a single EP/WXT background FITS file that "
+"contains counts per cm^2 accumulated over a reference exposure (typically"
+" 1e6 s)."
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
+msgid ""
+":py:obj:`from_epwxt_background_default "
+"<jinwu.background.BackgroundPrior.from_epwxt_background_default>`\\ "
+"\\(\\*\\[\\, chan\\_lo\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
+msgid "Return the ready-made BackgroundPrior values as requested by user."
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst:18
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:4 of
+msgid ""
+"This enforces the energy band via detector channels [chan_lo, chan_hi] "
+"(default 53–506, about 0.5–4.0 keV), computes the OFF-region prior counts"
+" in a desired t_off, and derives area_ratio from instrument geometry."
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst
+msgid "Parameters"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:8 of
+msgid ""
+"Path to the background FITS (counts per cm^2). In practice only one "
+"combined background file is available."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:11
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:13 of
+msgid "Inclusive channel bounds to approximate 0.5–4.0 keV."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:15 of
+msgid "Pixel size on detector (mm). Default 0.015 mm."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:17 of
+msgid "Sky angular size per pixel (degree). Default 0.00229 deg."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:19 of
+msgid "Source region radius (arcmin). Default 9'."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:21
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:23 of
+msgid "Background annulus inner/outer radii (arcmin). Default 18'–36'."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:25 of
+msgid "OFF prior exposure (s) for Li&Ma. Default 1e6 s (matches FITS by default)."
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:27 of
+msgid "Print brief diagnostics."
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundPrior.rst
+msgid "Return type"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundPrior.from_epwxt_background_default:1
+#: of
+msgid ""
+"Return the ready-made BackgroundPrior values as requested by user. "
+"Ignores file IO and outputs fixed values for reproducibility of quick "
+"tests."
+msgstr ""
+

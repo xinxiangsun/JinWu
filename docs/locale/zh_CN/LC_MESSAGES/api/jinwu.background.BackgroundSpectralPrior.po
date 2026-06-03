@@ -1,0 +1,162 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:2
+msgid "BackgroundSpectralPrior"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:1 of
+msgid ""
+"考虑能谱的背景先验：对所选能道逐道建立 Gamma 先验 λ_k ~ Gamma(a0_k, b0)， 其中 b0=t_ref（FITS "
+"中的总参考曝光），a0_k 是把“计/厘米^2”乘以 OFF 区域有效面积后、 在 t_ref 内的 OFF "
+"区域先验计数（可理解为先验的等效观测计数）。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:5 of
+msgid ""
+"该类可使用 OFF 区域的观测谱做共轭更新，并聚合为 BackgroundCountsPosterior， 用于对 ON/OFF "
+"的总计数进行后验预测采样或期望计算。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:9 of
+msgid "字段"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:10 of
+msgid "a0"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:-1 of
+msgid "np.ndarray (n_chan,)"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:11 of
+msgid "每个选择能道的先验 shape。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:12 of
+msgid "b0"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:-1 of
+msgid "float"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:13 of
+msgid "先验 rate（秒），通常为背景文件中的 EXPOSURE（如 1e6 s）。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:14 of
+msgid "area_ratio"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:15 of
+msgid "A_on / A_off。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:16 of
+msgid "channels"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior:17 of
+msgid "参与先验的 CHANNEL 索引集合（用于与观测谱对齐/筛选）。"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:10
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`as_counts_posterior "
+"<jinwu.background.BackgroundSpectralPrior.as_counts_posterior>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`from_epwxt_background "
+"<jinwu.background.BackgroundSpectralPrior.from_epwxt_background>`\\ "
+"\\(fits\\_path\\, \\*\\[\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+#: jinwu.background.backprior.BackgroundSpectralPrior.from_epwxt_background:1
+#: of
+msgid "读取单个 EP/WXT 背景 FITS（SPECTRUM: COUNTS 为“计/厘米^2”）并按能团形成逐道先验。"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`update_with_off_spectrum "
+"<jinwu.background.BackgroundSpectralPrior.update_with_off_spectrum>`\\ "
+"\\(pha\\_path\\, \\*\\[\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+#: jinwu.background.backprior.BackgroundSpectralPrior.update_with_off_spectrum:1
+#: of
+msgid "用 OFF 区域的观测谱（PHA，COUNTS 为整数计数）进行共轭更新，聚合为总计数后验。"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+msgid ""
+":py:obj:`update_with_on_bg_spectrum "
+"<jinwu.background.BackgroundSpectralPrior.update_with_on_bg_spectrum>`\\ "
+"\\(pha\\_path\\, \\*\\[\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:17:<autosummary>:1
+#: jinwu.background.backprior.BackgroundSpectralPrior.update_with_on_bg_spectrum:1
+#: of
+msgid ""
+"使用 ON 区域“背景-only”时段的观测谱进行更新： - shape 增加 sum(n_on_obs) - rate 增加 "
+"area_ratio * t_on_obs 返回聚合后的 BackgroundCountsPosterior。"
+msgstr ""
+
+#: ../../api/jinwu.background.BackgroundSpectralPrior.rst:19
+msgid "Methods Documentation"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior.from_epwxt_background:3
+#: of
+msgid ""
+"若提供 ARF，则用 SPECRESP 的第 [arf_bin_lo, arf_bin_hi]（1-based）能道推断能段， 并用 "
+"EBOUNDS 做能段重合筛选；否则回退到 CHANNEL 区间 [chan_lo, chan_hi]。 OFF/ON 区域面积由像元尺寸及 "
+"FoV 计算得到，area_ratio=A_on/A_off。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior.update_with_off_spectrum:3
+#: of
+msgid "若 use_ebounds=True，优先用 EBOUNDS 与 self.channels 对齐；否则按 CHANNEL 匹配。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior.update_with_off_spectrum:4
+#: of
+msgid "曝光时间从 PHA 的 SPECTRUM header['EXPOSURE'] 读取。"
+msgstr ""
+
+#: jinwu.background.backprior.BackgroundSpectralPrior.update_with_off_spectrum:5
+#: of
+msgid ""
+"返回 BackgroundCountsPosterior，参数 "
+"a_total=sum(a0)+sum(n_off_obs)，b=b0+t_off_obs。"
+msgstr ""
+

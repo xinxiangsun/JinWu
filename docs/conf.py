@@ -1,12 +1,13 @@
-"""
-Sphinx configuration for JinWu documentation.
-
-JinWu: Joint Inference for high-energy transient light-curve & spectral analysis
-        with Unifying physical modeling.
-"""
-import os
+"""JinWu Sphinx config."""
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
+
+# -- Mock environment-specific modules BEFORE any jinwu import ----------------
+# sphinx_automodapi imports the package during builder-inited, before autodoc
+# runs, so autodoc_mock_imports is too late.  We must mock at sys.modules level.
+if "xspec" not in sys.modules:
+    sys.modules["xspec"] = MagicMock()
 
 # -- Path setup ----------------------------------------------------------------
 # Add the src/ directory so Sphinx can import jinwu
@@ -16,8 +17,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 project = "JinWu"
 copyright = "2025-2026, Xinxiang Sun (孙新翔)"
 author = "Xinxiang Sun"
-release = "0.0.26"
-version = "0.0.26"
+
+# Read version from jinwu itself (works for both editable and installed)
+try:
+    import jinwu
+    release = jinwu.__version__
+except Exception:
+    release = "0.0.27"
+version = release.rsplit(".", 1)[0] if "." in release else release
 
 # -- General configuration -----------------------------------------------------
 extensions = [
@@ -84,6 +91,30 @@ html_css_files = ["custom.css"]
 
 # These paths are relative to conf.py
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+
+# -- Internationalization ------------------------------------------------------
+# Supported languages.  RTD sets 'language' config at build time via
+# the project's Admin → Languages setting.  Do NOT hardcode 'language' here.
+locale_dirs = ["locale/"]
+gettext_compact = False          # one .po per doc, not per directory
+
+# Mock troublesome imports that automodapi can't handle
+autodoc_mock_imports = [
+    "xspec",                # HEASoft XSPEC — not available on RTD, top-level import in core/plot.py
+    "jinwu.cluster",        # ImportError in cluster.cluster
+]
+
+# Suppress unresolvable cross-reference warnings
+nitpick_ignore = [
+    ("py:class", "np.ndarray"),
+    ("py:class", "numpy.ndarray"),
+    ("py:class", "Path"),
+    ("py:class", "pathlib.Path"),
+    ("py:class", "astropy.time.Time"),
+    ("py:class", "astropy.units.Quantity"),
+    ("py:class", "matplotlib.figure.Figure"),
+    ("py:class", "matplotlib.axes.Axes"),
+]
 
 # -- LaTeX & manual page output ------------------------------------------------
 latex_engine = "xelatex"

@@ -1,0 +1,99 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:2
+msgid "GeneralRelativity"
+msgstr ""
+
+#: jinwu.physics.gr.GeneralRelativity:1 of
+msgid "基础相对论/多普勒与辐射变换工具类"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:16:<autosummary>:1
+msgid ":py:obj:`beta <jinwu.physics.GeneralRelativity.beta>`"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:16:<autosummary>:1
+msgid ":py:obj:`lorentz_factor <jinwu.physics.GeneralRelativity.lorentz_factor>`"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:16:<autosummary>:1
+msgid ":py:obj:`v <jinwu.physics.GeneralRelativity.v>`"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:18
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+msgid ""
+":py:obj:`length_contraction "
+"<jinwu.physics.GeneralRelativity.length_contraction>`\\ \\(l\\_rest\\[\\,"
+" frame\\_from\\, ...\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+msgid ""
+":py:obj:`show_formula <jinwu.physics.GeneralRelativity.show_formula>`\\ "
+"\\(\\[formula\\_type\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+msgid ""
+":py:obj:`show_grmhd_equations "
+"<jinwu.physics.GeneralRelativity.show_grmhd_equations>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+#: jinwu.physics.gr.GeneralRelativity.show_grmhd_equations:1 of
+msgid "显示理想磁流体的GRMHD方程组（MHD守恒形式）"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+msgid ""
+":py:obj:`show_radiation_transform "
+"<jinwu.physics.GeneralRelativity.show_radiation_transform>`\\ "
+"\\(\\[formula\\_type\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+#: jinwu.physics.gr.GeneralRelativity.show_radiation_transform:1 of
+msgid "展示常用辐射变换公式"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:26:<autosummary>:1
+msgid ""
+":py:obj:`time_dilation <jinwu.physics.GeneralRelativity.time_dilation>`\\"
+" \\(t\\_rest\\[\\, frame\\_from\\, frame\\_to\\]\\)"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:28
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.physics.GeneralRelativity.rst:34
+msgid "Methods Documentation"
+msgstr ""
+

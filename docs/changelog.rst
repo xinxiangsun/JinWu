@@ -1,21 +1,21 @@
-
 Changelog
 =========
+
+v0.0.27 (2026-06-03)
+--------------------
+
+* Added Sphinx documentation with Read the Docs support
+* Documentation now auto-generates API reference from docstrings
 
 v0.0.26 (2026-05)
 -----------------
 
-- Added ``UpperLimit`` class with chain and error-based methods
-- Added EP FXT/WXT instrument data directory scanning
-- Added ``run_xspec_chain()`` for Bayesian MCMC chain analysis
-- Added ``nhtot()`` function for Galactic NH,tot retrieval
-- Added telescope definitions in config
+* Added :class:`jinwu.core.upperlimit.UpperLimit` with chain and fit.error dual routes
+* Added :mod:`jinwu.core.instruments` — EP FXT/WXT data directory scanning
+* Added :meth:`jinwu.core.fit.run_xspec_chain` for MCMC chain fitting
+* Telescope definitions in :mod:`jinwu.core.config`
 
-v0.0.25
--------
+Earlier Releases
+----------------
 
-- Initial public release structure
-- OGIP FITS I/O (ARF, RMF, PHA, lightcurves, events)
-- Light-curve fitting module with multiple built-in models
-- XSPEC/PyXspec spectral fitting wrapper
-- Swift/BAT, Swift/XRT, and Fermi/GBM data readers
+*See the Git history for earlier changes.*

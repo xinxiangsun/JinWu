@@ -1,0 +1,115 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.rebin_events_to_lightcurve.rst:2
+msgid "rebin_events_to_lightcurve"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:1 of
+msgid "从事件数据生成分 bin 光变曲线。"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:3 of
+msgid "将事件列表按时间分组统计，生成光变曲线。"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:6 of
+msgid "参数 (Parameters)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:7 of
+msgid "evt"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:-1 of
+msgid "EventData"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:8 of
+msgid "输入事件数据"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:9 of
+msgid "binsize"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:-1 of
+msgid "float"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:10 of
+msgid "时间分辨率（秒），即每个 bin 的宽度"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:11 of
+msgid "tmin, tmax"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:-1 of
+msgid "float, optional"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:12 of
+msgid "可选的时间范围；默认使用全部事件的时间范围"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:15 of
+msgid "返回 (Returns)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:16 of
+msgid "LightcurveData"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:17 of
+msgid "生成的光变曲线（COUNTS 模式）"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:20 of
+msgid "原理 (Principle)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:21 of
+msgid "根据 binsize 定义时间网格"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:22 of
+msgid "用直方图统计每个 bin 内的事件数"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:23 of
+msgid "误差假设为泊松分布：σ = √N"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:26 of
+msgid "示例 (Example)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:32 of
+msgid "English"
+msgstr ""
+
+#: jinwu.core.ops.rebin_events_to_lightcurve:33 of
+msgid ""
+"Bin events into lightcurve with given time resolution; returns "
+"LightcurveData."
+msgstr ""
+

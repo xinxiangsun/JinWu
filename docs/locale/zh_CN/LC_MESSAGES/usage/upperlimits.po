@@ -1,0 +1,55 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../usage/upperlimits.rst:3
+msgid "Upper Limits"
+msgstr ""
+
+#: ../../usage/upperlimits.rst:7
+msgid ""
+"This page is a work in progress.  See :mod:`jinwu.core.upperlimit` for "
+"the complete API."
+msgstr ""
+
+#: ../../usage/upperlimits.rst:10
+msgid "JinWu provides a unified upper limit framework:"
+msgstr ""
+
+#: ../../usage/upperlimits.rst:12
+msgid "``UpperLimit`` class wrapping chain-based and error-based methods"
+msgstr ""
+
+#: ../../usage/upperlimits.rst:13
+msgid "Supports multiple confidence levels (68%, 90%, 95%, 99%)"
+msgstr ""
+
+#: ../../usage/upperlimits.rst:14
+msgid "Feldman-Cousins and Bayesian approaches"
+msgstr ""
+
+#: ../../usage/upperlimits.rst:15
+msgid "Joint multi-observation significance via Li & Ma (1983)"
+msgstr ""
+
+#: ../../usage/upperlimits.rst:18
+msgid "Example"
+msgstr ""
+

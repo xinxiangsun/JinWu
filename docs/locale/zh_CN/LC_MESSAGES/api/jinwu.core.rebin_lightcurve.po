@@ -1,0 +1,117 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.rebin_lightcurve.rst:2
+msgid "rebin_lightcurve"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:1 of
+msgid "光变曲线时间重采样（rebinning）。"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:3 of
+msgid "将原始光变曲线按新的时间分辨率重新分组聚合。"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:6 of
+msgid "参数 (Parameters)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:7 of
+msgid "lc"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:-1 jinwu.core.ops.rebin_lightcurve:19 of
+msgid "LightcurveData"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:8 of
+msgid "输入光变曲线数据"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:9 of
+msgid "binsize"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:-1 of
+msgid "float"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:10 of
+msgid "新的时间分辨率（秒），即每个 bin 的宽度"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:11 of
+msgid "method"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:-1 of
+msgid "'auto' | 'sum' | 'mean', default='auto'"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:12 of
+msgid ""
+"聚合方法： - 'auto': 保持原始纵轴形式（rate->mean, counts->sum） - 'sum': 对计数求和（输出为 "
+"counts） - 'mean': 对速率求平均（输出为 rate；GTI 缺口时按有效曝光归一化）"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:18 of
+msgid "返回 (Returns)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:20 of
+msgid "重采样后的新光变曲线实例"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:23 of
+msgid "原理 (Principle)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:24 of
+msgid "根据 binsize 将时间轴分成等宽区间"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:25 of
+msgid "将原始数据点归入对应 bin"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:26 of
+msgid "对每个 bin 内的数据进行聚合（求和或平均）"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:27 of
+msgid "误差传播： - sum: σ_new = √(Σ σ_i²) - mean: σ_new = √(Σ σ_i²) / N"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:32 of
+msgid "示例 (Example)"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:38 of
+msgid "English"
+msgstr ""
+
+#: jinwu.core.ops.rebin_lightcurve:39 of
+msgid ""
+"Rebin lightcurve to new time resolution by grouping and aggregating data "
+"points."
+msgstr ""
+

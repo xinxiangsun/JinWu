@@ -1,0 +1,67 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:2
+msgid "RegionAreaSet"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
+msgid ":py:obj:`bkg <jinwu.core.RegionAreaSet.bkg>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
+msgid ":py:obj:`bkg_area <jinwu.core.RegionAreaSet.bkg_area>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
+msgid ":py:obj:`src <jinwu.core.RegionAreaSet.src>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
+msgid ":py:obj:`src_area <jinwu.core.RegionAreaSet.src_area>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
+msgid ":py:obj:`unk <jinwu.core.RegionAreaSet.unk>`"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:20
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:24:<autosummary>:1
+msgid ""
+":py:obj:`from_regions <jinwu.core.RegionAreaSet.from_regions>`\\ "
+"\\(regions\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:26
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.core.RegionAreaSet.rst:34
+msgid "Methods Documentation"
+msgstr ""
+

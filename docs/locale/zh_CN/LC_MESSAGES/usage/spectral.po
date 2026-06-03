@@ -1,0 +1,68 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../usage/spectral.rst:3
+msgid "Spectral Fitting"
+msgstr ""
+
+#: ../../usage/spectral.rst:7
+msgid ""
+"This page is a work in progress.  See the module docstrings in "
+":mod:`jinwu.core.fit` and :mod:`jinwu.core.upperlimit` for detailed API "
+"documentation."
+msgstr ""
+
+#: ../../usage/spectral.rst:11
+msgid ""
+"JinWu provides a Pythonic wrapper around XSPEC/PyXspec for spectral "
+"fitting, supporting:"
+msgstr ""
+
+#: ../../usage/spectral.rst:14
+msgid "Standard models (power-law, absorbed power-law, blackbody, etc.)"
+msgstr ""
+
+#: ../../usage/spectral.rst:15
+msgid "Bayesian MCMC chain analysis with PyMultiNest / emcee"
+msgstr ""
+
+#: ../../usage/spectral.rst:16
+msgid "Model comparison with Bayes factors and AIC"
+msgstr ""
+
+#: ../../usage/spectral.rst:17
+msgid "Upper limit computation (Feldman-Cousins, Bayesian, inverse Li-Ma)"
+msgstr ""
+
+#: ../../usage/spectral.rst:20
+msgid "Basic Fit"
+msgstr ""
+
+#: ../../usage/spectral.rst:33
+msgid ""
+"For batch processing multiple GRBs, see the EP260119a analysis workflow "
+"in the project repository."
+msgstr ""
+
+#: ../../usage/spectral.rst:37
+msgid "Chain Analysis"
+msgstr ""
+

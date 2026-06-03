@@ -1,0 +1,55 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../usage/lightcurve.rst:3
+msgid "Light-curve Fitting"
+msgstr ""
+
+#: ../../usage/lightcurve.rst:7
+msgid ""
+"This page is a work in progress.  See :mod:`jinwu.core.fit` for the "
+"complete API."
+msgstr ""
+
+#: ../../usage/lightcurve.rst:10
+msgid "JinWu's light-curve fitting module supports:"
+msgstr ""
+
+#: ../../usage/lightcurve.rst:12
+msgid "Built-in models: power-law, broken power-law, exponential decay, Gaussian"
+msgstr ""
+
+#: ../../usage/lightcurve.rst:13
+msgid "Custom expression via string input"
+msgstr ""
+
+#: ../../usage/lightcurve.rst:14
+msgid "Astropy-based fitting backends (Levenberg-Marquardt, TRFLSQP)"
+msgstr ""
+
+#: ../../usage/lightcurve.rst:15
+msgid "Unified interface for ``LightcurveData`` and ``LightcurveDataset``"
+msgstr ""
+
+#: ../../usage/lightcurve.rst:18
+msgid "Example"
+msgstr ""
+

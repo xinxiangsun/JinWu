@@ -1,0 +1,143 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.response.contgbmrsp.rst:2
+msgid "contgbmrsp"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:1 of
+msgid ""
+"用来生成连续观测的 GBM 响应文件，针对非触发情形。 需要通过网页安装的 GBM 响应生成的 Perl "
+"程序，并且所有的数据应该满足特定的文件目录格式。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:3 of
+msgid "赤经，单位是度，天文坐标系下的坐标。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:4 of
+msgid "赤纬，单位是度，天文坐标系下的坐标。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:5 of
+msgid "开始时间, Fermi MET 时间，以秒为单位。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:6 of
+msgid "结束时间, Fermi MET 时间，以秒为单位。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:7 of
+msgid "探测器代号列表。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:8 of
+msgid "生成用于执行 GBM 响应生成的 Perl 脚本的命令字符串。 执行生成的命令字符串，并打印输出或错误信息。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:10 of
+msgid "获取赤经。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:11 of
+msgid "获取赤纬。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:12 of
+msgid "获取开始时间(Fermi MET)。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:13 of
+msgid "获取结束时间(Fermi MET)。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:14 of
+msgid "获取从探测器代号派生的探测器编号。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:15 of
+msgid "获取探测器代号。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:16 of
+msgid "设置赤经。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:17 of
+msgid "设置赤纬。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:18 of
+msgid "设置探测器代号。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:19 of
+msgid "设置开始时间(Fermi MET)。"
+msgstr ""
+
+#: jinwu.response.gbm.contgbmrsp:20 of
+msgid "设置结束时间(Fermi MET)。"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:18:<autosummary>:1
+msgid ":py:obj:`dec <jinwu.response.contgbmrsp.dec>`"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:18:<autosummary>:1
+msgid ":py:obj:`detector <jinwu.response.contgbmrsp.detector>`"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:18:<autosummary>:1
+msgid ":py:obj:`ra <jinwu.response.contgbmrsp.ra>`"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:18:<autosummary>:1
+msgid ":py:obj:`tend <jinwu.response.contgbmrsp.tend>`"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:18:<autosummary>:1
+msgid ":py:obj:`tstart <jinwu.response.contgbmrsp.tstart>`"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:20
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:25:<autosummary>:1
+msgid ":py:obj:`commandpl <jinwu.response.contgbmrsp.commandpl>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:25:<autosummary>:1
+msgid ":py:obj:`gbmrsppl <jinwu.response.contgbmrsp.gbmrsppl>`\\ \\(\\)"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:27
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.response.contgbmrsp.rst:35
+msgid "Methods Documentation"
+msgstr ""
+

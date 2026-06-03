@@ -1,0 +1,69 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.core.JointDataset.rst:2
+msgid "JointDataset"
+msgstr ""
+
+#: jinwu.core.datasets.JointDataset:1 of
+msgid "A simple container for multiple datasets."
+msgstr ""
+
+#: jinwu.core.datasets.JointDataset:3 of
+msgid ""
+"This can hold any combination of light curves and spectra that "
+"conceptually belong to the same astrophysical source/event."
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:10
+msgid "Attributes Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:15:<autosummary>:1
+msgid ":py:obj:`lightcurves <jinwu.core.JointDataset.lightcurves>`"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:15:<autosummary>:1
+msgid ":py:obj:`spectra <jinwu.core.JointDataset.spectra>`"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:17
+msgid "Methods Summary"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:22:<autosummary>:1
+msgid ""
+":py:obj:`add_lightcurve <jinwu.core.JointDataset.add_lightcurve>`\\ "
+"\\(lc\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:22:<autosummary>:1
+msgid ":py:obj:`add_spectrum <jinwu.core.JointDataset.add_spectrum>`\\ \\(spec\\)"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:24
+msgid "Attributes Documentation"
+msgstr ""
+
+#: ../../api/jinwu.core.JointDataset.rst:29
+msgid "Methods Documentation"
+msgstr ""
+

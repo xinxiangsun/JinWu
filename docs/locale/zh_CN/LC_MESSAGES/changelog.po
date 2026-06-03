@@ -1,0 +1,67 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../changelog.rst:2
+msgid "Changelog"
+msgstr ""
+
+#: ../../changelog.rst:5
+msgid "v0.0.27 (2026-06-03)"
+msgstr ""
+
+#: ../../changelog.rst:7
+msgid "Added Sphinx documentation with Read the Docs support"
+msgstr ""
+
+#: ../../changelog.rst:8
+msgid "Documentation now auto-generates API reference from docstrings"
+msgstr ""
+
+#: ../../changelog.rst:11
+msgid "v0.0.26 (2026-05)"
+msgstr ""
+
+#: ../../changelog.rst:13
+msgid ""
+"Added :class:`jinwu.core.upperlimit.UpperLimit` with chain and fit.error "
+"dual routes"
+msgstr ""
+
+#: ../../changelog.rst:14
+msgid "Added :mod:`jinwu.core.instruments` — EP FXT/WXT data directory scanning"
+msgstr ""
+
+#: ../../changelog.rst:15
+msgid "Added :meth:`jinwu.core.fit.run_xspec_chain` for MCMC chain fitting"
+msgstr ""
+
+#: ../../changelog.rst:16
+msgid "Telescope definitions in :mod:`jinwu.core.config`"
+msgstr ""
+
+#: ../../changelog.rst:19
+msgid "Earlier Releases"
+msgstr ""
+
+#: ../../changelog.rst:21
+msgid "*See the Git history for earlier changes.*"
+msgstr ""
+

@@ -1,0 +1,79 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../quickstart.rst:2
+msgid "Quick Start Guide"
+msgstr ""
+
+#: ../../quickstart.rst:4
+msgid "Prerequisites"
+msgstr ""
+
+#: ../../quickstart.rst:7
+msgid ""
+"JinWu's spectral fitting relies on **HEASoft + XSPEC + model data**. The "
+"recommended way is via conda, but any working HEASoft installation works:"
+msgstr ""
+
+#: ../../quickstart.rst:17
+msgid "If HEASoft is already installed outside conda, use:"
+msgstr ""
+
+#: ../../quickstart.rst:24
+msgid "This guide walks through common JinWu workflows."
+msgstr ""
+
+#: ../../quickstart.rst:27
+msgid "Reading OGIP FITS Files"
+msgstr ""
+
+#: ../../quickstart.rst:29
+msgid "JinWu provides a unified interface for reading standard OGIP FITS files:"
+msgstr ""
+
+#: ../../quickstart.rst:53
+msgid "Working with Energy Bands"
+msgstr ""
+
+#: ../../quickstart.rst:69
+msgid "Computing Net Data"
+msgstr ""
+
+#: ../../quickstart.rst:71
+msgid ""
+"The :func:`jinwu.netdata` function computes net (background-subtracted) "
+"count rates and errors with proper uncertainty propagation:"
+msgstr ""
+
+#: ../../quickstart.rst:86
+msgid "Next Steps"
+msgstr ""
+
+#: ../../quickstart.rst:88
+msgid "See :doc:`api` for the complete API reference."
+msgstr ""
+
+#: ../../quickstart.rst:89
+msgid ""
+"Check the `GitHub repository <https://github.com/xinxiangsun/jinwu>`_ for"
+" examples and issue tracking."
+msgstr ""
+

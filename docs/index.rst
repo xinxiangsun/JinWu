@@ -1,97 +1,103 @@
-
+=============================================================
 JinWu Documentation
-====================
+=============================================================
 
-**JinWu** (金乌) is a comprehensive Python package for X-ray and gamma-ray
-astrophysics, combining spectral and temporal analysis with unified physical
-modeling.  It provides a modular, extensible framework for processing data from
-missions such as *Swift*, *Fermi*/GBM, and the *Einstein Probe* (EP).
+**Joint Inference for high-energy transient light-curve & spectral analysis
+with Unifying physical modeling.**
+
+JinWu (金乌) is a comprehensive Python toolkit for X-ray and gamma-ray
+astrophysics, bringing together spectral and temporal analysis with
+unified physical modeling.  Named after the mythical three-legged
+golden crow dwelling in the sun — a fitting symbol for a package that
+shines light on the most energetic transients in the Universe.
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
+   :caption: Contents
 
    quickstart
-   usage/spectral
+   api
    usage/lightcurve
+   usage/spectral
    usage/upperlimits
    usage/nhtot
-
-.. toctree::
-   :maxdepth: 3
-   :caption: API Reference
-
-   api
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Development
-
+   RedshiftExtrapolator
    changelog
-   GitHub <https://github.com/xinxiangsun/jinwu>
 
 ----
 
 Key Features
-------------
+============
 
-- **OGIP FITS I/O** — read/write ARF, RMF, PHA, lightcurves, and event files
-  with full validation.
-- **Spectral fitting** — wrapper around XSPEC/PyXspec with Bayesian chain
-  analysis, model comparison, and upper limit computation.
-- **Light-curve fitting** — built-in models (power-law, broken power-law,
-  exponential, Gaussian) with custom expression support.
-- **Upper limits** — Feldman-Cousins, Bayesian, and inverse Li-Ma methods,
-  with joint multi-observation significance.
-- **Galactic NH** — the ``nhtot`` tool wrapping Willingale et al. (2013)
-  for NHI + H₂ column densities.
-- **Multi-mission** — dedicated readers for Swift/BAT, Swift/XRT, Fermi/GBM,
-  and Einstein Probe data products.
+* **OGIP FITS I/O** — Read and write ARF, RMF, PHA, lightcurve, and event files
+* **Lightcurve & Spectral Analysis** — Background modeling, trigger evaluation, XSPEC-inspired components
+* **Multi-mission Support** — Einstein Probe (EP), Fermi/GBM, Swift/BAT, and more
+* **Unified Physical Modeling** — Consistent framework across bands and messengers
+* **Pure-Python ftools** — HEASOFT-compatible tools written entirely in Python
+* **Upper Limit Computation** — Bayesian & frequentist upper limits for faint transients
 
 Installation
-------------
+============
+
+JinWu's spectral fitting and XSPEC integration depend on
+**HEASoft/PyXspec** and XSPEC model data.  We recommend installing
+these via the HEASARC conda channel, though any working HEASoft
+installation is fine.
 
 .. code-block:: bash
 
+   # 1. Install HEASoft + XSPEC + model data via conda
+   conda create -n hea -c https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/conda \\
+       heasoft xspec xspec-data
+   conda activate hea
+
+   # 2. Install JinWu
    pip install jinwu
 
-Or from source:
+If you already have HEASoft installed outside conda (e.g. from source),
+JinWu can still use it — call :class:`jinwu.core.heasoft.HeasoftEnvManager`
+to initialize the environment:
+
+.. code-block:: python
+
+   from jinwu.core.heasoft import HeasoftEnvManager
+   mgr = HeasoftEnvManager()      # auto-detects HEADAS from env / rc files
+   mgr.init_heasoft()
+
+For development:
 
 .. code-block:: bash
 
-   git clone https://github.com/xinxiangsun/jinwu.git
+   conda activate hea
+   git clone https://github.com/xinxiangsun/jinwu
    cd jinwu
-   pip install -e .
+   pip install -e ".[docs]"
 
-Quick Example
--------------
+.. note::
 
-Get the Galactic hydrogen column density for a sky position:
+   The ``HeasoftEnvManager`` also works in Jupyter notebooks —
+   use :meth:`HeasoftEnvManager.init_heasoft_in_notebook`.
 
-.. code-block:: python
-
-   >>> from jinwu.core.utils import nhtot
-   >>> result = nhtot(159.386, 56.171)  # RA, Dec in degrees
-   >>> print(f"N_H,tot = {result['nhtot_weighted']:.2e} cm⁻²")
-   N_H,tot = 5.26e+19 cm⁻²
-
-Fit a light curve with a broken power-law:
+Quick Start
+===========
 
 .. code-block:: python
 
-   >>> from jinwu.core.data import LightcurveData
-   >>> from jinwu.core.fit import LightcurveFitter
-   >>> ...
+   import jinwu as jw
 
-License
--------
+   # Read OGIP FITS files
+   pha = jw.read_pha("source.pha")
+   lc  = jw.read_lc("lightcurve.fits")
 
-JinWu is released under the `GNU General Public License v3.0 or later
-<https://www.gnu.org/licenses/gpl-3.0.html>`_.
+   # Work with energy bands
+   band = jw.EnergyBand(0.3, 10.0, unit="keV")
 
-Cite
-----
+   # General net data computation
+   net = jw.netdata(src=src_counts, bkg=bkg_counts, exposure=exposure)
 
-If you use JinWu in your research, please cite the repository and the
-underlying methods (Willingale+2013, Li & Ma 1983, Feldman & Cousins 1998, etc.).
 
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`

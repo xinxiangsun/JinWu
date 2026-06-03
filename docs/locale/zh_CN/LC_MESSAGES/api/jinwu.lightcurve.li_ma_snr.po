@@ -1,0 +1,61 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) 2025-2026, Xinxiang Sun (孙新翔)
+# This file is distributed under the same license as the JinWu package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: JinWu 0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-03 19:29+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: zh_CN\n"
+"Language-Team: zh_CN <LL@li.org>\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: ../../api/jinwu.lightcurve.li_ma_snr.rst:2
+msgid "li_ma_snr"
+msgstr ""
+
+#: jinwu.lightcurve.duration.li_ma_snr:1 of
+msgid ""
+"Compute Li & Ma significance (Eq. 17 in Li & Ma 1983) given counts and "
+"alpha."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.li_ma_snr.rst
+msgid "Parameters"
+msgstr ""
+
+#: jinwu.lightcurve.duration.li_ma_snr:3 of
+msgid "Total counts in ON region."
+msgstr ""
+
+#: jinwu.lightcurve.duration.li_ma_snr:5 of
+msgid "Total counts in OFF region (reference background)."
+msgstr ""
+
+#: jinwu.lightcurve.duration.li_ma_snr:7 of
+msgid ""
+"Exposure/area scaling factor from OFF to ON: alpha = "
+"(A_on/A_off)*(t_on/t_off)."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.li_ma_snr.rst
+msgid "Returns"
+msgstr ""
+
+#: jinwu.lightcurve.duration.li_ma_snr:10 of
+msgid "The Li & Ma significance (>=0). Returns 0.0 if inputs are degenerate."
+msgstr ""
+
+#: ../../api/jinwu.lightcurve.li_ma_snr.rst
+msgid "Return type"
+msgstr ""
+
