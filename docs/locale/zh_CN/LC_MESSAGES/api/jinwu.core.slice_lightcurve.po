@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,25 +20,28 @@ msgstr ""
 
 #: ../../api/jinwu.core.slice_lightcurve.rst:2
 msgid "slice_lightcurve"
-msgstr ""
+msgstr "光变曲线切片"
 
 #: jinwu.core.ops.slice_lightcurve:1 of
 msgid "按时间范围筛选光变曲线，返回新实例。"
-msgstr ""
+msgstr "按时间范围筛选光变曲线，返回新实例。"
 
 #: jinwu.core.ops.slice_lightcurve:3 of
 msgid ""
 "参数 - lc: 输入光变曲线数据 - tmin/tmax: 时间下/上界（闭区间）；可为相对秒 (float) 或 astropy/jinwu "
 "的 Time/TimeDelta；None 表示不限"
 msgstr ""
+"参数 - lc: 输入光变曲线数据 - tmin/tmax: 时间下/上界（闭区间）；可为相对秒 (float) 或 astropy/jinwu "
+"的 Time/TimeDelta；None 表示不限"
 
 #: jinwu.core.ops.slice_lightcurve:7 of
 msgid "返回 - 新的 LightcurveData 实例"
-msgstr ""
+msgstr "返回 - 新的 LightcurveData 实例"
 
 #: jinwu.core.ops.slice_lightcurve:10 of
 msgid ""
 "English Filter lightcurve by time range [tmin, tmax]; returns new "
 "instance."
 msgstr ""
+"英文 按时间范围 [tmin, tmax] 筛选光变曲线；返回新实例。"
 

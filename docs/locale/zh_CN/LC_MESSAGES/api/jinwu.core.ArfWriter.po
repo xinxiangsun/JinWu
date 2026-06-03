@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,19 +20,21 @@ msgstr ""
 
 #: ../../api/jinwu.core.ArfWriter.rst:2
 msgid "ArfWriter"
-msgstr ""
+msgstr "ArfWriter"
 
 #: ../../api/jinwu.core.ArfWriter.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.core.ArfWriter.rst:14:<autosummary>:1
 msgid ""
 ":py:obj:`write <jinwu.core.ArfWriter.write>`\\ \\(\\*\\[\\, "
 "overwrite\\]\\)"
 msgstr ""
+":py:obj:`write <jinwu.core.ArfWriter.write>`\\ \\(\\*\\[\\, "
+"overwrite\\]\\)"
 
 #: ../../api/jinwu.core.ArfWriter.rst:16
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 

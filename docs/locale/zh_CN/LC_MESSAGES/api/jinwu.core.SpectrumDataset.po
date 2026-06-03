@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,45 +20,45 @@ msgstr ""
 
 #: ../../api/jinwu.core.SpectrumDataset.rst:2
 msgid "SpectrumDataset"
-msgstr ""
+msgstr "能谱数据集"
 
 #: jinwu.core.datasets.SpectrumDataset:1 of
 msgid "High-level spectral dataset container."
-msgstr ""
+msgstr "高层级能谱数据集容器。"
 
 #: ../../api/jinwu.core.SpectrumDataset.rst
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.core.datasets.SpectrumDataset:3 of
 msgid "The underlying OGIP spectral data (SPECTRUM + optional EBOUNDS)."
-msgstr ""
+msgstr "底层 OGIP 能谱数据（SPECTRUM + 可选 EBOUNDS）。"
 
 #: jinwu.core.datasets.SpectrumDataset:5 of
 msgid "A human-readable label for this spectrum (e.g. instrument, epoch)."
-msgstr ""
+msgstr "此能谱的可读标签（如仪器、观测时段）。"
 
 #: jinwu.core.datasets.SpectrumDataset:7 of
 msgid "Optional associated background spectrum."
-msgstr ""
+msgstr "可选关联本底能谱。"
 
 #: ../../api/jinwu.core.SpectrumDataset.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概览"
 
 #: ../../api/jinwu.core.SpectrumDataset.rst:16:<autosummary>:1
 msgid ":py:obj:`background <jinwu.core.SpectrumDataset.background>`"
-msgstr ""
+msgstr ":py:obj:`background <jinwu.core.SpectrumDataset.background>`"
 
 #: ../../api/jinwu.core.SpectrumDataset.rst:16:<autosummary>:1
 msgid ":py:obj:`data <jinwu.core.SpectrumDataset.data>`"
-msgstr ""
+msgstr ":py:obj:`data <jinwu.core.SpectrumDataset.data>`"
 
 #: ../../api/jinwu.core.SpectrumDataset.rst:16:<autosummary>:1
 msgid ":py:obj:`label <jinwu.core.SpectrumDataset.label>`"
-msgstr ""
+msgstr ":py:obj:`label <jinwu.core.SpectrumDataset.label>`"
 
 #: ../../api/jinwu.core.SpectrumDataset.rst:18
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 

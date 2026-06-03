@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 20:00+0800\n"
+"Last-Translator: Xinxiang Sun <xinxiang@example.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,59 +20,64 @@ msgstr ""
 
 #: ../../quickstart.rst:2
 msgid "Quick Start Guide"
-msgstr ""
+msgstr "快速入门指南"
 
 #: ../../quickstart.rst:4
 msgid "Prerequisites"
-msgstr ""
+msgstr "先决条件"
 
 #: ../../quickstart.rst:7
 msgid ""
 "JinWu's spectral fitting relies on **HEASoft + XSPEC + model data**. The "
 "recommended way is via conda, but any working HEASoft installation works:"
 msgstr ""
+"金乌的能谱拟合依赖于 **HEASoft + XSPEC + 模型数据**。推荐通过 conda "
+"安装，但任何可用的 HEASoft 安装均可："
 
 #: ../../quickstart.rst:17
 msgid "If HEASoft is already installed outside conda, use:"
-msgstr ""
+msgstr "如果 HEASoft 已通过 conda 以外的方式安装，请使用："
 
 #: ../../quickstart.rst:24
 msgid "This guide walks through common JinWu workflows."
-msgstr ""
+msgstr "本指南将介绍金乌的常见工作流程。"
 
 #: ../../quickstart.rst:27
 msgid "Reading OGIP FITS Files"
-msgstr ""
+msgstr "读取 OGIP FITS 文件"
 
 #: ../../quickstart.rst:29
 msgid "JinWu provides a unified interface for reading standard OGIP FITS files:"
-msgstr ""
+msgstr "金乌提供了读取标准 OGIP FITS 文件的统一接口："
 
 #: ../../quickstart.rst:53
 msgid "Working with Energy Bands"
-msgstr ""
+msgstr "处理能段"
 
 #: ../../quickstart.rst:69
 msgid "Computing Net Data"
-msgstr ""
+msgstr "计算净数据"
 
 #: ../../quickstart.rst:71
 msgid ""
 "The :func:`jinwu.netdata` function computes net (background-subtracted) "
 "count rates and errors with proper uncertainty propagation:"
 msgstr ""
+":func:`jinwu.netdata` 函数用于计算净（扣除背景）计数率及其误差，"
+"并进行正确的不确定度传播："
 
 #: ../../quickstart.rst:86
 msgid "Next Steps"
-msgstr ""
+msgstr "后续步骤"
 
 #: ../../quickstart.rst:88
 msgid "See :doc:`api` for the complete API reference."
-msgstr ""
+msgstr "完整 API 参考请参阅 :doc:`api`。"
 
 #: ../../quickstart.rst:89
 msgid ""
 "Check the `GitHub repository <https://github.com/xinxiangsun/jinwu>`_ for"
 " examples and issue tracking."
 msgstr ""
-
+"请查看 `GitHub 仓库 <https://github.com/xinxiangsun/jinwu>`_ 以获取示例"
+"和问题跟踪。"

@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,11 +20,11 @@ msgstr ""
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:2
 msgid "LightcurveSNREvaluator"
-msgstr ""
+msgstr "光变信噪比评估器"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:1 of
 msgid "Evaluate whether a given lightcurve can reach a target SNR after T0."
-msgstr ""
+msgstr "评估给定的光变曲线在 T0 之后是否能够达到目标 SNR。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:3 of
 msgid ""
@@ -35,22 +34,25 @@ msgid ""
 " fixed time window after T0. It supports a fast expected-value mode and "
 "an MC mode with Poisson fluctuations for ON and OFF."
 msgstr ""
+"此类接受分箱 ON 区域光变曲线（时间边界或中心及每 bin 计数）和背景先验，"
+"通过贝叶斯分块使用每块 Li&Ma SNR≥3 找到 T0，然后计算 T0 后固定时间窗口内的最大 Li&Ma SNR。"
+"支持快速期望值模式和带 ON/OFF 泊松涨落的 MC 模式。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:10 of
 msgid "Typical usage"
-msgstr ""
+msgstr "典型用法"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:27 of
 msgid "Load from NPZ (common keys)"
-msgstr ""
+msgstr "从 NPZ 加载（常用键）"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:28 of
 msgid "The loader prefers the following keys if present: - counts (ON-region):"
-msgstr ""
+msgstr "加载器优先使用以下键（若存在）： - counts（ON 区域）："
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:30 of
 msgid "'corrected_counts_src'  (preferred; counts in source region per bin)"
-msgstr ""
+msgstr "'corrected_counts_src'（首选；源区域每 bin 计数）"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:31 of
 msgid ""
@@ -58,24 +60,28 @@ msgid ""
 "'corrected_counts_back' (OFF region) then ON counts reconstructed by: "
 "counts_on = net + area_ratio * back"
 msgstr ""
+"若只有净计数+背景可用：'corrected_counts'（净计数）和 'corrected_counts_back'（OFF 区域），"
+"则通过 counts_on = net + area_ratio * back 重建 ON 计数"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:34 of
 msgid ""
 "As a fallback, 'raw_corrected_counts' will be treated as ON counts "
 "(approximation if it's actually net); a warning is emitted."
 msgstr ""
+"作为后备方案，'raw_corrected_counts' 将被视为 ON 计数（若实际为净计数则为近似值）；"
+"会发出警告。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:36 of
 msgid "time array:"
-msgstr ""
+msgstr "时间数组："
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator:37 of
 msgid "'time_series' (preferred) else 'raw_time_series'"
-msgstr ""
+msgstr "'time_series'（首选）否则 'raw_time_series'"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:16:<autosummary>:1
 msgid ""
@@ -83,22 +89,27 @@ msgid ""
 "<jinwu.lightcurve.LightcurveSNREvaluator.from_counts>`\\ \\(time\\, "
 "counts\\[\\, dt\\, background\\, ...\\]\\)"
 msgstr ""
+":py:obj:`from_counts "
+"<jinwu.lightcurve.LightcurveSNREvaluator.from_counts>`\\ \\(time\\, "
+"counts\\[\\, dt\\, background\\, ...\\]\\)"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:16:<autosummary>:1
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_counts:1 of
 msgid "Build evaluator from counts per bin."
-msgstr ""
+msgstr "从每 bin 计数构建评估器。"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:16:<autosummary>:1
 msgid ""
 ":py:obj:`from_npz <jinwu.lightcurve.LightcurveSNREvaluator.from_npz>`\\ "
 "\\(npz\\_path\\, background\\, \\*\\[\\, ...\\]\\)"
 msgstr ""
+":py:obj:`from_npz <jinwu.lightcurve.LightcurveSNREvaluator.from_npz>`\\ "
+"\\(npz\\_path\\, background\\, \\*\\[\\, ...\\]\\)"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:16:<autosummary>:1
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:1 of
 msgid "Build evaluator by loading a standard NPZ lightcurve file."
-msgstr ""
+msgstr "通过加载标准 NPZ 光变曲线文件构建评估器。"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:16:<autosummary>:1
 msgid ""
@@ -106,21 +117,24 @@ msgid ""
 "<jinwu.lightcurve.LightcurveSNREvaluator.reaches_snr>`\\ \\(\\[target\\, "
 "window\\, mode\\, n\\_mc\\, ...\\]\\)"
 msgstr ""
+":py:obj:`reaches_snr "
+"<jinwu.lightcurve.LightcurveSNREvaluator.reaches_snr>`\\ \\(\\[target\\, "
+"window\\, mode\\, n\\_mc\\, ...\\]\\)"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:16:<autosummary>:1
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:1 of
 msgid ""
 "Decide if the lightcurve can reach target SNR within window seconds after"
 " T0."
-msgstr ""
+msgstr "判定光变曲线在 T0 之后 window 秒内是否能达到目标 SNR。"
 
 #: ../../api/jinwu.lightcurve.LightcurveSNREvaluator.rst:18
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator of
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_counts:3 of
 msgid ""
@@ -128,100 +142,104 @@ msgid ""
 "edges, dt must be provided; if these are centers and dt is not given, it "
 "will be inferred from median spacing."
 msgstr ""
+"与每 bin 对应的时间戳 1D 数组。若为左边界，则必须提供 dt；若为中心且未提供 dt，"
+"则从中位间距推断。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_counts:7 of
 msgid "1D array of ON-region counts per bin (non-negative)."
-msgstr ""
+msgstr "ON 区域每 bin 计数的 1D 数组（非负）。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_counts:9 of
 msgid "Bin width in seconds. If None, inferred as median diff of time."
-msgstr ""
+msgstr "bin 宽度（秒）。若为 None，则从时间的中位差推断。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_counts:11 of
 msgid "Background prior object."
-msgstr ""
+msgstr "背景先验对象。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:3 of
 msgid ""
 "Selection logic: - time = npz[time_key_primary] if present else "
 "npz[time_key_fallback] - counts (ON region per bin):"
-msgstr ""
+msgstr "选择逻辑： - time = npz[time_key_primary]（若存在）否则 npz[time_key_fallback] - counts（ON 区域每 bin）："
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:6 of
 msgid "if counts_key_preferred in npz: use it directly"
-msgstr ""
+msgstr "若 counts_key_preferred 存在于 npz：直接使用"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:7 of
 msgid ""
 "elif both net_key and off_key in npz: reconstruct ON counts as counts_on "
 "= net + background.area_ratio * off"
 msgstr ""
+"否则若 net_key 和 off_key 均存在于 npz：按 counts_on = net + background.area_ratio * off 重建 ON 计数"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:9 of
 msgid "elif raw_counts_key_fallback in npz: use it as counts (warning)"
-msgstr ""
+msgstr "否则若 raw_counts_key_fallback 存在于 npz：将其用作计数（警告）"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:10 of
 msgid "else: raise ValueError"
-msgstr ""
+msgstr "否则：抛出 ValueError"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:12 of
 msgid "Path to NPZ file with lightcurve arrays."
-msgstr ""
+msgstr "包含光变曲线数组的 NPZ 文件路径。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:14 of
 msgid "Background prior object (provides area_ratio for reconstruction)."
-msgstr ""
+msgstr "背景先验对象（提供 area_ratio 用于重建）。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:16 of
 msgid "Bin width; if None, inferred from median diff of the chosen time array."
-msgstr ""
+msgstr "bin 宽度；若为 None，则从所选时间数组的中位差推断。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.from_npz:18 of
 msgid "If True, prints brief notes about which keys were used."
-msgstr ""
+msgstr "若为 True，打印关于使用了哪些键的简要说明。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:4 of
 msgid "Target SNR threshold (default 7.0)."
-msgstr ""
+msgstr "目标 SNR 阈值（默认 7.0）。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:6 of
 msgid "Time window in seconds after T0 to search for max SNR (default 1200 s)."
-msgstr ""
+msgstr "T0 之后搜索最大 SNR 的时间窗口（秒，默认 1200 秒）。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:8 of
 msgid ""
 "- 'fast': use expected OFF counts (no Poisson sampling), deterministic. -"
 " 'mc': Monte Carlo sampling with Poisson fluctuations for ON and OFF."
 msgstr ""
+"- 'fast': 使用期望 OFF 计数（无泊松采样），确定性。 - 'mc': 对 ON 和 OFF 进行带泊松涨落的蒙特卡洛采样。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:9 of
 msgid "'fast': use expected OFF counts (no Poisson sampling), deterministic."
-msgstr ""
+msgstr "'fast': 使用期望 OFF 计数（无泊松采样），确定性。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:10 of
 msgid "'mc': Monte Carlo sampling with Poisson fluctuations for ON and OFF."
-msgstr ""
+msgstr "'mc': 对 ON 和 OFF 进行带泊松涨落的蒙特卡洛采样。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:12 of
 msgid "Number of MC replicates when mode='mc'."
-msgstr ""
+msgstr "mode='mc' 时的 MC 重复次数。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:14 of
 msgid "Random generator for MC."
-msgstr ""
+msgstr "MC 随机数生成器。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:16 of
 msgid "SNR threshold used for T0 detection (default 3.0)."
-msgstr ""
+msgstr "用于 T0 检测的 SNR 阈值（默认 3.0）。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:18 of
 msgid "OFF counts treatment for both T0 and window SNR. See _find_T0_by_blocks."
-msgstr ""
+msgstr "T0 和窗口 SNR 的 OFF 计数处理方式。参见 _find_T0_by_blocks。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator of
 msgid "Returns"
-msgstr ""
+msgstr "返回"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:21 of
 msgid ""
@@ -230,20 +248,24 @@ msgid ""
 "dict: diagnostics including T0 estimate, probability (for mc),   and "
 "optionally the distribution of max SNRs."
 msgstr ""
+"- bool: 若达到目标 SNR 的概率（fast：指示器）>= 0.95 则为 True（仅对 mc 有意义；"
+"fast 模式下按 True/False 直接返回）。 - dict: 诊断信息，包括 T0 估计、概率（mc 模式）"
+"以及可选的 max SNR 分布。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:23 of
 msgid ""
 "bool: True if probability (fast: indicator) of reaching target SNR is >= "
 "0.95 (only meaningful for mc; for fast it is True/False as is)."
 msgstr ""
+"bool: 若达到目标 SNR 的概率（fast：指示器）>= 0.95 则为 True（仅对 mc 有意义；"
+"fast 模式下按 True/False 直接返回）。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator.reaches_snr:25 of
 msgid ""
 "dict: diagnostics including T0 estimate, probability (for mc), and "
 "optionally the distribution of max SNRs."
-msgstr ""
+msgstr "dict: 诊断信息，包括 T0 估计、概率（mc 模式）以及可选的 max SNR 分布。"
 
 #: jinwu.lightcurve.duration.LightcurveSNREvaluator of
 msgid "Return type"
-msgstr ""
-
+msgstr "返回类型"

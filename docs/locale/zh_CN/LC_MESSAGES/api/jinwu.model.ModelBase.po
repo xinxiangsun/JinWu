@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,60 +20,65 @@ msgstr ""
 
 #: ../../api/jinwu.model.ModelBase.rst:2
 msgid "ModelBase"
-msgstr ""
+msgstr "模型基类"
 
 #: jinwu.model.modelbase.ModelBase:1 of
 msgid "Common base class for all spectral model components."
-msgstr ""
+msgstr "所有能谱模型分量的公共基类。"
 
 #: ../../api/jinwu.model.ModelBase.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.model.ModelBase.rst:14:<autosummary>:1
 msgid ":py:obj:`param_names <jinwu.model.ModelBase.param_names>`"
-msgstr ""
+msgstr ":py:obj:`param_names <jinwu.model.ModelBase.param_names>`"
 
 #: ../../api/jinwu.model.ModelBase.rst:16
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
 msgid ""
 ":py:obj:`__call__ <jinwu.model.ModelBase.__call__>`\\ \\(\\*args\\, "
 "\\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`__call__ <jinwu.model.ModelBase.__call__>`\\ \\(\\*args\\, "
+"\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
 #: jinwu.model.modelbase.ModelBase.__call__:1 of
 msgid "Call self as a function."
-msgstr ""
+msgstr "将自身作为函数调用。"
 
 #: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
 msgid ""
 ":py:obj:`evaluate <jinwu.model.ModelBase.evaluate>`\\ \\(\\*args\\, "
 "\\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`evaluate <jinwu.model.ModelBase.evaluate>`\\ \\(\\*args\\, "
+"\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
 msgid "Return model output."
-msgstr ""
+msgstr "返回模型输出。"
 
 #: ../../api/jinwu.model.ModelBase.rst:22:<autosummary>:1
 msgid ""
 ":py:obj:`set_params <jinwu.model.ModelBase.set_params>`\\ "
 "\\(\\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`set_params <jinwu.model.ModelBase.set_params>`\\ "
+"\\(\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ModelBase.rst:24
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.model.ModelBase.rst:28
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.model.modelbase.ModelBase.evaluate:1 of
 msgid "Return model output. Subclasses define the signature."
-msgstr ""
-
+msgstr "返回模型输出。子类定义其签名。"

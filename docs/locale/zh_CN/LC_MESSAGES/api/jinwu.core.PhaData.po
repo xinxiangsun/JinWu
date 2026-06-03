@@ -3,195 +3,203 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: JinWu 0.0\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language: zh_CN\n"
-"Language-Team: zh_CN <LL@li.org>\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
+"Project-Id-Version: JinWu 0.0n"
+"Report-Msgid-Bugs-To: n"
+"POT-Creation-Date: 2026-06-03 19:29+0800n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONEn"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>n"
+"Language: zh_CNn"
+"Language-Team: zh_CN <LL@li.org>n"
+"Plural-Forms: nplurals=1; plural=0;n"
+"MIME-Version: 1.0n"
+"Content-Type: text/plain; charset=utf-8n"
+"Content-Transfer-Encoding: 8bitn"
+"Generated-By: Babel 2.18.0n"
 
 #: ../../api/jinwu.core.PhaData.rst:2
 msgid "PhaData"
-msgstr ""
+msgstr "PHA数据"
 
 #: jinwu.core.data.PhaData:1 of
 msgid "Concrete PHA data class with local behavior implementation."
-msgstr ""
+msgstr "具有本地行为实现的具体PHA数据类。"
 
 #: ../../api/jinwu.core.PhaData.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性摘要"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`OPTIONAL_KEYS <jinwu.core.PhaData.OPTIONAL_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`OPTIONAL_KEYS <jinwu.core.PhaData.OPTIONAL_KEYS>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`OPTIONAL_RATE_COLUMNS <jinwu.core.PhaData.OPTIONAL_RATE_COLUMNS>`"
-msgstr ""
+msgstr ":py:obj:`OPTIONAL_RATE_COLUMNS <jinwu.core.PhaData.OPTIONAL_RATE_COLUMNS>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`REQUIRED_COLUMNS <jinwu.core.PhaData.REQUIRED_COLUMNS>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_COLUMNS <jinwu.core.PhaData.REQUIRED_COLUMNS>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`REQUIRED_KEYS <jinwu.core.PhaData.REQUIRED_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_KEYS <jinwu.core.PhaData.REQUIRED_KEYS>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`ancrfile <jinwu.core.PhaData.ancrfile>`"
-msgstr ""
+msgstr ":py:obj:`ancrfile <jinwu.core.PhaData.ancrfile>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`areascal <jinwu.core.PhaData.areascal>`"
-msgstr ""
+msgstr ":py:obj:`areascal <jinwu.core.PhaData.areascal>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`backscal <jinwu.core.PhaData.backscal>`"
-msgstr ""
+msgstr ":py:obj:`backscal <jinwu.core.PhaData.backscal>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`channels <jinwu.core.PhaData.channels>`"
-msgstr ""
+msgstr ":py:obj:`channels <jinwu.core.PhaData.channels>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`columns <jinwu.core.PhaData.columns>`"
-msgstr ""
+msgstr ":py:obj:`columns <jinwu.core.PhaData.columns>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`count_rate <jinwu.core.PhaData.count_rate>`"
-msgstr ""
+msgstr ":py:obj:`count_rate <jinwu.core.PhaData.count_rate>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`counts <jinwu.core.PhaData.counts>`"
-msgstr ""
+msgstr ":py:obj:`counts <jinwu.core.PhaData.counts>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`ebounds <jinwu.core.PhaData.ebounds>`"
-msgstr ""
+msgstr ":py:obj:`ebounds <jinwu.core.PhaData.ebounds>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`exposure <jinwu.core.PhaData.exposure>`"
-msgstr ""
+msgstr ":py:obj:`exposure <jinwu.core.PhaData.exposure>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`grouping <jinwu.core.PhaData.grouping>`"
-msgstr ""
+msgstr ":py:obj:`grouping <jinwu.core.PhaData.grouping>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`header <jinwu.core.PhaData.header>`"
-msgstr ""
+msgstr ":py:obj:`header <jinwu.core.PhaData.header>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`headers_dump <jinwu.core.PhaData.headers_dump>`"
-msgstr ""
+msgstr ":py:obj:`headers_dump <jinwu.core.PhaData.headers_dump>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`kind <jinwu.core.PhaData.kind>`"
-msgstr ""
+msgstr ":py:obj:`kind <jinwu.core.PhaData.kind>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`meta <jinwu.core.PhaData.meta>`"
-msgstr ""
+msgstr ":py:obj:`meta <jinwu.core.PhaData.meta>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`path <jinwu.core.PhaData.path>`"
-msgstr ""
+msgstr ":py:obj:`path <jinwu.core.PhaData.path>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`quality <jinwu.core.PhaData.quality>`"
-msgstr ""
+msgstr ":py:obj:`quality <jinwu.core.PhaData.quality>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`rate <jinwu.core.PhaData.rate>`"
-msgstr ""
+msgstr ":py:obj:`rate <jinwu.core.PhaData.rate>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`raw_spectrum_columns <jinwu.core.PhaData.raw_spectrum_columns>`"
-msgstr ""
+msgstr ":py:obj:`raw_spectrum_columns <jinwu.core.PhaData.raw_spectrum_columns>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`respfile <jinwu.core.PhaData.respfile>`"
-msgstr ""
+msgstr ":py:obj:`respfile <jinwu.core.PhaData.respfile>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`stat_err <jinwu.core.PhaData.stat_err>`"
-msgstr ""
+msgstr ":py:obj:`stat_err <jinwu.core.PhaData.stat_err>`"
 
 #: ../../api/jinwu.core.PhaData.rst:38:<autosummary>:1
 msgid ":py:obj:`validation <jinwu.core.PhaData.validation>`"
-msgstr ""
+msgstr ":py:obj:`validation <jinwu.core.PhaData.validation>`"
 
 #: ../../api/jinwu.core.PhaData.rst:40
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法摘要"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ""
 ":py:obj:`get_keyword_ci <jinwu.core.PhaData.get_keyword_ci>`\\ "
 "\\(key\\[\\, default\\]\\)"
 msgstr ""
+":py:obj:`get_keyword_ci <jinwu.core.PhaData.get_keyword_ci>`\\ "
+"\\(key\\[\\, default\\]\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:1 of
 msgid "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
-msgstr ""
+msgstr "大小写不敏感地从 header 中读取关键字（若 header 为 dict）。"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ""
 ":py:obj:`group_by_min_counts <jinwu.core.PhaData.group_by_min_counts>`\\ "
 "\\(min\\_counts\\)"
 msgstr ""
+":py:obj:`group_by_min_counts <jinwu.core.PhaData.group_by_min_counts>`\\ "
+"\\(min\\_counts\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ""
 ":py:obj:`grppha <jinwu.core.PhaData.grppha>`\\ \\(\\*\\[\\, "
 "min\\_counts\\, groupfile\\, rebin\\, ...\\]\\)"
 msgstr ""
+":py:obj:`grppha <jinwu.core.PhaData.grppha>`\\ \\(\\*\\[\\, "
+"min\\_counts\\, groupfile\\, rebin\\, ...\\]\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ":py:obj:`plot <jinwu.core.PhaData.plot>`\\ \\(\\*\\*kwargs\\)"
-msgstr ""
+msgstr ":py:obj:`plot <jinwu.core.PhaData.plot>`\\ \\(\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ""
 ":py:obj:`rebin <jinwu.core.PhaData.rebin>`\\ \\(\\*\\[\\, factor\\, "
 "min\\_counts\\]\\)"
 msgstr ""
+":py:obj:`rebin <jinwu.core.PhaData.rebin>`\\ \\(\\*\\[\\, factor\\, "
+"min\\_counts\\]\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ""
 ":py:obj:`slice <jinwu.core.PhaData.slice>`\\ \\(\\*\\[\\, emin\\, emax\\,"
 " ch\\_lo\\, ch\\_hi\\]\\)"
 msgstr ""
+":py:obj:`slice <jinwu.core.PhaData.slice>`\\ \\(\\*\\[\\, emin\\, emax\\,"
+" ch\\_lo\\, ch\\_hi\\]\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 msgid ":py:obj:`validate <jinwu.core.PhaData.validate>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`validate <jinwu.core.PhaData.validate>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.PhaData.rst:50:<autosummary>:1
 #: jinwu.core.data.PhaData.validate:1 of
 msgid "通用层：仅检查路径与 header 存在性。子类会扩展。"
-msgstr ""
+msgstr "通用层：仅检查路径与 header 存在性。子类会扩展。"
 
 #: ../../api/jinwu.core.PhaData.rst:52
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.PhaData.rst:80
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:3 of
 msgid "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
-msgstr ""
-
+msgstr "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"

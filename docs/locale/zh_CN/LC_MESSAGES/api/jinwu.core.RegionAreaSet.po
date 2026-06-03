@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,47 +20,49 @@ msgstr ""
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:2
 msgid "RegionAreaSet"
-msgstr ""
+msgstr "区域面积集"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概览"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
 msgid ":py:obj:`bkg <jinwu.core.RegionAreaSet.bkg>`"
-msgstr ""
+msgstr ":py:obj:`bkg <jinwu.core.RegionAreaSet.bkg>`"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
 msgid ":py:obj:`bkg_area <jinwu.core.RegionAreaSet.bkg_area>`"
-msgstr ""
+msgstr ":py:obj:`bkg_area <jinwu.core.RegionAreaSet.bkg_area>`"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
 msgid ":py:obj:`src <jinwu.core.RegionAreaSet.src>`"
-msgstr ""
+msgstr ":py:obj:`src <jinwu.core.RegionAreaSet.src>`"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
 msgid ":py:obj:`src_area <jinwu.core.RegionAreaSet.src_area>`"
-msgstr ""
+msgstr ":py:obj:`src_area <jinwu.core.RegionAreaSet.src_area>`"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:18:<autosummary>:1
 msgid ":py:obj:`unk <jinwu.core.RegionAreaSet.unk>`"
-msgstr ""
+msgstr ":py:obj:`unk <jinwu.core.RegionAreaSet.unk>`"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:20
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概览"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:24:<autosummary>:1
 msgid ""
-":py:obj:`from_regions <jinwu.core.RegionAreaSet.from_regions>`\\ "
-"\\(regions\\)"
+":py:obj:`from_regions <jinwu.core.RegionAreaSet.from_regions>`\\\\ "
+"\\\\(regions\\\\)"
 msgstr ""
+":py:obj:`from_regions <jinwu.core.RegionAreaSet.from_regions>`\\\\ "
+"\\\\(regions\\\\)"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:26
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.RegionAreaSet.rst:34
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 

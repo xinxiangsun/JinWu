@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 20:00+0800\n"
+"Last-Translator: Xinxiang Sun <xinxiang@example.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,35 +20,34 @@ msgstr ""
 
 #: ../../usage/lightcurve.rst:3
 msgid "Light-curve Fitting"
-msgstr ""
+msgstr "光变曲线拟合"
 
 #: ../../usage/lightcurve.rst:7
 msgid ""
 "This page is a work in progress.  See :mod:`jinwu.core.fit` for the "
 "complete API."
-msgstr ""
+msgstr "本页面正在建设中。完整 API 请参阅 :mod:`jinwu.core.fit`。"
 
 #: ../../usage/lightcurve.rst:10
 msgid "JinWu's light-curve fitting module supports:"
-msgstr ""
+msgstr "金乌的光变曲线拟合模块支持："
 
 #: ../../usage/lightcurve.rst:12
 msgid "Built-in models: power-law, broken power-law, exponential decay, Gaussian"
-msgstr ""
+msgstr "内置模型：幂律、折线幂律、指数衰减、高斯"
 
 #: ../../usage/lightcurve.rst:13
 msgid "Custom expression via string input"
-msgstr ""
+msgstr "通过字符串输入自定义表达式"
 
 #: ../../usage/lightcurve.rst:14
 msgid "Astropy-based fitting backends (Levenberg-Marquardt, TRFLSQP)"
-msgstr ""
+msgstr "基于 Astropy 的拟合后端（Levenberg-Marquardt、TRFLSQP）"
 
 #: ../../usage/lightcurve.rst:15
 msgid "Unified interface for ``LightcurveData`` and ``LightcurveDataset``"
-msgstr ""
+msgstr "``LightcurveData`` 和 ``LightcurveDataset`` 的统一接口"
 
 #: ../../usage/lightcurve.rst:18
 msgid "Example"
-msgstr ""
-
+msgstr "示例"

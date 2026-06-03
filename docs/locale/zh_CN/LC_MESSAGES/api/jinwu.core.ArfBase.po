@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,103 +20,107 @@ msgstr ""
 
 #: ../../api/jinwu.core.ArfBase.rst:2
 msgid "ArfBase"
-msgstr ""
+msgstr "ArfBase"
 
 #: jinwu.core.base.ArfBase:1 of
 msgid "Pure field-only base dataclass for ARF response data."
-msgstr ""
+msgstr "ARF 响应数据的纯字段基数据类。"
 
 #: ../../api/jinwu.core.ArfBase.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`REQUIRED_COLUMNS_ARF <jinwu.core.ArfBase.REQUIRED_COLUMNS_ARF>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_COLUMNS_ARF <jinwu.core.ArfBase.REQUIRED_COLUMNS_ARF>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ""
 ":py:obj:`REQUIRED_COLUMNS_RMF_MIN "
 "<jinwu.core.ArfBase.REQUIRED_COLUMNS_RMF_MIN>`"
 msgstr ""
+":py:obj:`REQUIRED_COLUMNS_RMF_MIN "
+"<jinwu.core.ArfBase.REQUIRED_COLUMNS_RMF_MIN>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`REQUIRED_KEYS_ANY <jinwu.core.ArfBase.REQUIRED_KEYS_ANY>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_KEYS_ANY <jinwu.core.ArfBase.REQUIRED_KEYS_ANY>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`columns <jinwu.core.ArfBase.columns>`"
-msgstr ""
+msgstr ":py:obj:`columns <jinwu.core.ArfBase.columns>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`energ_hi <jinwu.core.ArfBase.energ_hi>`"
-msgstr ""
+msgstr ":py:obj:`energ_hi <jinwu.core.ArfBase.energ_hi>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`energ_lo <jinwu.core.ArfBase.energ_lo>`"
-msgstr ""
+msgstr ":py:obj:`energ_lo <jinwu.core.ArfBase.energ_lo>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`header <jinwu.core.ArfBase.header>`"
-msgstr ""
+msgstr ":py:obj:`header <jinwu.core.ArfBase.header>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`headers_dump <jinwu.core.ArfBase.headers_dump>`"
-msgstr ""
+msgstr ":py:obj:`headers_dump <jinwu.core.ArfBase.headers_dump>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`kind <jinwu.core.ArfBase.kind>`"
-msgstr ""
+msgstr ":py:obj:`kind <jinwu.core.ArfBase.kind>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`meta <jinwu.core.ArfBase.meta>`"
-msgstr ""
+msgstr ":py:obj:`meta <jinwu.core.ArfBase.meta>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`path <jinwu.core.ArfBase.path>`"
-msgstr ""
+msgstr ":py:obj:`path <jinwu.core.ArfBase.path>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`specresp <jinwu.core.ArfBase.specresp>`"
-msgstr ""
+msgstr ":py:obj:`specresp <jinwu.core.ArfBase.specresp>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:26:<autosummary>:1
 msgid ":py:obj:`validation <jinwu.core.ArfBase.validation>`"
-msgstr ""
+msgstr ":py:obj:`validation <jinwu.core.ArfBase.validation>`"
 
 #: ../../api/jinwu.core.ArfBase.rst:28
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.core.ArfBase.rst:33:<autosummary>:1
 msgid ""
 ":py:obj:`get_keyword_ci <jinwu.core.ArfBase.get_keyword_ci>`\\ "
 "\\(key\\[\\, default\\]\\)"
 msgstr ""
+":py:obj:`get_keyword_ci <jinwu.core.ArfBase.get_keyword_ci>`\\ "
+"\\(key\\[\\, default\\]\\)"
 
 #: ../../api/jinwu.core.ArfBase.rst:33:<autosummary>:1
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:1 of
 msgid "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
-msgstr ""
+msgstr "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
 
 #: ../../api/jinwu.core.ArfBase.rst:33:<autosummary>:1
 msgid ":py:obj:`validate <jinwu.core.ArfBase.validate>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`validate <jinwu.core.ArfBase.validate>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.ArfBase.rst:33:<autosummary>:1
 #: jinwu.core.ogip.OgipResponseBase.validate:1 of
 msgid "通用层：仅检查路径与 header 存在性。子类会扩展。"
-msgstr ""
+msgstr "通用层：仅检查路径与 header 存在性。子类会扩展。"
 
 #: ../../api/jinwu.core.ArfBase.rst:35
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.ArfBase.rst:51
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:3 of
 msgid "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
-msgstr ""
+msgstr "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
 

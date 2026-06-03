@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,41 +20,41 @@ msgstr ""
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:2
 msgid "BackgroundPrior"
-msgstr ""
+msgstr "背景先验"
 
 #: jinwu.background.backprior.BackgroundPrior:1 of
 msgid "Background prior based on OFF-region total counts over a known exposure."
-msgstr ""
+msgstr "基于已知曝光时间内 OFF 区域总计数的背景先验。"
 
 #: jinwu.background.backprior.BackgroundPrior:5 of
 msgid "Total counts observed in the OFF region during t_off seconds."
-msgstr ""
+msgstr "在 t_off 秒内于 OFF 区域观测到的总计数。"
 
 #: jinwu.background.backprior.BackgroundPrior of
 msgid "type"
-msgstr ""
+msgstr "类型"
 
 #: jinwu.background.backprior.BackgroundPrior:7
 #: jinwu.background.backprior.BackgroundPrior:13
 #: jinwu.background.backprior.BackgroundPrior:19 of
 msgid "float"
-msgstr ""
+msgstr "float"
 
 #: jinwu.background.backprior.BackgroundPrior:11 of
 msgid "Exposure time in the OFF region corresponding to n_off_prior (seconds)."
-msgstr ""
+msgstr "与 n_off_prior 对应的 OFF 区域曝光时间（秒）。"
 
 #: jinwu.background.backprior.BackgroundPrior:17 of
 msgid "A_on / A_off. The Li&Ma alpha uses alpha = area_ratio * (t_on / t_off)."
-msgstr ""
+msgstr "A_on / A_off。Li&Ma 的 alpha 参数使用 alpha = area_ratio * (t_on / t_off)。"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
 msgid ":py:obj:`alpha <jinwu.background.BackgroundPrior.alpha>`\\ \\(t\\_on\\)"
-msgstr ""
+msgstr ":py:obj:`alpha <jinwu.background.BackgroundPrior.alpha>`\\ \\(t\\_on\\)"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
 msgid ""
@@ -63,6 +62,9 @@ msgid ""
 "<jinwu.background.BackgroundPrior.from_epwxt_background>`\\ "
 "\\(fits\\_path\\, \\*\\[\\, ...\\]\\)"
 msgstr ""
+":py:obj:`from_epwxt_background "
+"<jinwu.background.BackgroundPrior.from_epwxt_background>`\\ "
+"\\(fits\\_path\\, \\*\\[\\, ...\\]\\)"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:1 of
@@ -71,6 +73,8 @@ msgid ""
 "contains counts per cm^2 accumulated over a reference exposure (typically"
 " 1e6 s)."
 msgstr ""
+"从单个 EP/WXT 背景 FITS 文件构造 BackgroundPrior，该文件包含在参考曝光时间（通常为 1e6 "
+"秒）内每平方厘米的累计计数。"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
 msgid ""
@@ -78,14 +82,17 @@ msgid ""
 "<jinwu.background.BackgroundPrior.from_epwxt_background_default>`\\ "
 "\\(\\*\\[\\, chan\\_lo\\, ...\\]\\)"
 msgstr ""
+":py:obj:`from_epwxt_background_default "
+"<jinwu.background.BackgroundPrior.from_epwxt_background_default>`\\ "
+"\\(\\*\\[\\, chan\\_lo\\, ...\\]\\)"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:16:<autosummary>:1
 msgid "Return the ready-made BackgroundPrior values as requested by user."
-msgstr ""
+msgstr "返回用户请求的现成 BackgroundPrior 值。"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst:18
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:4 of
 msgid ""
@@ -93,50 +100,52 @@ msgid ""
 "(default 53–506, about 0.5–4.0 keV), computes the OFF-region prior counts"
 " in a desired t_off, and derives area_ratio from instrument geometry."
 msgstr ""
+"通过探测器通道 [chan_lo, chan_hi]（默认 53–506，约 0.5–4.0 keV）限定能段，"
+"计算所需 t_off 内的 OFF 区域先验计数，并根据仪器几何推导 area_ratio。"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:8 of
 msgid ""
 "Path to the background FITS (counts per cm^2). In practice only one "
 "combined background file is available."
-msgstr ""
+msgstr "背景 FITS 文件路径（每平方厘米计数）。实际中只有一个合并的背景文件可用。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:11
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:13 of
 msgid "Inclusive channel bounds to approximate 0.5–4.0 keV."
-msgstr ""
+msgstr "含上下界的通道范围，用于近似 0.5–4.0 keV 能段。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:15 of
 msgid "Pixel size on detector (mm). Default 0.015 mm."
-msgstr ""
+msgstr "探测器像元尺寸（mm）。默认 0.015 mm。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:17 of
 msgid "Sky angular size per pixel (degree). Default 0.00229 deg."
-msgstr ""
+msgstr "每像元的天球角尺寸（度）。默认 0.00229 度。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:19 of
 msgid "Source region radius (arcmin). Default 9'."
-msgstr ""
+msgstr "源区域半径（角分）。默认 9'。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:21
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:23 of
 msgid "Background annulus inner/outer radii (arcmin). Default 18'–36'."
-msgstr ""
+msgstr "背景环带内/外半径（角分）。默认 18'–36'。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:25 of
 msgid "OFF prior exposure (s) for Li&Ma. Default 1e6 s (matches FITS by default)."
-msgstr ""
+msgstr "Li&Ma 的 OFF 先验曝光时间（秒）。默认 1e6 秒（与 FITS 文件默认匹配）。"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background:27 of
 msgid "Print brief diagnostics."
-msgstr ""
+msgstr "打印简要诊断信息。"
 
 #: ../../api/jinwu.background.BackgroundPrior.rst
 msgid "Return type"
-msgstr ""
+msgstr "返回类型"
 
 #: jinwu.background.backprior.BackgroundPrior.from_epwxt_background_default:1
 #: of
@@ -145,4 +154,4 @@ msgid ""
 "Ignores file IO and outputs fixed values for reproducibility of quick "
 "tests."
 msgstr ""
-
+"返回用户请求的现成 BackgroundPrior 值。忽略文件 IO，输出固定值以保证快速测试的可复现性。"

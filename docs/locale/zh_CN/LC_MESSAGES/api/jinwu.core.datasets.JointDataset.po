@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,51 +20,56 @@ msgstr ""
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:2
 msgid "JointDataset"
-msgstr ""
+msgstr "JointDataset"
 
 #: jinwu.core.datasets.JointDataset:1 of
 msgid "A simple container for multiple datasets."
-msgstr ""
+msgstr "多数据集的简单容器。"
 
 #: jinwu.core.datasets.JointDataset:3 of
 msgid ""
 "This can hold any combination of light curves and spectra that "
 "conceptually belong to the same astrophysical source/event."
 msgstr ""
+"可容纳概念上属于同一天体物理源/事例的任意光变曲线与能谱组合。"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:15:<autosummary>:1
 msgid ":py:obj:`lightcurves <jinwu.core.datasets.JointDataset.lightcurves>`"
-msgstr ""
+msgstr ":py:obj:`lightcurves <jinwu.core.datasets.JointDataset.lightcurves>`"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:15:<autosummary>:1
 msgid ":py:obj:`spectra <jinwu.core.datasets.JointDataset.spectra>`"
-msgstr ""
+msgstr ":py:obj:`spectra <jinwu.core.datasets.JointDataset.spectra>`"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:17
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:22:<autosummary>:1
 msgid ""
 ":py:obj:`add_lightcurve "
 "<jinwu.core.datasets.JointDataset.add_lightcurve>`\\ \\(lc\\)"
 msgstr ""
+":py:obj:`add_lightcurve "
+"<jinwu.core.datasets.JointDataset.add_lightcurve>`\\ \\(lc\\)"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:22:<autosummary>:1
 msgid ""
 ":py:obj:`add_spectrum <jinwu.core.datasets.JointDataset.add_spectrum>`\\ "
 "\\(spec\\)"
 msgstr ""
+":py:obj:`add_spectrum <jinwu.core.datasets.JointDataset.add_spectrum>`\\ "
+"\\(spec\\)"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:24
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.datasets.JointDataset.rst:29
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 

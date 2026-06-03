@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,69 +20,68 @@ msgstr ""
 
 #: ../../api/jinwu.core.OgipMeta.rst:2
 msgid "OgipMeta"
-msgstr ""
+msgstr "OGIP元数据"
 
 #: ../../api/jinwu.core.OgipMeta.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性摘要"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`binsize <jinwu.core.OgipMeta.binsize>`"
-msgstr ""
+msgstr ":py:obj:`binsize <jinwu.core.OgipMeta.binsize>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`dateobs <jinwu.core.OgipMeta.dateobs>`"
-msgstr ""
+msgstr ":py:obj:`dateobs <jinwu.core.OgipMeta.dateobs>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`detnam <jinwu.core.OgipMeta.detnam>`"
-msgstr ""
+msgstr ":py:obj:`detnam <jinwu.core.OgipMeta.detnam>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`instrume <jinwu.core.OgipMeta.instrume>`"
-msgstr ""
+msgstr ":py:obj:`instrume <jinwu.core.OgipMeta.instrume>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`mjdref <jinwu.core.OgipMeta.mjdref>`"
-msgstr ""
+msgstr ":py:obj:`mjdref <jinwu.core.OgipMeta.mjdref>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`object <jinwu.core.OgipMeta.object>`"
-msgstr ""
+msgstr ":py:obj:`object <jinwu.core.OgipMeta.object>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`obs_id <jinwu.core.OgipMeta.obs_id>`"
-msgstr ""
+msgstr ":py:obj:`obs_id <jinwu.core.OgipMeta.obs_id>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`telescop <jinwu.core.OgipMeta.telescop>`"
-msgstr ""
+msgstr ":py:obj:`telescop <jinwu.core.OgipMeta.telescop>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`timesys <jinwu.core.OgipMeta.timesys>`"
-msgstr ""
+msgstr ":py:obj:`timesys <jinwu.core.OgipMeta.timesys>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`timeunit <jinwu.core.OgipMeta.timeunit>`"
-msgstr ""
+msgstr ":py:obj:`timeunit <jinwu.core.OgipMeta.timeunit>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`timezero <jinwu.core.OgipMeta.timezero>`"
-msgstr ""
+msgstr ":py:obj:`timezero <jinwu.core.OgipMeta.timezero>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`trefpos <jinwu.core.OgipMeta.trefpos>`"
-msgstr ""
+msgstr ":py:obj:`trefpos <jinwu.core.OgipMeta.trefpos>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`tstart <jinwu.core.OgipMeta.tstart>`"
-msgstr ""
+msgstr ":py:obj:`tstart <jinwu.core.OgipMeta.tstart>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:27:<autosummary>:1
 msgid ":py:obj:`tstop <jinwu.core.OgipMeta.tstop>`"
-msgstr ""
+msgstr ":py:obj:`tstop <jinwu.core.OgipMeta.tstop>`"
 
 #: ../../api/jinwu.core.OgipMeta.rst:29
 msgid "Attributes Documentation"
-msgstr ""
-
+msgstr "属性文档"

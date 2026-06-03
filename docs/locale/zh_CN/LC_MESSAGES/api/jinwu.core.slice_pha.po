@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,25 +20,28 @@ msgstr ""
 
 #: ../../api/jinwu.core.slice_pha.rst:2
 msgid "slice_pha"
-msgstr ""
+msgstr "能谱切片"
 
 #: jinwu.core.ops.slice_pha:1 of
 msgid "按能量或道范围筛选 PHA，返回新实例。"
-msgstr ""
+msgstr "按能量或道范围筛选 PHA，返回新实例。"
 
 #: jinwu.core.ops.slice_pha:3 of
 msgid ""
 "参数 - pha: 输入 PHA 数据 - emin/emax: 能量范围(keV); 需 ebounds 存在 - ch_lo/ch_hi: "
 "道范围（优先级低于能量）"
 msgstr ""
+"参数 - pha: 输入 PHA 数据 - emin/emax: 能量范围(keV); 需 ebounds 存在 - ch_lo/ch_hi: "
+"道范围（优先级低于能量）"
 
 #: jinwu.core.ops.slice_pha:8 of
 msgid "返回 - 新的 PhaData 实例"
-msgstr ""
+msgstr "返回 - 新的 PhaData 实例"
 
 #: jinwu.core.ops.slice_pha:11 of
 msgid ""
 "English Filter PHA by energy (needs ebounds) or channel range; returns "
 "new instance."
 msgstr ""
+"英文 按能量（需要 ebounds）或道范围筛选 PHA；返回新实例。"
 

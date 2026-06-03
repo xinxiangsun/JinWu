@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,21 +20,21 @@ msgstr ""
 
 #: ../../api/jinwu.core.FitsHeaderDump.rst:2
 msgid "FitsHeaderDump"
-msgstr ""
+msgstr "FitsHeaderDump"
 
 #: ../../api/jinwu.core.FitsHeaderDump.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.FitsHeaderDump.rst:15:<autosummary>:1
 msgid ":py:obj:`extensions <jinwu.core.FitsHeaderDump.extensions>`"
-msgstr ""
+msgstr ":py:obj:`extensions <jinwu.core.FitsHeaderDump.extensions>`"
 
 #: ../../api/jinwu.core.FitsHeaderDump.rst:15:<autosummary>:1
 msgid ":py:obj:`primary <jinwu.core.FitsHeaderDump.primary>`"
-msgstr ""
+msgstr ":py:obj:`primary <jinwu.core.FitsHeaderDump.primary>`"
 
 #: ../../api/jinwu.core.FitsHeaderDump.rst:17
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 

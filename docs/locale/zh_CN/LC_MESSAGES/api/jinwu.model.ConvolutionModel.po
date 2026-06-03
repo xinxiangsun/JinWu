@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,87 +20,94 @@ msgstr ""
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:2
 msgid "ConvolutionModel"
-msgstr ""
+msgstr "卷积模型"
 
 #: jinwu.model.modelbase.ConvolutionModel:1 of
 msgid "Convolution component: transforms an input spectrum."
-msgstr ""
+msgstr "卷积分量：对输入能谱进行变换。"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:14:<autosummary>:1
 msgid ":py:obj:`param_names <jinwu.model.ConvolutionModel.param_names>`"
-msgstr ""
+msgstr ":py:obj:`param_names <jinwu.model.ConvolutionModel.param_names>`"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:16
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:23:<autosummary>:1
 msgid ""
 ":py:obj:`__call__ <jinwu.model.ConvolutionModel.__call__>`\\ "
 "\\(\\*args\\, \\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`__call__ <jinwu.model.ConvolutionModel.__call__>`\\ "
+"\\(\\*args\\, \\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:23:<autosummary>:1
 #: jinwu.model.modelbase.ModelBase.__call__:1 of
 msgid "Call self as a function."
-msgstr ""
+msgstr "将自身作为函数调用。"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:23:<autosummary>:1
 msgid ""
 ":py:obj:`apply <jinwu.model.ConvolutionModel.apply>`\\ \\(energy\\, "
 "spectrum\\, \\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`apply <jinwu.model.ConvolutionModel.apply>`\\ \\(energy\\, "
+"spectrum\\, \\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:23:<autosummary>:1
 #: jinwu.model.modelbase.ConvolutionModel.apply:1 of
 msgid "Alias for evaluate: perform convolution on the input spectrum."
-msgstr ""
+msgstr "evaluate 的别名：对输入能谱执行卷积。"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:23:<autosummary>:1
 msgid ""
 ":py:obj:`evaluate <jinwu.model.ConvolutionModel.evaluate>`\\ \\(energy\\,"
 " spectrum\\, \\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`evaluate <jinwu.model.ConvolutionModel.evaluate>`\\ \\(energy\\,"
+" spectrum\\, \\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:23:<autosummary>:1
 msgid ""
 ":py:obj:`set_params <jinwu.model.ConvolutionModel.set_params>`\\ "
 "\\(\\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`set_params <jinwu.model.ConvolutionModel.set_params>`\\ "
+"\\(\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:25
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst:29
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.model.modelbase.ConvolutionModel.evaluate:1 of
 msgid "Energy array (bin edges or centers)."
-msgstr ""
+msgstr "能量数组（bin 边界或中心）。"
 
 #: jinwu.model.modelbase.ConvolutionModel.evaluate:3 of
 msgid "Input spectrum to be convolved."
-msgstr ""
+msgstr "待卷积的输入能谱。"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst
 msgid "Returns"
-msgstr ""
+msgstr "返回"
 
 #: jinwu.model.modelbase.ConvolutionModel.evaluate:6 of
 msgid "Convolved spectrum, same shape as input spectrum."
-msgstr ""
+msgstr "卷积后的能谱，与输入能谱形状相同。"
 
 #: ../../api/jinwu.model.ConvolutionModel.rst
 msgid "Return type"
-msgstr ""
-
+msgstr "返回类型"

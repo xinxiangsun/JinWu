@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,55 +20,59 @@ msgstr ""
 
 #: ../../api/jinwu.core.timescale.rst:2
 msgid "timescale"
-msgstr ""
+msgstr "时标"
 
 #: jinwu.core.data.timescale:1 of
 msgid "事件时标分析器（独立于 EventData.plot）。"
-msgstr ""
+msgstr "事件时标分析器（独立于 EventData.plot）。"
 
 #: jinwu.core.data.timescale:3 of
 msgid "负责调用 `ops.txx` 计算时标，并通过 `plot.plot_event_txx` 可视化。"
-msgstr ""
+msgstr "负责调用 `ops.txx` 计算时标，并通过 `plot.plot_event_txx` 可视化。"
 
 #: ../../api/jinwu.core.timescale.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概览"
 
 #: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
 msgid ""
-":py:obj:`compute <jinwu.core.timescale.compute>`\\ \\(\\*\\[\\, "
-"background\\, alpha\\]\\)"
+":py:obj:`compute <jinwu.core.timescale.compute>`\\\\ \\\\(\\\\*\\\\[\\\\, "
+"background\\\\, alpha\\\\]\\\\)"
 msgstr ""
+":py:obj:`compute <jinwu.core.timescale.compute>`\\\\ \\\\(\\\\*\\\\[\\\\, "
+"background\\\\, alpha\\\\]\\\\)"
 
 #: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
 #: jinwu.core.data.timescale.compute:1 of
 msgid "调用 `ops.txx` 计算时标结果。"
-msgstr ""
+msgstr "调用 `ops.txx` 计算时标结果。"
 
 #: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
 msgid ""
-":py:obj:`plot <jinwu.core.timescale.plot>`\\ \\(\\[result\\, srcname\\, "
-"title\\, figsize\\, out\\, ...\\]\\)"
+":py:obj:`plot <jinwu.core.timescale.plot>`\\\\ \\\\(\\\\[result\\\\, srcname\\\\, "
+"title\\\\, figsize\\\\, out\\\\, ...\\\\]\\\\)"
 msgstr ""
+":py:obj:`plot <jinwu.core.timescale.plot>`\\\\ \\\\(\\\\[result\\\\, srcname\\\\, "
+"title\\\\, figsize\\\\, out\\\\, ...\\\\]\\\\)"
 
 #: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
 #: jinwu.core.data.timescale.plot:1 of
 msgid "绘制时标诊断图；若无 result 则内部先 compute。"
-msgstr ""
+msgstr "绘制时标诊断图；若无 result 则内部先 compute。"
 
 #: ../../api/jinwu.core.timescale.rst:16:<autosummary>:1
-msgid ":py:obj:`summary <jinwu.core.timescale.summary>`\\ \\(\\[result\\]\\)"
-msgstr ""
+msgid ":py:obj:`summary <jinwu.core.timescale.summary>`\\\\ \\\\(\\\\[result\\\\]\\\\)"
+msgstr ":py:obj:`summary <jinwu.core.timescale.summary>`\\\\ \\\\(\\\\[result\\\\]\\\\)"
 
 #: ../../api/jinwu.core.timescale.rst:18
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.core.data.timescale.plot:3 of
 msgid "参数 - binsize: 直方图分箱宽度（秒）。等价于传入 `evt_binsize` 给 `compute/ops.txx`。"
-msgstr ""
+msgstr "参数 - binsize: 直方图分箱宽度（秒）。等价于传入 `evt_binsize` 给 `compute/ops.txx`。"
 
 #: jinwu.core.data.timescale.plot:5 of
 msgid "这样可以在不显式调用 `compute` 的情况下直接 `plot(..., binsize=...)`。"
-msgstr ""
+msgstr "这样可以在不显式调用 `compute` 的情况下直接 `plot(..., binsize=...)`。"
 

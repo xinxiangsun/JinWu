@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,189 +20,199 @@ msgstr ""
 
 #: ../../api/jinwu.core.EventData.rst:2
 msgid "EventData"
-msgstr ""
+msgstr "EventData"
 
 #: jinwu.core.data.EventData:1 of
 msgid "Concrete event data class with local behavior implementation."
-msgstr ""
+msgstr "带有本地行为实现的具体事例数据类。"
 
 #: ../../api/jinwu.core.EventData.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`CRITICAL_KEYS <jinwu.core.EventData.CRITICAL_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`CRITICAL_KEYS <jinwu.core.EventData.CRITICAL_KEYS>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`OPTIONAL_KEYS <jinwu.core.EventData.OPTIONAL_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`OPTIONAL_KEYS <jinwu.core.EventData.OPTIONAL_KEYS>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`REQUIRED_COLUMNS_ANY <jinwu.core.EventData.REQUIRED_COLUMNS_ANY>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_COLUMNS_ANY <jinwu.core.EventData.REQUIRED_COLUMNS_ANY>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`REQUIRED_KEYS <jinwu.core.EventData.REQUIRED_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_KEYS <jinwu.core.EventData.REQUIRED_KEYS>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`absolute_time <jinwu.core.EventData.absolute_time>`"
-msgstr ""
+msgstr ":py:obj:`absolute_time <jinwu.core.EventData.absolute_time>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`channel <jinwu.core.EventData.channel>`"
-msgstr ""
+msgstr ":py:obj:`channel <jinwu.core.EventData.channel>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`colmap <jinwu.core.EventData.colmap>`"
-msgstr ""
+msgstr ":py:obj:`colmap <jinwu.core.EventData.colmap>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`columns <jinwu.core.EventData.columns>`"
-msgstr ""
+msgstr ":py:obj:`columns <jinwu.core.EventData.columns>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`duration <jinwu.core.EventData.duration>`"
-msgstr ""
+msgstr ":py:obj:`duration <jinwu.core.EventData.duration>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`ebounds <jinwu.core.EventData.ebounds>`"
-msgstr ""
+msgstr ":py:obj:`ebounds <jinwu.core.EventData.ebounds>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`energy <jinwu.core.EventData.energy>`"
-msgstr ""
+msgstr ":py:obj:`energy <jinwu.core.EventData.energy>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`gti <jinwu.core.EventData.gti>`"
-msgstr ""
+msgstr ":py:obj:`gti <jinwu.core.EventData.gti>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`gti_exposure <jinwu.core.EventData.gti_exposure>`"
-msgstr ""
+msgstr ":py:obj:`gti_exposure <jinwu.core.EventData.gti_exposure>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`gti_start <jinwu.core.EventData.gti_start>`"
-msgstr ""
+msgstr ":py:obj:`gti_start <jinwu.core.EventData.gti_start>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`gti_start_obj <jinwu.core.EventData.gti_start_obj>`"
-msgstr ""
+msgstr ":py:obj:`gti_start_obj <jinwu.core.EventData.gti_start_obj>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`gti_stop <jinwu.core.EventData.gti_stop>`"
-msgstr ""
+msgstr ":py:obj:`gti_stop <jinwu.core.EventData.gti_stop>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`gti_stop_obj <jinwu.core.EventData.gti_stop_obj>`"
-msgstr ""
+msgstr ":py:obj:`gti_stop_obj <jinwu.core.EventData.gti_stop_obj>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`header <jinwu.core.EventData.header>`"
-msgstr ""
+msgstr ":py:obj:`header <jinwu.core.EventData.header>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`headers_dump <jinwu.core.EventData.headers_dump>`"
-msgstr ""
+msgstr ":py:obj:`headers_dump <jinwu.core.EventData.headers_dump>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`kind <jinwu.core.EventData.kind>`"
-msgstr ""
+msgstr ":py:obj:`kind <jinwu.core.EventData.kind>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`meta <jinwu.core.EventData.meta>`"
-msgstr ""
+msgstr ":py:obj:`meta <jinwu.core.EventData.meta>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`n <jinwu.core.EventData.n>`"
-msgstr ""
+msgstr ":py:obj:`n <jinwu.core.EventData.n>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`path <jinwu.core.EventData.path>`"
-msgstr ""
+msgstr ":py:obj:`path <jinwu.core.EventData.path>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`pi <jinwu.core.EventData.pi>`"
-msgstr ""
+msgstr ":py:obj:`pi <jinwu.core.EventData.pi>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`raw_columns <jinwu.core.EventData.raw_columns>`"
-msgstr ""
+msgstr ":py:obj:`raw_columns <jinwu.core.EventData.raw_columns>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`telescop <jinwu.core.EventData.telescop>`"
-msgstr ""
+msgstr ":py:obj:`telescop <jinwu.core.EventData.telescop>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`time <jinwu.core.EventData.time>`"
-msgstr ""
+msgstr ":py:obj:`time <jinwu.core.EventData.time>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`time_raw <jinwu.core.EventData.time_raw>`"
-msgstr ""
+msgstr ":py:obj:`time_raw <jinwu.core.EventData.time_raw>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`time_rel <jinwu.core.EventData.time_rel>`"
-msgstr ""
+msgstr ":py:obj:`time_rel <jinwu.core.EventData.time_rel>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`timezero <jinwu.core.EventData.timezero>`"
-msgstr ""
+msgstr ":py:obj:`timezero <jinwu.core.EventData.timezero>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`timezero_obj <jinwu.core.EventData.timezero_obj>`"
-msgstr ""
+msgstr ":py:obj:`timezero_obj <jinwu.core.EventData.timezero_obj>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`validation <jinwu.core.EventData.validation>`"
-msgstr ""
+msgstr ":py:obj:`validation <jinwu.core.EventData.validation>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`x <jinwu.core.EventData.x>`"
-msgstr ""
+msgstr ":py:obj:`x <jinwu.core.EventData.x>`"
 
 #: ../../api/jinwu.core.EventData.rst:47:<autosummary>:1
 msgid ":py:obj:`y <jinwu.core.EventData.y>`"
-msgstr ""
+msgstr ":py:obj:`y <jinwu.core.EventData.y>`"
 
 #: ../../api/jinwu.core.EventData.rst:49
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`clear_all <jinwu.core.EventData.clear_all>`\\ \\(\\*\\[\\, "
 "use\\_original\\]\\)"
 msgstr ""
+":py:obj:`clear_all <jinwu.core.EventData.clear_all>`\\ \\(\\*\\[\\, "
+"use\\_original\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`clear_energy <jinwu.core.EventData.clear_energy>`\\ \\(\\*\\[\\,"
 " use\\_original\\]\\)"
 msgstr ""
+":py:obj:`clear_energy <jinwu.core.EventData.clear_energy>`\\ \\(\\*\\[\\,"
+" use\\_original\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`clear_region <jinwu.core.EventData.clear_region>`\\ \\(\\*\\[\\,"
 " use\\_original\\]\\)"
 msgstr ""
+":py:obj:`clear_region <jinwu.core.EventData.clear_region>`\\ \\(\\*\\[\\,"
+" use\\_original\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`clear_time <jinwu.core.EventData.clear_time>`\\ \\(\\*\\[\\, "
 "use\\_original\\]\\)"
 msgstr ""
+":py:obj:`clear_time <jinwu.core.EventData.clear_time>`\\ \\(\\*\\[\\, "
+"use\\_original\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`extract_curve <jinwu.core.EventData.extract_curve>`\\ "
 "\\(binsize\\, \\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`extract_curve <jinwu.core.EventData.extract_curve>`\\ "
+"\\(binsize\\, \\*\\*kwargs\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ":py:obj:`extract_gti <jinwu.core.EventData.extract_gti>`\\ \\(hdul\\)"
-msgstr ""
+msgstr ":py:obj:`extract_gti <jinwu.core.EventData.extract_gti>`\\ \\(hdul\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 #: jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:1 of
@@ -211,113 +220,138 @@ msgid ""
 "Extension point: parse GTI from an opened `HDUList` and return list of "
 "(start, stop) tuples."
 msgstr ""
+"扩展点：从已打开的 `HDUList` 解析 GTI，返回 (start, stop) 元组列表。"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`extract_image <jinwu.core.EventData.extract_image>`\\ "
 "\\(\\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`extract_image <jinwu.core.EventData.extract_image>`\\ "
+"\\(\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`extract_spectrum <jinwu.core.EventData.extract_spectrum>`\\ "
 "\\(\\*\\*kwargs\\)"
 msgstr ""
+":py:obj:`extract_spectrum <jinwu.core.EventData.extract_spectrum>`\\ "
+"\\(\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`filter_energy <jinwu.core.EventData.filter_energy>`\\ "
 "\\(\\[pi\\_min\\, pi\\_max\\]\\)"
 msgstr ""
+":py:obj:`filter_energy <jinwu.core.EventData.filter_energy>`\\ "
+"\\(\\[pi\\_min\\, pi\\_max\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`filter_region <jinwu.core.EventData.filter_region>`\\ "
 "\\(region\\)"
 msgstr ""
+":py:obj:`filter_region <jinwu.core.EventData.filter_region>`\\ "
+"\\(region\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`filter_time <jinwu.core.EventData.filter_time>`\\ \\(\\[tmin\\, "
 "tmax\\]\\)"
 msgstr ""
+":py:obj:`filter_time <jinwu.core.EventData.filter_time>`\\ \\(\\[tmin\\, "
+"tmax\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ":py:obj:`get_energy <jinwu.core.EventData.get_energy>`\\ \\(\\[rmf\\]\\)"
-msgstr ""
+msgstr ":py:obj:`get_energy <jinwu.core.EventData.get_energy>`\\ \\(\\[rmf\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`get_keyword_ci <jinwu.core.EventData.get_keyword_ci>`\\ "
 "\\(key\\[\\, default\\]\\)"
 msgstr ""
+":py:obj:`get_keyword_ci <jinwu.core.EventData.get_keyword_ci>`\\ "
+"\\(key\\[\\, default\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:1 of
 msgid "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
-msgstr ""
+msgstr "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`get_time_object <jinwu.core.EventData.get_time_object>`\\ "
 "\\(\\[index\\]\\)"
 msgstr ""
+":py:obj:`get_time_object <jinwu.core.EventData.get_time_object>`\\ "
+"\\(\\[index\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`plot <jinwu.core.EventData.plot>`\\ \\(\\[ax\\, bins\\, cmap\\, "
 "title\\, invert\\_ra\\, ...\\]\\)"
 msgstr ""
+":py:obj:`plot <jinwu.core.EventData.plot>`\\ \\(\\[ax\\, bins\\, cmap\\, "
+"title\\, invert\\_ra\\, ...\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`rebin <jinwu.core.EventData.rebin>`\\ \\(binsize\\, \\*\\[\\, "
 "tmin\\, tmax\\]\\)"
 msgstr ""
+":py:obj:`rebin <jinwu.core.EventData.rebin>`\\ \\(binsize\\, \\*\\[\\, "
+"tmin\\, tmax\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`save <jinwu.core.EventData.save>`\\ \\(outpath\\[\\, kind\\, "
 "overwrite\\]\\)"
 msgstr ""
+":py:obj:`save <jinwu.core.EventData.save>`\\ \\(outpath\\[\\, kind\\, "
+"overwrite\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`slice <jinwu.core.EventData.slice>`\\ \\(\\[tmin\\, tmax\\, "
 "pi\\_min\\, pi\\_max\\, ch\\_min\\, ...\\]\\)"
 msgstr ""
+":py:obj:`slice <jinwu.core.EventData.slice>`\\ \\(\\[tmin\\, tmax\\, "
+"pi\\_min\\, pi\\_max\\, ch\\_min\\, ...\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ""
 ":py:obj:`timescale <jinwu.core.EventData.timescale>`\\ \\(\\*\\[\\, "
 "background\\, alpha\\]\\)"
 msgstr ""
+":py:obj:`timescale <jinwu.core.EventData.timescale>`\\ \\(\\*\\[\\, "
+"background\\, alpha\\]\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 #: jinwu.core.data.EventData.timescale:1 of
 msgid "创建独立的 timescale 分析器。"
-msgstr ""
+msgstr "创建独立的 timescale 分析器。"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ":py:obj:`validate <jinwu.core.EventData.validate>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`validate <jinwu.core.EventData.validate>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 #: jinwu.core.data.EventData.validate:1 of
 msgid "通用层：仅检查路径与 header 存在性。子类会扩展。"
-msgstr ""
+msgstr "通用层：仅检查路径与 header 存在性。子类会扩展。"
 
 #: ../../api/jinwu.core.EventData.rst:73:<autosummary>:1
 msgid ":py:obj:`xselect <jinwu.core.EventData.xselect>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`xselect <jinwu.core.EventData.xselect>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.EventData.rst:75
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.EventData.rst:112
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:3 of
 msgid ""
@@ -325,8 +359,10 @@ msgid ""
 "insensitive) and, if present, returns a list of (START, STOP) pairs. "
 "Readers should call this to populate event objects' GTI field."
 msgstr ""
+"默认实现搜索名为 'GTI' 的扩展（大小写不敏感），若存在则返回 (START, STOP) 对列表。"
+"读取器应调用此方法以填充事例对象的 GTI 字段。"
 
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:3 of
 msgid "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
-msgstr ""
+msgstr "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
 

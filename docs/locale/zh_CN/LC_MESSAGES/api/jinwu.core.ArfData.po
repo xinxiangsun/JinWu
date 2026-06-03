@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,113 +20,119 @@ msgstr ""
 
 #: ../../api/jinwu.core.ArfData.rst:2
 msgid "ArfData"
-msgstr ""
+msgstr "ArfData"
 
 #: jinwu.core.data.ArfData:1 of
 msgid "Concrete ARF data class with local behavior implementation."
-msgstr ""
+msgstr "带有本地行为实现的具体 ARF 数据类。"
 
 #: ../../api/jinwu.core.ArfData.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`REQUIRED_COLUMNS_ARF <jinwu.core.ArfData.REQUIRED_COLUMNS_ARF>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_COLUMNS_ARF <jinwu.core.ArfData.REQUIRED_COLUMNS_ARF>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ""
 ":py:obj:`REQUIRED_COLUMNS_RMF_MIN "
 "<jinwu.core.ArfData.REQUIRED_COLUMNS_RMF_MIN>`"
 msgstr ""
+":py:obj:`REQUIRED_COLUMNS_RMF_MIN "
+"<jinwu.core.ArfData.REQUIRED_COLUMNS_RMF_MIN>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`REQUIRED_KEYS_ANY <jinwu.core.ArfData.REQUIRED_KEYS_ANY>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_KEYS_ANY <jinwu.core.ArfData.REQUIRED_KEYS_ANY>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`columns <jinwu.core.ArfData.columns>`"
-msgstr ""
+msgstr ":py:obj:`columns <jinwu.core.ArfData.columns>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`energ_hi <jinwu.core.ArfData.energ_hi>`"
-msgstr ""
+msgstr ":py:obj:`energ_hi <jinwu.core.ArfData.energ_hi>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`energ_lo <jinwu.core.ArfData.energ_lo>`"
-msgstr ""
+msgstr ":py:obj:`energ_lo <jinwu.core.ArfData.energ_lo>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`header <jinwu.core.ArfData.header>`"
-msgstr ""
+msgstr ":py:obj:`header <jinwu.core.ArfData.header>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`headers_dump <jinwu.core.ArfData.headers_dump>`"
-msgstr ""
+msgstr ":py:obj:`headers_dump <jinwu.core.ArfData.headers_dump>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`kind <jinwu.core.ArfData.kind>`"
-msgstr ""
+msgstr ":py:obj:`kind <jinwu.core.ArfData.kind>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`meta <jinwu.core.ArfData.meta>`"
-msgstr ""
+msgstr ":py:obj:`meta <jinwu.core.ArfData.meta>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`path <jinwu.core.ArfData.path>`"
-msgstr ""
+msgstr ":py:obj:`path <jinwu.core.ArfData.path>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`specresp <jinwu.core.ArfData.specresp>`"
-msgstr ""
+msgstr ":py:obj:`specresp <jinwu.core.ArfData.specresp>`"
 
 #: ../../api/jinwu.core.ArfData.rst:26:<autosummary>:1
 msgid ":py:obj:`validation <jinwu.core.ArfData.validation>`"
-msgstr ""
+msgstr ":py:obj:`validation <jinwu.core.ArfData.validation>`"
 
 #: ../../api/jinwu.core.ArfData.rst:28
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.core.ArfData.rst:35:<autosummary>:1
 msgid ""
 ":py:obj:`get_keyword_ci <jinwu.core.ArfData.get_keyword_ci>`\\ "
 "\\(key\\[\\, default\\]\\)"
 msgstr ""
+":py:obj:`get_keyword_ci <jinwu.core.ArfData.get_keyword_ci>`\\ "
+"\\(key\\[\\, default\\]\\)"
 
 #: ../../api/jinwu.core.ArfData.rst:35:<autosummary>:1
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:1 of
 msgid "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
-msgstr ""
+msgstr "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
 
 #: ../../api/jinwu.core.ArfData.rst:35:<autosummary>:1
 msgid ""
 ":py:obj:`plot <jinwu.core.ArfData.plot>`\\ \\(\\[ax\\, energy\\_unit\\, "
 "yscale\\, title\\]\\)"
 msgstr ""
+":py:obj:`plot <jinwu.core.ArfData.plot>`\\ \\(\\[ax\\, energy\\_unit\\, "
+"yscale\\, title\\]\\)"
 
 #: ../../api/jinwu.core.ArfData.rst:35:<autosummary>:1
 msgid ":py:obj:`rebin <jinwu.core.ArfData.rebin>`\\ \\(factor\\)"
-msgstr ""
+msgstr ":py:obj:`rebin <jinwu.core.ArfData.rebin>`\\ \\(factor\\)"
 
 #: ../../api/jinwu.core.ArfData.rst:35:<autosummary>:1
 msgid ":py:obj:`validate <jinwu.core.ArfData.validate>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`validate <jinwu.core.ArfData.validate>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.ArfData.rst:35:<autosummary>:1
 #: jinwu.core.data.ArfData.validate:1 of
 msgid "通用层：仅检查路径与 header 存在性。子类会扩展。"
-msgstr ""
+msgstr "通用层：仅检查路径与 header 存在性。子类会扩展。"
 
 #: ../../api/jinwu.core.ArfData.rst:37
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.ArfData.rst:53
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:3 of
 msgid "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
-msgstr ""
+msgstr "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
 

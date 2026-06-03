@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,21 +20,21 @@ msgstr ""
 
 #: ../../api/jinwu.core.ChannelBand.rst:2
 msgid "ChannelBand"
-msgstr ""
+msgstr "ChannelBand"
 
 #: ../../api/jinwu.core.ChannelBand.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.ChannelBand.rst:15:<autosummary>:1
 msgid ":py:obj:`ch_hi <jinwu.core.ChannelBand.ch_hi>`"
-msgstr ""
+msgstr ":py:obj:`ch_hi <jinwu.core.ChannelBand.ch_hi>`"
 
 #: ../../api/jinwu.core.ChannelBand.rst:15:<autosummary>:1
 msgid ":py:obj:`ch_lo <jinwu.core.ChannelBand.ch_lo>`"
-msgstr ""
+msgstr ":py:obj:`ch_lo <jinwu.core.ChannelBand.ch_lo>`"
 
 #: ../../api/jinwu.core.ChannelBand.rst:17
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 

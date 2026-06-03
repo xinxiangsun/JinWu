@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,11 +20,11 @@ msgstr ""
 
 #: ../../api/jinwu.spectrum.KConfig.rst:2
 msgid "KConfig"
-msgstr ""
+msgstr "K配置"
 
 #: jinwu.spectrum.specfake.KConfig:1 of
 msgid "K 计算所需的不可变配置对象。 Immutable config for K computation."
-msgstr ""
+msgstr "K 计算所需的不可变配置对象。"
 
 #: jinwu.spectrum.specfake.KConfig:4 of
 msgid ""
@@ -36,41 +35,43 @@ msgid ""
 "XSPEC 环境常量 | XSPEC globals - allow_prompting: 是否允许 XSPEC 交互提示 | whether "
 "to allow XSPEC prompting"
 msgstr ""
+"字段 - arf/rmf/background: 路径字符串 - model/params: "
+"XSPEC 模型与参数 - band: (emin, emax) [keV] 能段 - exposure/back_exposure: 源/背景曝光秒数 - "
+"xspec_abund/xspec_xsect/xspec_cosmo: XSPEC 环境常量 - allow_prompting: 是否允许 XSPEC 交互提示"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:14:<autosummary>:1
 msgid ":py:obj:`allow_prompting <jinwu.spectrum.KConfig.allow_prompting>`"
-msgstr ""
+msgstr ":py:obj:`allow_prompting <jinwu.spectrum.KConfig.allow_prompting>`"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:16
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:20:<autosummary>:1
 msgid ":py:obj:`key <jinwu.spectrum.KConfig.key>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`key <jinwu.spectrum.KConfig.key>`\\ \\(\\)"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:20:<autosummary>:1
 #: jinwu.spectrum.specfake.KConfig.key:1 of
 msgid "将配置编码为缓存键（SHA256）。 Encode configuration into a cache key (SHA256)."
-msgstr ""
+msgstr "将配置编码为缓存键（SHA256）。"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:22
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.spectrum.KConfig.rst:26
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.spectrum.specfake.KConfig.key:4 of
 msgid "说明 | Notes - 数值保留有限精度，避免浮点噪声导致缓存抖动；"
-msgstr ""
+msgstr "说明 - 数值保留有限精度，避免浮点噪声导致缓存抖动；"
 
 #: jinwu.spectrum.specfake.KConfig.key:6 of
 msgid "Use limited precision for floats to avoid cache churn from tiny diffs."
-msgstr ""
-
+msgstr "对浮点数使用有限精度，避免微小差异导致缓存抖动。"

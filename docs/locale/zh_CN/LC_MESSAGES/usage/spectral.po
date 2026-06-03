@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 20:00+0800\n"
+"Last-Translator: Xinxiang Sun <xinxiang@example.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,7 +20,7 @@ msgstr ""
 
 #: ../../usage/spectral.rst:3
 msgid "Spectral Fitting"
-msgstr ""
+msgstr "能谱拟合"
 
 #: ../../usage/spectral.rst:7
 msgid ""
@@ -29,40 +28,43 @@ msgid ""
 ":mod:`jinwu.core.fit` and :mod:`jinwu.core.upperlimit` for detailed API "
 "documentation."
 msgstr ""
+"本页面正在建设中。详细 API 文档请参阅 :mod:`jinwu.core.fit` 和 "
+":mod:`jinwu.core.upperlimit` 中的模块 docstring。"
 
 #: ../../usage/spectral.rst:11
 msgid ""
 "JinWu provides a Pythonic wrapper around XSPEC/PyXspec for spectral "
 "fitting, supporting:"
-msgstr ""
+msgstr "金乌为 XSPEC/PyXspec 提供了 Python 化的能谱拟合封装，支持："
 
 #: ../../usage/spectral.rst:14
 msgid "Standard models (power-law, absorbed power-law, blackbody, etc.)"
-msgstr ""
+msgstr "标准模型（幂律、吸收幂律、黑体等）"
 
 #: ../../usage/spectral.rst:15
 msgid "Bayesian MCMC chain analysis with PyMultiNest / emcee"
-msgstr ""
+msgstr "基于 PyMultiNest / emcee 的贝叶斯 MCMC 链分析"
 
 #: ../../usage/spectral.rst:16
 msgid "Model comparison with Bayes factors and AIC"
-msgstr ""
+msgstr "使用贝叶斯因子和 AIC 进行模型比较"
 
 #: ../../usage/spectral.rst:17
 msgid "Upper limit computation (Feldman-Cousins, Bayesian, inverse Li-Ma)"
-msgstr ""
+msgstr "上限计算（Feldman-Cousins、贝叶斯、逆 Li-Ma）"
 
 #: ../../usage/spectral.rst:20
 msgid "Basic Fit"
-msgstr ""
+msgstr "基本拟合"
 
 #: ../../usage/spectral.rst:33
 msgid ""
 "For batch processing multiple GRBs, see the EP260119a analysis workflow "
 "in the project repository."
 msgstr ""
+"对多个伽马暴（GRB）进行批量处理，请参考项目仓库中的 EP260119a 分析"
+"工作流。"
 
 #: ../../usage/spectral.rst:37
 msgid "Chain Analysis"
-msgstr ""
-
+msgstr "链分析"

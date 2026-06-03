@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,41 +20,42 @@ msgstr ""
 
 #: ../../api/jinwu.lightcurve.li_ma_snr.rst:2
 msgid "li_ma_snr"
-msgstr ""
+msgstr "Li-Ma信噪比"
 
 #: jinwu.lightcurve.duration.li_ma_snr:1 of
 msgid ""
 "Compute Li & Ma significance (Eq. 17 in Li & Ma 1983) given counts and "
 "alpha."
 msgstr ""
+"根据计数和 alpha 计算 Li & Ma 显著性（Li & Ma 1983 中的公式 17）。"
 
 #: ../../api/jinwu.lightcurve.li_ma_snr.rst
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.lightcurve.duration.li_ma_snr:3 of
 msgid "Total counts in ON region."
-msgstr ""
+msgstr "ON 区域的总计数。"
 
 #: jinwu.lightcurve.duration.li_ma_snr:5 of
 msgid "Total counts in OFF region (reference background)."
-msgstr ""
+msgstr "OFF 区域的总计数（参考背景）。"
 
 #: jinwu.lightcurve.duration.li_ma_snr:7 of
 msgid ""
 "Exposure/area scaling factor from OFF to ON: alpha = "
 "(A_on/A_off)*(t_on/t_off)."
 msgstr ""
+"从 OFF 到 ON 的曝光/面积缩放因子：alpha = (A_on/A_off)*(t_on/t_off)。"
 
 #: ../../api/jinwu.lightcurve.li_ma_snr.rst
 msgid "Returns"
-msgstr ""
+msgstr "返回"
 
 #: jinwu.lightcurve.duration.li_ma_snr:10 of
 msgid "The Li & Ma significance (>=0). Returns 0.0 if inputs are degenerate."
-msgstr ""
+msgstr "Li & Ma 显著性（>=0）。若输入退化则返回 0.0。"
 
 #: ../../api/jinwu.lightcurve.li_ma_snr.rst
 msgid "Return type"
-msgstr ""
-
+msgstr "返回类型"

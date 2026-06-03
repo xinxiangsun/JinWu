@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,11 +20,11 @@ msgstr ""
 
 #: ../../api/jinwu.core.__version__.rst:2
 msgid "__version__"
-msgstr ""
+msgstr "版本号"
 
 #: jinwu.core.__version__:1 of
 msgid "str(object='') -> str str(bytes_or_buffer[, encoding[, errors]]) -> str"
-msgstr ""
+msgstr "str(object='') -> str str(bytes_or_buffer[, encoding[, errors]]) -> str"
 
 #: jinwu.core.__version__:4 of
 msgid ""
@@ -35,4 +34,8 @@ msgid ""
 "the result of object.__str__() (if defined) or repr(object). encoding "
 "defaults to sys.getdefaultencoding(). errors defaults to 'strict'."
 msgstr ""
+"从给定对象创建一个新的字符串对象。如果指定了 encoding 或 errors，"
+"则对象必须暴露一个数据缓冲区，该缓冲区将使用给定的编码和错误处理程序进行解码。"
+"否则，返回 object.__str__() 的结果（如果已定义）或 repr(object)。"
+"encoding 默认为 sys.getdefaultencoding()。errors 默认为 'strict'。"
 

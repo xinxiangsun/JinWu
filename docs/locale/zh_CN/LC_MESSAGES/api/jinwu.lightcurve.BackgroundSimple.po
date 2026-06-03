@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,37 +20,36 @@ msgstr ""
 
 #: ../../api/jinwu.lightcurve.BackgroundSimple.rst:2
 msgid "BackgroundSimple"
-msgstr ""
+msgstr "简单背景"
 
 #: jinwu.lightcurve.trigger.BackgroundSimple:1 of
 msgid "Minimal background config for Li&Ma."
-msgstr ""
+msgstr "Li&Ma 的最小背景配置。"
 
 #: ../../api/jinwu.lightcurve.BackgroundSimple.rst
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.lightcurve.trigger.BackgroundSimple:3 of
 msgid "A_on / A_off."
-msgstr ""
+msgstr "A_on / A_off。"
 
 #: jinwu.lightcurve.trigger.BackgroundSimple:5 of
 msgid "Reference OFF exposure used for Li&Ma alpha (seconds)."
-msgstr ""
+msgstr "用于 Li&Ma alpha 的参考 OFF 曝光时间（秒）。"
 
 #: jinwu.lightcurve.trigger.BackgroundSimple:7 of
 msgid "Total OFF counts corresponding to t_off_ref."
-msgstr ""
+msgstr "与 t_off_ref 对应的 OFF 总计数。"
 
 #: ../../api/jinwu.lightcurve.BackgroundSimple.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.lightcurve.BackgroundSimple.rst:14:<autosummary>:1
 msgid ":py:obj:`alpha <jinwu.lightcurve.BackgroundSimple.alpha>`\\ \\(t\\_on\\)"
-msgstr ""
+msgstr ":py:obj:`alpha <jinwu.lightcurve.BackgroundSimple.alpha>`\\ \\(t\\_on\\)"
 
 #: ../../api/jinwu.lightcurve.BackgroundSimple.rst:16
 msgid "Methods Documentation"
-msgstr ""
-
+msgstr "方法文档"

@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 20:00+0800\n"
+"Last-Translator: Xinxiang Sun <xinxiang@example.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,17 +20,18 @@ msgstr ""
 
 #: ../../index.rst:14
 msgid "Contents"
-msgstr ""
+msgstr "目录"
 
 #: ../../index.rst:3
 msgid "JinWu Documentation"
-msgstr ""
+msgstr "金乌文档"
 
 #: ../../index.rst:5
 msgid ""
 "**Joint Inference for high-energy transient light-curve & spectral "
 "analysis with Unifying physical modeling.**"
 msgstr ""
+"**高能暂现源光变曲线与能谱的联合分析，基于统一物理建模。**"
 
 #: ../../index.rst:8
 msgid ""
@@ -41,50 +41,60 @@ msgid ""
 "crow dwelling in the sun — a fitting symbol for a package that shines "
 "light on the most energetic transients in the Universe."
 msgstr ""
+"金乌 (JinWu) 是一个面向 X 射线和伽马射线天体物理的综合性 Python "
+"工具包，将能谱分析和时变分析统一于物理建模框架之下。其名取自神话中"
+"居于太阳的三足金乌——恰如其分地象征着一个照亮宇宙中最高能暂现源的"
+"软件包。"
 
 #: ../../index.rst:30
 msgid "Key Features"
-msgstr ""
+msgstr "主要特性"
 
 #: ../../index.rst:32
 msgid ""
 "**OGIP FITS I/O** — Read and write ARF, RMF, PHA, lightcurve, and event "
 "files"
 msgstr ""
+"**OGIP FITS 输入/输出** — 读写 ARF、RMF、PHA、光变曲线和事件文件"
 
 #: ../../index.rst:33
 msgid ""
 "**Lightcurve & Spectral Analysis** — Background modeling, trigger "
 "evaluation, XSPEC-inspired components"
 msgstr ""
+"**光变曲线与能谱分析** — 背景建模、触发评估、XSPEC 风格的组件"
 
 #: ../../index.rst:34
 msgid ""
 "**Multi-mission Support** — Einstein Probe (EP), Fermi/GBM, Swift/BAT, "
 "and more"
 msgstr ""
+"**多任务支持** — 爱因斯坦探针 (EP)、Fermi/GBM、Swift/BAT 等"
 
 #: ../../index.rst:35
 msgid ""
 "**Unified Physical Modeling** — Consistent framework across bands and "
 "messengers"
 msgstr ""
+"**统一物理建模** — 跨波段、跨信使的一致性框架"
 
 #: ../../index.rst:36
 msgid ""
 "**Pure-Python ftools** — HEASOFT-compatible tools written entirely in "
 "Python"
 msgstr ""
+"**纯 Python ftools** — 完全以 Python 编写的 HEASOFT 兼容工具"
 
 #: ../../index.rst:37
 msgid ""
 "**Upper Limit Computation** — Bayesian & frequentist upper limits for "
 "faint transients"
 msgstr ""
+"**上限计算** — 针对暗弱暂现源的贝叶斯与频率学派上限"
 
 #: ../../index.rst:40
 msgid "Installation"
-msgstr ""
+msgstr "安装"
 
 #: ../../index.rst:42
 msgid ""
@@ -93,6 +103,9 @@ msgid ""
 "via the HEASARC conda channel, though any working HEASoft installation is"
 " fine."
 msgstr ""
+"金乌的能谱拟合和 XSPEC 集成依赖于 **HEASoft/PyXspec** 和 XSPEC "
+"模型数据。我们推荐通过 HEASARC conda 频道安装，不过任何可用的 "
+"HEASoft 安装均可。"
 
 #: ../../index.rst:57
 msgid ""
@@ -101,30 +114,34 @@ msgid ""
 ":class:`jinwu.core.heasoft.HeasoftEnvManager` to initialize the "
 "environment:"
 msgstr ""
+"如果您已经通过 conda 以外的方式（如源码编译）安装了 HEASoft，金乌"
+"仍然可以使用它——调用 :class:`jinwu.core.heasoft.HeasoftEnvManager` "
+"来初始化环境："
 
 #: ../../index.rst:67
 msgid "For development:"
-msgstr ""
+msgstr "开发环境："
 
 #: ../../index.rst:78
 msgid ""
 "The ``HeasoftEnvManager`` also works in Jupyter notebooks — use "
 ":meth:`HeasoftEnvManager.init_heasoft_in_notebook`."
 msgstr ""
+"``HeasoftEnvManager`` 也可在 Jupyter notebook 中使用——调用 "
+":meth:`HeasoftEnvManager.init_heasoft_in_notebook`。"
 
 #: ../../index.rst:82
 msgid "Quick Start"
-msgstr ""
+msgstr "快速入门"
 
 #: ../../index.rst:100
 msgid "Indices and tables"
-msgstr ""
+msgstr "索引与表格"
 
 #: ../../index.rst:102
 msgid ":ref:`genindex`"
-msgstr ""
+msgstr ":ref:`genindex`"
 
 #: ../../index.rst:103
 msgid ":ref:`modindex`"
-msgstr ""
-
+msgstr ":ref:`modindex`"

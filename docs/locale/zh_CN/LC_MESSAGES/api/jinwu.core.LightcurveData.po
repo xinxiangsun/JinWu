@@ -3,259 +3,264 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: JinWu 0.0\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language: zh_CN\n"
-"Language-Team: zh_CN <LL@li.org>\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
+"Project-Id-Version: JinWu 0.0n"
+"Report-Msgid-Bugs-To: n"
+"POT-Creation-Date: 2026-06-03 19:29+0800n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONEn"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>n"
+"Language: zh_CNn"
+"Language-Team: zh_CN <LL@li.org>n"
+"Plural-Forms: nplurals=1; plural=0;n"
+"MIME-Version: 1.0n"
+"Content-Type: text/plain; charset=utf-8n"
+"Content-Transfer-Encoding: 8bitn"
+"Generated-By: Babel 2.18.0n"
 
 #: ../../api/jinwu.core.LightcurveData.rst:2
 msgid "LightcurveData"
-msgstr ""
+msgstr "光变数据"
 
 #: jinwu.core.data.LightcurveData:1 of
 msgid "Concrete lightcurve data class with local behavior implementation."
-msgstr ""
+msgstr "具有本地行为实现的具体光变曲线数据类。"
 
 #: ../../api/jinwu.core.LightcurveData.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性摘要"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`CRITICAL_KEYS <jinwu.core.LightcurveData.CRITICAL_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`CRITICAL_KEYS <jinwu.core.LightcurveData.CRITICAL_KEYS>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`OPTIONAL_KEYS <jinwu.core.LightcurveData.OPTIONAL_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`OPTIONAL_KEYS <jinwu.core.LightcurveData.OPTIONAL_KEYS>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ""
 ":py:obj:`REQUIRED_COLUMNS_ANY "
 "<jinwu.core.LightcurveData.REQUIRED_COLUMNS_ANY>`"
 msgstr ""
+":py:obj:`REQUIRED_COLUMNS_ANY "
+"<jinwu.core.LightcurveData.REQUIRED_COLUMNS_ANY>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`REQUIRED_KEYS <jinwu.core.LightcurveData.REQUIRED_KEYS>`"
-msgstr ""
+msgstr ":py:obj:`REQUIRED_KEYS <jinwu.core.LightcurveData.REQUIRED_KEYS>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`absolute_time <jinwu.core.LightcurveData.absolute_time>`"
-msgstr ""
+msgstr ":py:obj:`absolute_time <jinwu.core.LightcurveData.absolute_time>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`areascal <jinwu.core.LightcurveData.areascal>`"
-msgstr ""
+msgstr ":py:obj:`areascal <jinwu.core.LightcurveData.areascal>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`backscal <jinwu.core.LightcurveData.backscal>`"
-msgstr ""
+msgstr ":py:obj:`backscal <jinwu.core.LightcurveData.backscal>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`bin_centers <jinwu.core.LightcurveData.bin_centers>`"
-msgstr ""
+msgstr ":py:obj:`bin_centers <jinwu.core.LightcurveData.bin_centers>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`bin_exposure <jinwu.core.LightcurveData.bin_exposure>`"
-msgstr ""
+msgstr ":py:obj:`bin_exposure <jinwu.core.LightcurveData.bin_exposure>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`bin_hi <jinwu.core.LightcurveData.bin_hi>`"
-msgstr ""
+msgstr ":py:obj:`bin_hi <jinwu.core.LightcurveData.bin_hi>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`bin_lo <jinwu.core.LightcurveData.bin_lo>`"
-msgstr ""
+msgstr ":py:obj:`bin_lo <jinwu.core.LightcurveData.bin_lo>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`bin_width <jinwu.core.LightcurveData.bin_width>`"
-msgstr ""
+msgstr ":py:obj:`bin_width <jinwu.core.LightcurveData.bin_width>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`binning <jinwu.core.LightcurveData.binning>`"
-msgstr ""
+msgstr ":py:obj:`binning <jinwu.core.LightcurveData.binning>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`columns <jinwu.core.LightcurveData.columns>`"
-msgstr ""
+msgstr ":py:obj:`columns <jinwu.core.LightcurveData.columns>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`counts <jinwu.core.LightcurveData.counts>`"
-msgstr ""
+msgstr ":py:obj:`counts <jinwu.core.LightcurveData.counts>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`counts_err <jinwu.core.LightcurveData.counts_err>`"
-msgstr ""
+msgstr ":py:obj:`counts_err <jinwu.core.LightcurveData.counts_err>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`dt <jinwu.core.LightcurveData.dt>`"
-msgstr ""
+msgstr ":py:obj:`dt <jinwu.core.LightcurveData.dt>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`err_dist <jinwu.core.LightcurveData.err_dist>`"
-msgstr ""
+msgstr ":py:obj:`err_dist <jinwu.core.LightcurveData.err_dist>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`error <jinwu.core.LightcurveData.error>`"
-msgstr ""
+msgstr ":py:obj:`error <jinwu.core.LightcurveData.error>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`exposure <jinwu.core.LightcurveData.exposure>`"
-msgstr ""
+msgstr ":py:obj:`exposure <jinwu.core.LightcurveData.exposure>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`fracexp <jinwu.core.LightcurveData.fracexp>`"
-msgstr ""
+msgstr ":py:obj:`fracexp <jinwu.core.LightcurveData.fracexp>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`gti <jinwu.core.LightcurveData.gti>`"
-msgstr ""
+msgstr ":py:obj:`gti <jinwu.core.LightcurveData.gti>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`gti_start <jinwu.core.LightcurveData.gti_start>`"
-msgstr ""
+msgstr ":py:obj:`gti_start <jinwu.core.LightcurveData.gti_start>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`gti_stop <jinwu.core.LightcurveData.gti_stop>`"
-msgstr ""
+msgstr ":py:obj:`gti_stop <jinwu.core.LightcurveData.gti_stop>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`header <jinwu.core.LightcurveData.header>`"
-msgstr ""
+msgstr ":py:obj:`header <jinwu.core.LightcurveData.header>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`headers_dump <jinwu.core.LightcurveData.headers_dump>`"
-msgstr ""
+msgstr ":py:obj:`headers_dump <jinwu.core.LightcurveData.headers_dump>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`is_rate <jinwu.core.LightcurveData.is_rate>`"
-msgstr ""
+msgstr ":py:obj:`is_rate <jinwu.core.LightcurveData.is_rate>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`kind <jinwu.core.LightcurveData.kind>`"
-msgstr ""
+msgstr ":py:obj:`kind <jinwu.core.LightcurveData.kind>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`mean_counts <jinwu.core.LightcurveData.mean_counts>`"
-msgstr ""
+msgstr ":py:obj:`mean_counts <jinwu.core.LightcurveData.mean_counts>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`mean_rate <jinwu.core.LightcurveData.mean_rate>`"
-msgstr ""
+msgstr ":py:obj:`mean_rate <jinwu.core.LightcurveData.mean_rate>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`meta <jinwu.core.LightcurveData.meta>`"
-msgstr ""
+msgstr ":py:obj:`meta <jinwu.core.LightcurveData.meta>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`mjdref <jinwu.core.LightcurveData.mjdref>`"
-msgstr ""
+msgstr ":py:obj:`mjdref <jinwu.core.LightcurveData.mjdref>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`n <jinwu.core.LightcurveData.n>`"
-msgstr ""
+msgstr ":py:obj:`n <jinwu.core.LightcurveData.n>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`path <jinwu.core.LightcurveData.path>`"
-msgstr ""
+msgstr ":py:obj:`path <jinwu.core.LightcurveData.path>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`quality <jinwu.core.LightcurveData.quality>`"
-msgstr ""
+msgstr ":py:obj:`quality <jinwu.core.LightcurveData.quality>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`rate <jinwu.core.LightcurveData.rate>`"
-msgstr ""
+msgstr ":py:obj:`rate <jinwu.core.LightcurveData.rate>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`rate_err <jinwu.core.LightcurveData.rate_err>`"
-msgstr ""
+msgstr ":py:obj:`rate_err <jinwu.core.LightcurveData.rate_err>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`ratio <jinwu.core.LightcurveData.ratio>`"
-msgstr ""
+msgstr ":py:obj:`ratio <jinwu.core.LightcurveData.ratio>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`region <jinwu.core.LightcurveData.region>`"
-msgstr ""
+msgstr ":py:obj:`region <jinwu.core.LightcurveData.region>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`telescop <jinwu.core.LightcurveData.telescop>`"
-msgstr ""
+msgstr ":py:obj:`telescop <jinwu.core.LightcurveData.telescop>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`time <jinwu.core.LightcurveData.time>`"
-msgstr ""
+msgstr ":py:obj:`time <jinwu.core.LightcurveData.time>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`time_raw <jinwu.core.LightcurveData.time_raw>`"
-msgstr ""
+msgstr ":py:obj:`time_raw <jinwu.core.LightcurveData.time_raw>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`time_rel <jinwu.core.LightcurveData.time_rel>`"
-msgstr ""
+msgstr ":py:obj:`time_rel <jinwu.core.LightcurveData.time_rel>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`timesys <jinwu.core.LightcurveData.timesys>`"
-msgstr ""
+msgstr ":py:obj:`timesys <jinwu.core.LightcurveData.timesys>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`timezero <jinwu.core.LightcurveData.timezero>`"
-msgstr ""
+msgstr ":py:obj:`timezero <jinwu.core.LightcurveData.timezero>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`timezero_obj <jinwu.core.LightcurveData.timezero_obj>`"
-msgstr ""
+msgstr ":py:obj:`timezero_obj <jinwu.core.LightcurveData.timezero_obj>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`total_counts <jinwu.core.LightcurveData.total_counts>`"
-msgstr ""
+msgstr ":py:obj:`total_counts <jinwu.core.LightcurveData.total_counts>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`tseg <jinwu.core.LightcurveData.tseg>`"
-msgstr ""
+msgstr ":py:obj:`tseg <jinwu.core.LightcurveData.tseg>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`tstart <jinwu.core.LightcurveData.tstart>`"
-msgstr ""
+msgstr ":py:obj:`tstart <jinwu.core.LightcurveData.tstart>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`validation <jinwu.core.LightcurveData.validation>`"
-msgstr ""
+msgstr ":py:obj:`validation <jinwu.core.LightcurveData.validation>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:64:<autosummary>:1
 msgid ":py:obj:`value <jinwu.core.LightcurveData.value>`"
-msgstr ""
+msgstr ":py:obj:`value <jinwu.core.LightcurveData.value>`"
 
 #: ../../api/jinwu.core.LightcurveData.rst:66
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法摘要"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`apply_gti <jinwu.core.LightcurveData.apply_gti>`\\ "
 "\\(\\[inplace\\]\\)"
 msgstr ""
+":py:obj:`apply_gti <jinwu.core.LightcurveData.apply_gti>`\\ "
+"\\(\\[inplace\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`apply_mask <jinwu.core.LightcurveData.apply_mask>`\\ "
 "\\(mask\\[\\, inplace\\, filtered\\_attrs\\]\\)"
 msgstr ""
+":py:obj:`apply_mask <jinwu.core.LightcurveData.apply_mask>`\\ "
+"\\(mask\\[\\, inplace\\, filtered\\_attrs\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ":py:obj:`extract_gti <jinwu.core.LightcurveData.extract_gti>`\\ \\(hdul\\)"
-msgstr ""
+msgstr ":py:obj:`extract_gti <jinwu.core.LightcurveData.extract_gti>`\\ \\(hdul\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 #: jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:1 of
@@ -263,78 +268,93 @@ msgid ""
 "Extension point: parse GTI from an opened `HDUList` and return list of "
 "(start, stop) tuples."
 msgstr ""
+"扩展点：从打开的 `HDUList` 解析GTI并返回 (start, stop) 元组列表。"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`get_keyword_ci <jinwu.core.LightcurveData.get_keyword_ci>`\\ "
 "\\(key\\[\\, default\\]\\)"
 msgstr ""
+":py:obj:`get_keyword_ci <jinwu.core.LightcurveData.get_keyword_ci>`\\ "
+"\\(key\\[\\, default\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:1 of
 msgid "大小写不敏感地从 header 中读取关键字（若 header 为 dict）."
-msgstr ""
+msgstr "大小写不敏感地从 header 中读取关键字（若 header 为 dict）。"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`get_time_object <jinwu.core.LightcurveData.get_time_object>`\\ "
 "\\(\\[index\\]\\)"
 msgstr ""
+":py:obj:`get_time_object <jinwu.core.LightcurveData.get_time_object>`\\ "
+"\\(\\[index\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`join <jinwu.core.LightcurveData.join>`\\ \\(other\\[\\, "
 "skip\\_checks\\]\\)"
 msgstr ""
+":py:obj:`join <jinwu.core.LightcurveData.join>`\\ \\(other\\[\\, "
+"skip\\_checks\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ":py:obj:`plot <jinwu.core.LightcurveData.plot>`\\ \\(\\*\\*kwargs\\)"
-msgstr ""
+msgstr ":py:obj:`plot <jinwu.core.LightcurveData.plot>`\\ \\(\\*\\*kwargs\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`rebin <jinwu.core.LightcurveData.rebin>`\\ \\(binsize\\[\\, "
 "method\\, align\\_ref\\, empty\\_bin\\]\\)"
 msgstr ""
+":py:obj:`rebin <jinwu.core.LightcurveData.rebin>`\\ \\(binsize\\[\\, "
+"method\\, align\\_ref\\, empty\\_bin\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`slice <jinwu.core.LightcurveData.slice>`\\ \\(\\[tmin\\, "
 "tmax\\]\\)"
 msgstr ""
+":py:obj:`slice <jinwu.core.LightcurveData.slice>`\\ \\(\\[tmin\\, "
+"tmax\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ":py:obj:`sort <jinwu.core.LightcurveData.sort>`\\ \\(\\[inplace\\]\\)"
-msgstr ""
+msgstr ":py:obj:`sort <jinwu.core.LightcurveData.sort>`\\ \\(\\[inplace\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`split_by_gti <jinwu.core.LightcurveData.split_by_gti>`\\ "
 "\\(\\[min\\_points\\]\\)"
 msgstr ""
+":py:obj:`split_by_gti <jinwu.core.LightcurveData.split_by_gti>`\\ "
+"\\(\\[min\\_points\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ""
 ":py:obj:`truncate <jinwu.core.LightcurveData.truncate>`\\ \\(\\[tmin\\, "
 "tmax\\]\\)"
 msgstr ""
+":py:obj:`truncate <jinwu.core.LightcurveData.truncate>`\\ \\(\\[tmin\\, "
+"tmax\\]\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 msgid ":py:obj:`validate <jinwu.core.LightcurveData.validate>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`validate <jinwu.core.LightcurveData.validate>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.LightcurveData.rst:82:<autosummary>:1
 #: jinwu.core.data.LightcurveData.validate:1 of
 msgid "通用层：仅检查路径与 header 存在性。子类会扩展。"
-msgstr ""
+msgstr "通用层：仅检查路径与 header 存在性。子类会扩展。"
 
 #: ../../api/jinwu.core.LightcurveData.rst:84
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.LightcurveData.rst:138
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:3 of
 msgid ""
@@ -342,8 +362,9 @@ msgid ""
 "insensitive) and, if present, returns a list of (START, STOP) pairs. "
 "Readers should call this to populate event objects' GTI field."
 msgstr ""
+"默认实现在（大小写不敏感）名为 'GTI' 的扩展中搜索，若存在则返回 (START, STOP) 对列表。"
+"读取器应调用此方法填充事例对象的 GTI 字段。"
 
 #: jinwu.core.ogip.OgipFitsBase.get_keyword_ci:3 of
 msgid "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"
-msgstr ""
-
+msgstr "返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。"

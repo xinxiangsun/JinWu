@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,45 +20,45 @@ msgstr ""
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst:2
 msgid "SpectrumDataset"
-msgstr ""
+msgstr "SpectrumDataset"
 
 #: jinwu.core.datasets.SpectrumDataset:1 of
 msgid "High-level spectral dataset container."
-msgstr ""
+msgstr "高层能谱数据集容器。"
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst
 msgid "Parameters"
-msgstr ""
+msgstr "参数"
 
 #: jinwu.core.datasets.SpectrumDataset:3 of
 msgid "The underlying OGIP spectral data (SPECTRUM + optional EBOUNDS)."
-msgstr ""
+msgstr "底层的 OGIP 能谱数据（SPECTRUM + 可选的 EBOUNDS）。"
 
 #: jinwu.core.datasets.SpectrumDataset:5 of
 msgid "A human-readable label for this spectrum (e.g. instrument, epoch)."
-msgstr ""
+msgstr "此能谱的人类可读标签（如仪器、观测期）。"
 
 #: jinwu.core.datasets.SpectrumDataset:7 of
 msgid "Optional associated background spectrum."
-msgstr ""
+msgstr "可选关联背景能谱。"
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst:16:<autosummary>:1
 msgid ":py:obj:`background <jinwu.core.datasets.SpectrumDataset.background>`"
-msgstr ""
+msgstr ":py:obj:`background <jinwu.core.datasets.SpectrumDataset.background>`"
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst:16:<autosummary>:1
 msgid ":py:obj:`data <jinwu.core.datasets.SpectrumDataset.data>`"
-msgstr ""
+msgstr ":py:obj:`data <jinwu.core.datasets.SpectrumDataset.data>`"
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst:16:<autosummary>:1
 msgid ":py:obj:`label <jinwu.core.datasets.SpectrumDataset.label>`"
-msgstr ""
+msgstr ":py:obj:`label <jinwu.core.datasets.SpectrumDataset.label>`"
 
 #: ../../api/jinwu.core.datasets.SpectrumDataset.rst:18
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 

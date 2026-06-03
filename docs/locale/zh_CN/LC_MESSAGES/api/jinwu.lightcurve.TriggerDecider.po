@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,35 +20,37 @@ msgstr ""
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:2
 msgid "TriggerDecider"
-msgstr ""
+msgstr "触发判定器"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:1 of
 msgid "Decide triggerability from a counts lightcurve or event times."
-msgstr ""
+msgstr "从计数光变曲线或事例时间判定可触发性。"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:4 of
 msgid "Core checks"
-msgstr ""
+msgstr "核心检验"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:5 of
 msgid ""
 "sliding_window(window=1200): scan max Li&Ma SNR over all windows of size "
 "window."
-msgstr ""
+msgstr "sliding_window(window=1200): 在所有大小为 window 的窗口上扫描最大 Li&Ma SNR。"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:6 of
 msgid "head_window(window=1200): Li&Ma SNR of the first window only."
-msgstr ""
+msgstr "head_window(window=1200): 仅计算第一个窗口的 Li&Ma SNR。"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:7 of
 msgid ""
 "cumulative_from_t0(target=7): if head window fails, grow cumulatively "
 "from T0 (by default first non-zero bin) and check if SNR reaches target."
 msgstr ""
+"cumulative_from_t0(target=7): 若前端窗口未通过，则从 T0（默认第一个非零 bin）开始累加增长，"
+"检查 SNR 是否达到目标值。"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:11 of
 msgid "Inputs"
-msgstr ""
+msgstr "输入"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:12 of
 msgid ""
@@ -58,10 +59,13 @@ msgid ""
 "bin width in seconds (assumed constant) bg : BackgroundSimple with "
 "(n_off_ref, t_off_ref, area_ratio)"
 msgstr ""
+"time : bin 左边界或中心的 1D 数组（单调递增） counts : ON 区域每 bin 计数的 1D 数组（非负） "
+"dt : bin 宽度的浮点数（秒，假设恒定） bg : 包含 (n_off_ref, t_off_ref, area_ratio) 的 "
+"BackgroundSimple 对象"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:18 of
 msgid "Notes"
-msgstr ""
+msgstr "说明"
 
 #: jinwu.lightcurve.trigger.TriggerDecider:19 of
 msgid ""
@@ -69,10 +73,11 @@ msgid ""
 "be added by drawing per-bin ON counts around an expectation and reusing "
 "the same APIs."
 msgstr ""
+"此类不修改计数（无泊松化）。未来可通过在期望值周围抽取每 bin ON 计数并复用相同 API 来添加 MC 功能。"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
@@ -80,49 +85,60 @@ msgid ""
 "<jinwu.lightcurve.TriggerDecider.cumulative_from_t0>`\\ \\(\\*\\[\\, "
 "target\\, t0\\_mode\\, ...\\]\\)"
 msgstr ""
+":py:obj:`cumulative_from_t0 "
+"<jinwu.lightcurve.TriggerDecider.cumulative_from_t0>`\\ \\(\\*\\[\\, "
+"target\\, t0\\_mode\\, ...\\]\\)"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid "Grow cumulatively from T0 and search for the first time SNR>=target."
-msgstr ""
+msgstr "从 T0 开始累加增长，搜索首次达到 SNR>=target 的时刻。"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
 ":py:obj:`decide <jinwu.lightcurve.TriggerDecider.decide>`\\ \\(\\*\\[\\, "
 "window\\, target\\, step\\, t0\\_mode\\]\\)"
 msgstr ""
+":py:obj:`decide <jinwu.lightcurve.TriggerDecider.decide>`\\ \\(\\*\\[\\, "
+"window\\, target\\, step\\, t0\\_mode\\]\\)"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
 "Two-step decision: 1) Sliding `window` SNR anywhere >= target? If yes, "
 "trigger."
-msgstr ""
+msgstr "两步判定：1) 滑动窗口 SNR 任意位置 >= target？若是，触发。"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
 ":py:obj:`from_counts <jinwu.lightcurve.TriggerDecider.from_counts>`\\ "
 "\\(time\\, counts\\, dt\\, bg\\)"
 msgstr ""
+":py:obj:`from_counts <jinwu.lightcurve.TriggerDecider.from_counts>`\\ "
+"\\(time\\, counts\\, dt\\, bg\\)"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
 ":py:obj:`from_events <jinwu.lightcurve.TriggerDecider.from_events>`\\ "
 "\\(events\\, \\*\\, dt\\, bg\\[\\, t\\_start\\, t\\_end\\]\\)"
 msgstr ""
+":py:obj:`from_events <jinwu.lightcurve.TriggerDecider.from_events>`\\ "
+"\\(events\\, \\*\\, dt\\, bg\\[\\, t\\_start\\, t\\_end\\]\\)"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid "Bin photon arrival times into counts per bin of width dt."
-msgstr ""
+msgstr "将光子到达时间分箱为宽度为 dt 的每 bin 计数。"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
 ":py:obj:`head_window <jinwu.lightcurve.TriggerDecider.head_window>`\\ "
 "\\(\\*\\[\\, window\\]\\)"
 msgstr ""
+":py:obj:`head_window <jinwu.lightcurve.TriggerDecider.head_window>`\\ "
+"\\(\\*\\[\\, window\\]\\)"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 #: jinwu.lightcurve.trigger.TriggerDecider.head_window:1 of
 msgid "SNR of the first `window` seconds from the series start."
-msgstr ""
+msgstr "序列起始处首个 `window` 秒内的 SNR。"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 msgid ""
@@ -130,23 +146,28 @@ msgid ""
 "<jinwu.lightcurve.TriggerDecider.sliding_window>`\\ \\(\\*\\[\\, "
 "window\\, step\\]\\)"
 msgstr ""
+":py:obj:`sliding_window "
+"<jinwu.lightcurve.TriggerDecider.sliding_window>`\\ \\(\\*\\[\\, "
+"window\\, step\\]\\)"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:19:<autosummary>:1
 #: jinwu.lightcurve.trigger.TriggerDecider.sliding_window:1 of
 msgid ""
 "Scan all windows of size `window` (seconds) and return whether SNR>=7 is "
 "achieved, with diagnostic info."
-msgstr ""
+msgstr "扫描所有大小为 `window`（秒）的窗口，返回是否达到 SNR>=7 以及诊断信息。"
 
 #: ../../api/jinwu.lightcurve.TriggerDecider.rst:21
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 
 #: jinwu.lightcurve.trigger.TriggerDecider.cumulative_from_t0:1 of
 msgid ""
 "Grow cumulatively from T0 and search for the first time SNR>=target. If "
 "max_window is given, only search within [T0, T0+max_window)."
 msgstr ""
+"从 T0 开始累加增长，搜索首次达到 SNR>=target 的时刻。若给定 max_window，"
+"仅在 [T0, T0+max_window) 内搜索。"
 
 #: jinwu.lightcurve.trigger.TriggerDecider.decide:1 of
 msgid ""
@@ -155,6 +176,9 @@ msgid ""
 "cumulatively from T0 until reach target or series ends. Returns a dict "
 "with decision and diagnostics."
 msgstr ""
+"两步判定：1) 滑动 `window` SNR 在任意位置 >= target？若是，触发。 2) 前端 `window` SNR "
+">= target？若是，触发。 3) 否则从 T0 开始累加增长，直至达到 target 或序列结束。"
+"返回包含判定结果和诊断信息的字典。"
 
 #: jinwu.lightcurve.trigger.TriggerDecider.from_events:1 of
 msgid ""
@@ -162,4 +186,5 @@ msgid ""
 "t_start/t_end are not given, they are inferred from min/max events with "
 "one bin padding on the right edge."
 msgstr ""
-
+"将光子到达时间分箱为宽度为 dt 的每 bin 计数。若未提供 t_start/t_end，"
+"则从事件的最小/最大值推断，并在右边界添加一个 bin 的填充。"

@@ -3,39 +3,37 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: JinWu 0.0\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language: zh_CN\n"
-"Language-Team: zh_CN <LL@li.org>\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
+"Project-Id-Version: JinWu 0.0n"
+"Report-Msgid-Bugs-To: n"
+"POT-Creation-Date: 2026-06-03 19:29+0800n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONEn"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>n"
+"Language: zh_CNn"
+"Language-Team: zh_CN <LL@li.org>n"
+"Plural-Forms: nplurals=1; plural=0;n"
+"MIME-Version: 1.0n"
+"Content-Type: text/plain; charset=utf-8n"
+"Content-Transfer-Encoding: 8bitn"
+"Generated-By: Babel 2.18.0n"
 
 #: ../../api/jinwu.core.OgipEventReader.rst:2
 msgid "OgipEventReader"
-msgstr ""
+msgstr "OGIP事例读取器"
 
 #: ../../api/jinwu.core.OgipEventReader.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法摘要"
 
 #: ../../api/jinwu.core.OgipEventReader.rst:15:<autosummary>:1
 msgid ":py:obj:`read <jinwu.core.OgipEventReader.read>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`read <jinwu.core.OgipEventReader.read>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.OgipEventReader.rst:15:<autosummary>:1
 msgid ":py:obj:`validate <jinwu.core.OgipEventReader.validate>`\\ \\(\\)"
-msgstr ""
+msgstr ":py:obj:`validate <jinwu.core.OgipEventReader.validate>`\\ \\(\\)"
 
 #: ../../api/jinwu.core.OgipEventReader.rst:17
 msgid "Methods Documentation"
-msgstr ""
-
+msgstr "方法文档"

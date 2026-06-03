@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 20:00+0800\n"
+"Last-Translator: Xinxiang Sun <xinxiang@example.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,13 +20,14 @@ msgstr ""
 
 #: ../../usage/nhtot.rst:3
 msgid "Galactic NH (nhtot)"
-msgstr ""
+msgstr "银河系氢柱密度 (nhtot)"
 
 #: ../../usage/nhtot.rst:7
 msgid ""
 "This page is a work in progress.  See :func:`jinwu.core.utils.nhtot` for "
 "the complete API."
 msgstr ""
+"本页面正在建设中。完整 API 请参阅 :func:`jinwu.core.utils.nhtot`。"
 
 #: ../../usage/nhtot.rst:10
 msgid ""
@@ -35,6 +35,9 @@ msgid ""
 "obtain the **total** Galactic hydrogen column density using the method of"
 " Willingale et al. (2013, MNRAS, 431, 394)."
 msgstr ""
+"``nhtot`` 函数查询 Swift UKSSDC nhtot 网络服务，使用 "
+"Willingale et al. (2013, MNRAS, 431, 394) 的方法获取**总**银河系"
+"氢柱密度。"
 
 #: ../../usage/nhtot.rst:14
 msgid ""
@@ -42,10 +45,12 @@ msgid ""
 " — molecular hydrogen (estimated from dust reddening E(B-V)) - **NH,tot**"
 " = NHI + 2×NH₂"
 msgstr ""
+"包括： - **NHI** — 原子氢（来自 21 cm 巡天） - **NH₂** — 分子氢"
+"（由尘埃红化 E(B-V) 估算） - **NH,tot** = NHI + 2×NH₂"
 
 #: ../../usage/nhtot.rst:20
 msgid "Why nhtot?"
-msgstr ""
+msgstr "为什么使用 nhtot？"
 
 #: ../../usage/nhtot.rst:22
 msgid ""
@@ -54,20 +59,25 @@ msgid ""
 "significantly, and using NHI-only values in ``tbabs`` (which assumes 20% "
 "molecular fraction) systematically underestimates Galactic absorption."
 msgstr ""
+"HEASoft 的 ``nh`` 工具**仅**返回 NHI（来自 HI4PI 图）。在低银纬"
+"（|b| < 20°）区域，分子氢的贡献显著，在 ``tbabs``（假定分子比例为"
+" 20%）中仅使用 NHI 值会系统性地低估银河系吸收。"
 
 #: ../../usage/nhtot.rst:27
 msgid ""
 "The Swift community (including Valan et al. 2023) uses ``nhtot`` for the "
 "Galactic component of X-ray spectral fitting."
 msgstr ""
+"Swift 社区（包括 Valan et al. 2023）使用 ``nhtot`` 处理 X 射线能谱"
+"拟合中的银河系分量。"
 
 #: ../../usage/nhtot.rst:31
 msgid "Usage"
-msgstr ""
+msgstr "用法"
 
 #: ../../usage/nhtot.rst:51
 msgid "Reference"
-msgstr ""
+msgstr "参考文献"
 
 #: ../../usage/nhtot.rst:53
 msgid ""
@@ -75,4 +85,6 @@ msgid ""
 "O'Brien, P. T. 2013, MNRAS, 431, 394 (`arXiv:1303.0843 "
 "<https://arxiv.org/abs/1303.0843>`_)"
 msgstr ""
-
+"Willingale, R., Starling, R. L. C., Beardmore, A. P., Tanvir, N. R., & "
+"O'Brien, P. T. 2013, MNRAS, 431, 394 (`arXiv:1303.0843 "
+"<https://arxiv.org/abs/1303.0843>`_)"

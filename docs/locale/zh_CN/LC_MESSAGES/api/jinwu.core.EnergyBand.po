@@ -3,7 +3,6 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
@@ -21,29 +20,29 @@ msgstr ""
 
 #: ../../api/jinwu.core.EnergyBand.rst:2
 msgid "EnergyBand"
-msgstr ""
+msgstr "EnergyBand"
 
 #: ../../api/jinwu.core.EnergyBand.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性概要"
 
 #: ../../api/jinwu.core.EnergyBand.rst:17:<autosummary>:1
 msgid ":py:obj:`emax <jinwu.core.EnergyBand.emax>`"
-msgstr ""
+msgstr ":py:obj:`emax <jinwu.core.EnergyBand.emax>`"
 
 #: ../../api/jinwu.core.EnergyBand.rst:17:<autosummary>:1
 msgid ":py:obj:`emax_unit <jinwu.core.EnergyBand.emax_unit>`"
-msgstr ""
+msgstr ":py:obj:`emax_unit <jinwu.core.EnergyBand.emax_unit>`"
 
 #: ../../api/jinwu.core.EnergyBand.rst:17:<autosummary>:1
 msgid ":py:obj:`emin <jinwu.core.EnergyBand.emin>`"
-msgstr ""
+msgstr ":py:obj:`emin <jinwu.core.EnergyBand.emin>`"
 
 #: ../../api/jinwu.core.EnergyBand.rst:17:<autosummary>:1
 msgid ":py:obj:`emin_unit <jinwu.core.EnergyBand.emin_unit>`"
-msgstr ""
+msgstr ":py:obj:`emin_unit <jinwu.core.EnergyBand.emin_unit>`"
 
 #: ../../api/jinwu.core.EnergyBand.rst:19
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 

@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,75 +20,83 @@ msgstr ""
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:2
 msgid "BackgroundCountsPosterior"
-msgstr ""
+msgstr "背景计数后验"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:1 of
 msgid "背景区域计数后验（聚合到选择能段之后）。"
-msgstr ""
+msgstr "背景区域计数后验（聚合到选择能段之后）。"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:3 of
 msgid ""
-"基于 Gamma-Poisson 共轭：以 OFF 区域“计数率” λ_off ~ Gamma(a_total, b) "
+"基于 Gamma-Poisson 共轭：以 OFF 区域"计数率" λ_off ~ Gamma(a_total, b) "
 "（shape=a_total, rate=b），则： - OFF 区域在曝光 t 的后验预测 n_off ~ Poisson-Gamma "
 "混合，等价于 NB(r=a_total, p=b/(b+t))； - ON 区域在曝光 t 的后验预测 n_on,bkg ~ "
 "NB(r=a_total, p=b/(b+area_ratio*t))，"
 msgstr ""
+"基于 Gamma-Poisson 共轭：以 OFF 区域"计数率" λ_off ~ Gamma(a_total, b) "
+"（shape=a_total, rate=b），则： - OFF 区域在曝光 t 的后验预测 n_off ~ Poisson-Gamma "
+"混合，等价于 NB(r=a_total, p=b/(b+t))； - ON 区域在曝光 t 的后验预测 n_on,bkg ~ "
+"NB(r=a_total, p=b/(b+area_ratio*t))，"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:7 of
 msgid "其中 area_ratio=A_on/A_off。"
-msgstr ""
+msgstr "其中 area_ratio=A_on/A_off。"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:9 of
 msgid "我们通过 Gamma-Poisson 的层次采样实现采样（避免不同库对 NB 参数化差异）。"
-msgstr ""
+msgstr "我们通过 Gamma-Poisson 的层次采样实现采样（避免不同库对 NB 参数化差异）。"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:12 of
 msgid "属性"
-msgstr ""
+msgstr "属性"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:13 of
 msgid "a_total"
-msgstr ""
+msgstr "a_total"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:-1 of
 msgid "float"
-msgstr ""
+msgstr "float"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:14 of
 msgid "选择能段内所有能道的先验 shape 之和（更新后为后验 shape）。"
-msgstr ""
+msgstr "选择能段内所有能道的先验 shape 之和（更新后为后验 shape）。"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:15 of
 msgid "b"
-msgstr ""
+msgstr "b"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:16 of
 msgid "先验/后验的 rate 参数（单位：秒），通常为 t_ref + sum(t_obs_off)。"
-msgstr ""
+msgstr "先验/后验的 rate 参数（单位：秒），通常为 t_ref + sum(t_obs_off)。"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:17 of
 msgid "area_ratio"
-msgstr ""
+msgstr "area_ratio"
 
 #: jinwu.background.backprior.BackgroundCountsPosterior:18 of
 msgid "A_on / A_off，用于把 OFF 计数率映射到 ON 背景计数率。"
-msgstr ""
+msgstr "A_on / A_off，用于把 OFF 计数率映射到 ON 背景计数率。"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 msgid ""
 ":py:obj:`expected_off "
 "<jinwu.background.BackgroundCountsPosterior.expected_off>`\\ \\(t\\)"
 msgstr ""
+":py:obj:`expected_off "
+"<jinwu.background.BackgroundCountsPosterior.expected_off>`\\ \\(t\\)"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 msgid ""
 ":py:obj:`expected_on "
 "<jinwu.background.BackgroundCountsPosterior.expected_on>`\\ \\(t\\)"
 msgstr ""
+":py:obj:`expected_on "
+"<jinwu.background.BackgroundCountsPosterior.expected_on>`\\ \\(t\\)"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 msgid ""
@@ -97,11 +104,14 @@ msgid ""
 "<jinwu.background.BackgroundCountsPosterior.sample_off>`\\ \\(t\\[\\, "
 "size\\, rng\\]\\)"
 msgstr ""
+":py:obj:`sample_off "
+"<jinwu.background.BackgroundCountsPosterior.sample_off>`\\ \\(t\\[\\, "
+"size\\, rng\\]\\)"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 #: jinwu.background.backprior.BackgroundCountsPosterior.sample_off:1 of
 msgid "采样 OFF 区域在曝光 t 的后验预测计数。"
-msgstr ""
+msgstr "采样 OFF 区域在曝光 t 的后验预测计数。"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 msgid ""
@@ -109,11 +119,14 @@ msgid ""
 "<jinwu.background.BackgroundCountsPosterior.sample_on>`\\ \\(t\\[\\, "
 "size\\, rng\\]\\)"
 msgstr ""
+":py:obj:`sample_on "
+"<jinwu.background.BackgroundCountsPosterior.sample_on>`\\ \\(t\\[\\, "
+"size\\, rng\\]\\)"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 #: jinwu.background.backprior.BackgroundCountsPosterior.sample_on:1 of
 msgid "采样 ON 区域（仅背景）在曝光 t 的后验预测计数。"
-msgstr ""
+msgstr "采样 ON 区域（仅背景）在曝光 t 的后验预测计数。"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 msgid ""
@@ -121,12 +134,15 @@ msgid ""
 "<jinwu.background.BackgroundCountsPosterior.update_with_off_counts>`\\ "
 "\\(n\\_off\\, t\\_off\\, \\*\\[\\, ...\\]\\)"
 msgstr ""
+":py:obj:`update_with_off_counts "
+"<jinwu.background.BackgroundCountsPosterior.update_with_off_counts>`\\ "
+"\\(n\\_off\\, t\\_off\\, \\*\\[\\, ...\\]\\)"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 #: jinwu.background.backprior.BackgroundCountsPosterior.update_with_off_counts:1
 #: of
 msgid "用额外的 OFF 观测（总计数与曝光）进行一次共轭更新。"
-msgstr ""
+msgstr "用额外的 OFF 观测（总计数与曝光）进行一次共轭更新。"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 msgid ""
@@ -134,14 +150,16 @@ msgid ""
 "<jinwu.background.BackgroundCountsPosterior.update_with_on_bg_counts>`\\ "
 "\\(n\\_on\\_bg\\, t\\_on\\_bg\\, \\*\\)"
 msgstr ""
+":py:obj:`update_with_on_bg_counts "
+"<jinwu.background.BackgroundCountsPosterior.update_with_on_bg_counts>`\\ "
+"\\(n\\_on\\_bg\\, t\\_on\\_bg\\, \\*\\)"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:19:<autosummary>:1
 #: jinwu.background.backprior.BackgroundCountsPosterior.update_with_on_bg_counts:1
 #: of
 msgid "用额外的 ON 背景-only 观测进行更新（等效 OFF 曝光为 area_ratio*t_on_bg）。"
-msgstr ""
+msgstr "用额外的 ON 背景-only 观测进行更新（等效 OFF 曝光为 area_ratio*t_on_bg）。"
 
 #: ../../api/jinwu.background.BackgroundCountsPosterior.rst:21
 msgid "Methods Documentation"
-msgstr ""
-
+msgstr "方法文档"

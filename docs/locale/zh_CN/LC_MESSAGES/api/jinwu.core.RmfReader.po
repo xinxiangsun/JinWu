@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <sunxinxiang@nousresearch.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,21 +20,21 @@ msgstr ""
 
 #: ../../api/jinwu.core.RmfReader.rst:2
 msgid "RmfReader"
-msgstr ""
+msgstr "RMF读取器"
 
 #: ../../api/jinwu.core.RmfReader.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概览"
 
 #: ../../api/jinwu.core.RmfReader.rst:15:<autosummary>:1
-msgid ":py:obj:`read <jinwu.core.RmfReader.read>`\\ \\(\\)"
-msgstr ""
+msgid ":py:obj:`read <jinwu.core.RmfReader.read>`\\\\ \\\\(\\\\)"
+msgstr ":py:obj:`read <jinwu.core.RmfReader.read>`\\\\ \\\\(\\\\)"
 
 #: ../../api/jinwu.core.RmfReader.rst:15:<autosummary>:1
-msgid ":py:obj:`validate <jinwu.core.RmfReader.validate>`\\ \\(\\)"
-msgstr ""
+msgid ":py:obj:`validate <jinwu.core.RmfReader.validate>`\\\\ \\\\(\\\\)"
+msgstr ":py:obj:`validate <jinwu.core.RmfReader.validate>`\\\\ \\\\(\\\\)"
 
 #: ../../api/jinwu.core.RmfReader.rst:17
 msgid "Methods Documentation"
-msgstr ""
+msgstr "方法文档"
 

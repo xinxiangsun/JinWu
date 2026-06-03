@@ -3,67 +3,68 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: JinWu 0.0\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language: zh_CN\n"
-"Language-Team: zh_CN <LL@li.org>\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
+"Project-Id-Version: JinWu 0.0n"
+"Report-Msgid-Bugs-To: n"
+"POT-Creation-Date: 2026-06-03 19:29+0800n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONEn"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>n"
+"Language: zh_CNn"
+"Language-Team: zh_CN <LL@li.org>n"
+"Plural-Forms: nplurals=1; plural=0;n"
+"MIME-Version: 1.0n"
+"Content-Type: text/plain; charset=utf-8n"
+"Content-Transfer-Encoding: 8bitn"
+"Generated-By: Babel 2.18.0n"
 
 #: ../../api/jinwu.core.JointDataset.rst:2
 msgid "JointDataset"
-msgstr ""
+msgstr "联合数据集"
 
 #: jinwu.core.datasets.JointDataset:1 of
 msgid "A simple container for multiple datasets."
-msgstr ""
+msgstr "一个用于容纳多个数据集的简单容器。"
 
 #: jinwu.core.datasets.JointDataset:3 of
 msgid ""
 "This can hold any combination of light curves and spectra that "
 "conceptually belong to the same astrophysical source/event."
 msgstr ""
+"可以容纳概念上属于同一天体物理源/事件的任意光变曲线和能谱组合。"
 
 #: ../../api/jinwu.core.JointDataset.rst:10
 msgid "Attributes Summary"
-msgstr ""
+msgstr "属性摘要"
 
 #: ../../api/jinwu.core.JointDataset.rst:15:<autosummary>:1
 msgid ":py:obj:`lightcurves <jinwu.core.JointDataset.lightcurves>`"
-msgstr ""
+msgstr ":py:obj:`lightcurves <jinwu.core.JointDataset.lightcurves>`"
 
 #: ../../api/jinwu.core.JointDataset.rst:15:<autosummary>:1
 msgid ":py:obj:`spectra <jinwu.core.JointDataset.spectra>`"
-msgstr ""
+msgstr ":py:obj:`spectra <jinwu.core.JointDataset.spectra>`"
 
 #: ../../api/jinwu.core.JointDataset.rst:17
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法摘要"
 
 #: ../../api/jinwu.core.JointDataset.rst:22:<autosummary>:1
 msgid ""
 ":py:obj:`add_lightcurve <jinwu.core.JointDataset.add_lightcurve>`\\ "
 "\\(lc\\)"
 msgstr ""
+":py:obj:`add_lightcurve <jinwu.core.JointDataset.add_lightcurve>`\\ "
+"\\(lc\\)"
 
 #: ../../api/jinwu.core.JointDataset.rst:22:<autosummary>:1
 msgid ":py:obj:`add_spectrum <jinwu.core.JointDataset.add_spectrum>`\\ \\(spec\\)"
-msgstr ""
+msgstr ":py:obj:`add_spectrum <jinwu.core.JointDataset.add_spectrum>`\\ \\(spec\\)"
 
 #: ../../api/jinwu.core.JointDataset.rst:24
 msgid "Attributes Documentation"
-msgstr ""
+msgstr "属性文档"
 
 #: ../../api/jinwu.core.JointDataset.rst:29
 msgid "Methods Documentation"
-msgstr ""
-
+msgstr "方法文档"

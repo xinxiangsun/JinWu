@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 19:29+0800\n"
+"Last-Translator: Xinxiang Sun <EMAIL@ADDRESS>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,33 +20,32 @@ msgstr ""
 
 #: ../../api/jinwu.spectrum.XspecSession.rst:2
 msgid "XspecSession"
-msgstr ""
+msgstr "XSPEC会话"
 
 #: jinwu.spectrum.specfake.XspecSession:1 of
 msgid "一个轻量的 XSPEC 会话，提供 K 计算能力。 A lightweight XSPEC session that can compute K."
-msgstr ""
+msgstr "一个轻量的 XSPEC 会话，提供 K 计算能力。"
 
 #: jinwu.spectrum.specfake.XspecSession:4 of
 msgid "使用原则 | Usage - 每次计算前清空 AllData/AllModels，避免状态污染；"
-msgstr ""
+msgstr "使用原则 - 每次计算前清空 AllData/AllModels，避免状态污染；"
 
 #: jinwu.spectrum.specfake.XspecSession:6 of
 msgid "Clear AllData/AllModels to avoid state leakage between runs."
-msgstr ""
+msgstr "每次计算前清空 AllData/AllModels，避免运行间状态泄漏。"
 
 #: jinwu.spectrum.specfake.XspecSession:7 of
 msgid "关闭 XSPEC 交互提示，确保无人值守运行； Disable prompting for non-interactive execution."
-msgstr ""
+msgstr "关闭 XSPEC 交互提示，确保无人值守运行。"
 
 #: ../../api/jinwu.spectrum.XspecSession.rst:10
 msgid "Methods Summary"
-msgstr ""
+msgstr "方法概要"
 
 #: ../../api/jinwu.spectrum.XspecSession.rst:14:<autosummary>:1
 msgid ":py:obj:`compute_K <jinwu.spectrum.XspecSession.compute_K>`\\ \\(cfg\\)"
-msgstr ""
+msgstr ":py:obj:`compute_K <jinwu.spectrum.XspecSession.compute_K>`\\ \\(cfg\\)"
 
 #: ../../api/jinwu.spectrum.XspecSession.rst:16
 msgid "Methods Documentation"
-msgstr ""
-
+msgstr "方法文档"

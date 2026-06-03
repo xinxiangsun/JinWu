@@ -3,14 +3,13 @@
 # This file is distributed under the same license as the JinWu package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: JinWu 0.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-03 19:29+0800\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"PO-Revision-Date: 2026-06-03 20:00+0800\n"
+"Last-Translator: Xinxiang Sun <xinxiang@example.com>\n"
 "Language: zh_CN\n"
 "Language-Team: zh_CN <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -21,35 +20,34 @@ msgstr ""
 
 #: ../../usage/upperlimits.rst:3
 msgid "Upper Limits"
-msgstr ""
+msgstr "上限"
 
 #: ../../usage/upperlimits.rst:7
 msgid ""
 "This page is a work in progress.  See :mod:`jinwu.core.upperlimit` for "
 "the complete API."
-msgstr ""
+msgstr "本页面正在建设中。完整 API 请参阅 :mod:`jinwu.core.upperlimit`。"
 
 #: ../../usage/upperlimits.rst:10
 msgid "JinWu provides a unified upper limit framework:"
-msgstr ""
+msgstr "金乌提供了统一的上限计算框架："
 
 #: ../../usage/upperlimits.rst:12
 msgid "``UpperLimit`` class wrapping chain-based and error-based methods"
-msgstr ""
+msgstr "``UpperLimit`` 类封装了基于链和基于误差的方法"
 
 #: ../../usage/upperlimits.rst:13
 msgid "Supports multiple confidence levels (68%, 90%, 95%, 99%)"
-msgstr ""
+msgstr "支持多种置信水平（68%、90%、95%、99%）"
 
 #: ../../usage/upperlimits.rst:14
 msgid "Feldman-Cousins and Bayesian approaches"
-msgstr ""
+msgstr "Feldman-Cousins 和贝叶斯方法"
 
 #: ../../usage/upperlimits.rst:15
 msgid "Joint multi-observation significance via Li & Ma (1983)"
-msgstr ""
+msgstr "通过 Li & Ma (1983) 联合多观测显著性"
 
 #: ../../usage/upperlimits.rst:18
 msgid "Example"
-msgstr ""
-
+msgstr "示例"
