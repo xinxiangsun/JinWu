@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from . import (
         core,
         lightcurve,
+        lf,
         background,
         spectrum,
         response,
@@ -120,6 +121,7 @@ __license__ = "GPL-3.0-or-later"
 _SUBPACKAGES = {
     'core',
     'lightcurve',
+    'lf',
     'background',
     'spectrum',
     'response',
@@ -188,6 +190,7 @@ __all__ = [
     'core',
     'time',
     'lightcurve',
+    'lf',
     'background',
     'spectrum',
     'response',

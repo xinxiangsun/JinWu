@@ -53,7 +53,7 @@ except PackageNotFoundError:  # pragma: no cover - during editable installs
 	__version__ = "0.0.13"
 
 _MODULE_EXPORTS = {
-	'heasoft', 'plot', 'time', 'ops', 'io', 'redshift',
+	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift',
 }
 
 _BASE_EXPORTS = {
@@ -85,7 +85,7 @@ _DATASET_EXPORTS = {
 
 __all__ = [
 	# Submodules
-	'heasoft', 'plot', 'time', 'ops', 'io',
+	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift',
 	# Data containers
 	'EnergyBand', 'ChannelBand', 'RegionArea', 'RegionAreaSet', 'HduHeader', 'FitsHeaderDump', 'OgipMeta', 'ArfBase', 'RmfBase', 'PhaBase', 'ArfData', 'RmfData', 'PhaData', 'LightcurveDataBase', 'LightcurveData', 'EventDataBase', 'EventData', 'timescale',
 	# Dataset containers

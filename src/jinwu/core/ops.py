@@ -23,7 +23,13 @@ Pure functional interface; all operations return new instances.
 
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING, Literal, Sequence, cast
+from dataclasses import dataclass as _dataclass
+import os as _os
+import shlex as _shlex
+import shutil as _shutil
+import subprocess as _subprocess
+import tempfile as _tempfile
+from typing import Iterable as _Iterable, Mapping as _Mapping, Optional, Sequence, Literal, cast, TYPE_CHECKING
 
 import numpy as np
 from . import gti as gtimod
@@ -3683,3 +3689,240 @@ def txx(
         "background_model_counts": bkg_model_counts,
         "bb_block_bkg_model_counts": block_bkg_model_arr,
     }
+
+# ==================== HEASoft/FTOOLS process operations ====================
+# These helpers are intentionally mission-agnostic. They prepare a safe
+# non-interactive HEASoft environment and execute external HEASoft commands.
+
+@_dataclass(frozen=True)
+class CommandResult:
+    """Result returned by a HEASoft/FTOOLS command invocation."""
+
+    command: tuple[str, ...]
+    returncode: int
+    stdout: str
+    stderr: str
+    cwd: str | None = None
+    log_path: str | None = None
+    script_path: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0
+
+
+def _candidate_headas_dirs() -> list[_Path]:
+    candidates: list[_Path] = []
+    env_headas = _os.environ.get("HEADAS")
+    if env_headas:
+        candidates.append(_Path(env_headas))
+    conda_prefix = _os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.append(_Path(conda_prefix) / "heasoft")
+    # Fallback: check common conda environments for a 'hea' HEASoft install
+    for _home_base in (_Path.home(), _Path("/home/xinxiang")):
+        _hea_candidate = _home_base / "miniconda3" / "envs" / "hea" / "heasoft"
+        if (_hea_candidate / "bin").exists():
+            candidates.append(_hea_candidate)
+            break
+    return candidates
+
+
+def _resolve_headas(headas: str | _Path | None = None) -> _Path:
+    if headas is not None:
+        path = _Path(headas).expanduser().resolve()
+        if not (path / "bin").exists():
+            raise FileNotFoundError(f"HEADAS bin directory not found: {path / 'bin'}")
+        return path
+    for candidate in _candidate_headas_dirs():
+        candidate = candidate.expanduser()
+        if (candidate / "bin").exists():
+            return candidate.resolve()
+    raise FileNotFoundError("Cannot locate HEASoft HEADAS. Set HEADAS or pass headas=...")
+
+
+def _prepend_env_path(value: str | None, entry: _Path) -> str:
+    parts = [] if not value else value.split(_os.pathsep)
+    entry_s = str(entry)
+    return _os.pathsep.join([entry_s] + [p for p in parts if p != entry_s])
+
+
+def _safe_headas_dir(path: str | _Path | None, prefix: str) -> _Path:
+    base = _Path(_tempfile.gettempdir()) / prefix if path is None else _Path(path).expanduser()
+    base.mkdir(parents=True, exist_ok=True)
+    return base.resolve()
+
+
+def ensure_headas_env(
+    *,
+    headas: str | _Path | None = None,
+    env: _Mapping[str, str] | None = None,
+    home: str | _Path | None = None,
+    pfiles: str | _Path | None = None,
+) -> dict[str, str]:
+    """Return an environment dictionary suitable for HEASoft commands.
+
+    The function does not source ``headas-init.sh``. Instead it sets stable
+    command-line variables: ``HEADAS``, ``PATH``, ``PFILES`` and
+    ``HEADASNOQUERY``. This keeps non-interactive/sandboxed runs from failing
+    because the user's real HOME or PFILES directory is not writable.
+    """
+
+    out = dict(_os.environ if env is None else env)
+    headas_path = _resolve_headas(headas)
+    headas_bin = headas_path / "bin"
+    headas_python = headas_path / "lib" / "python"
+    syspfiles = headas_path / "syspfiles"
+
+    out["HEADAS"] = str(headas_path)
+    out["HEADASNOQUERY"] = "1"
+    out["PATH"] = _prepend_env_path(out.get("PATH"), headas_bin)
+    if headas_python.exists():
+        out["PYTHONPATH"] = _prepend_env_path(out.get("PYTHONPATH"), headas_python)
+
+    pfiles_dir = _safe_headas_dir(pfiles, "headas_pfiles")
+    out["PFILES"] = f"{pfiles_dir}{_os.pathsep}{syspfiles}" if syspfiles.exists() else str(pfiles_dir)
+    out["HOME"] = str(_safe_headas_dir(home, "headas_home"))
+    return out
+
+
+def find_headas_task(task: str, *, headas: str | _Path | None = None, env: _Mapping[str, str] | None = None) -> str:
+    """Resolve a HEASoft task executable path using a prepared environment."""
+
+    task_env = ensure_headas_env(headas=headas, env=env)
+    found = _shutil.which(task, path=task_env.get("PATH"))
+    if found is None:
+        raise FileNotFoundError(f"HEASoft task not found in PATH: {task}")
+    return found
+
+
+def _normalize_headas_command(command: str | Sequence[str]) -> list[str]:
+    if isinstance(command, str):
+        return _shlex.split(command)
+    return [str(part) for part in command]
+
+
+def _write_command_log(path: str | _Path, *, command: Sequence[str], stdout: str, stderr: str, returncode: int) -> str:
+    log_path = _Path(path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    content = [
+        "$ " + " ".join(_shlex.quote(x) for x in command),
+        f"returncode={returncode}",
+        "\n[stdout]",
+        stdout or "",
+        "\n[stderr]",
+        stderr or "",
+    ]
+    log_path.write_text("\n".join(content), encoding="utf-8")
+    return str(log_path)
+
+
+def run_command(
+    command: str | Sequence[str],
+    *,
+    cwd: str | _Path | None = None,
+    env: _Mapping[str, str] | None = None,
+    headas: str | _Path | None = None,
+    input_text: str | None = None,
+    log_path: str | _Path | None = None,
+    check: bool = False,
+) -> CommandResult:
+    """Run a non-interactive HEASoft/FTOOLS command."""
+
+    cmd = _normalize_headas_command(command)
+    cmd_env = ensure_headas_env(headas=headas, env=env)
+    proc = _subprocess.run(
+        cmd,
+        input=input_text,
+        text=True,
+        capture_output=True,
+        cwd=None if cwd is None else str(cwd),
+        env=cmd_env,
+    )
+    written_log = None
+    if log_path is not None:
+        written_log = _write_command_log(log_path, command=cmd, stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode)
+    result = CommandResult(
+        command=tuple(cmd),
+        returncode=proc.returncode,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        cwd=None if cwd is None else str(cwd),
+        log_path=written_log,
+    )
+    if check and not result.ok:
+        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(cmd)}\n{result.stderr or result.stdout}")
+    return result
+
+
+def _xselect_script_text(commands: str | _Iterable[str], *, append_exit: bool = True) -> str:
+    if isinstance(commands, str):
+        lines = [line.rstrip() for line in commands.splitlines()]
+    else:
+        lines = [str(line).rstrip() for line in commands]
+    if append_exit:
+        stripped = [line.strip().lower() for line in lines if line.strip()]
+        if not stripped or stripped[-1] not in {"exit", "quit"}:
+            lines.extend(["exit", "no"])
+    return "\n".join(lines) + "\n"
+
+
+def run_xselect_script(
+    commands: str | _Iterable[str],
+    *,
+    cwd: str | _Path | None = None,
+    env: _Mapping[str, str] | None = None,
+    headas: str | _Path | None = None,
+    script_path: str | _Path | None = None,
+    log_path: str | _Path | None = None,
+    append_exit: bool = True,
+    check: bool = False,
+) -> CommandResult:
+    """Run official HEASoft ``xselect`` with commands supplied via stdin."""
+
+    cmd_env = ensure_headas_env(headas=headas, env=env)
+    xselect_exe = find_headas_task("xselect", env=cmd_env)
+    script = _xselect_script_text(commands, append_exit=append_exit)
+
+    written_script = None
+    if script_path is not None:
+        spath = _Path(script_path)
+        spath.parent.mkdir(parents=True, exist_ok=True)
+        spath.write_text(script, encoding="utf-8")
+        written_script = str(spath)
+
+    proc = _subprocess.run(
+        [xselect_exe],
+        input=script,
+        text=True,
+        capture_output=True,
+        cwd=None if cwd is None else str(cwd),
+        env=cmd_env,
+    )
+    written_log = None
+    if log_path is not None:
+        written_log = _write_command_log(log_path, command=[xselect_exe], stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode)
+        with _Path(written_log).open("a", encoding="utf-8") as f:
+            f.write("\n\n[xselect script]\n")
+            f.write(script)
+    result = CommandResult(
+        command=(xselect_exe,),
+        returncode=proc.returncode,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+        cwd=None if cwd is None else str(cwd),
+        log_path=written_log,
+        script_path=written_script,
+    )
+    if check and not result.ok:
+        raise RuntimeError(f"xselect failed ({result.returncode})\n{result.stderr or result.stdout}")
+    return result
+
+
+__all__.extend([
+    "CommandResult",
+    "ensure_headas_env",
+    "find_headas_task",
+    "run_command",
+    "run_xselect_script",
+])

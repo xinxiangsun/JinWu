@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 __all__ = [
+    "XSPEC_COSMO_PLANCK18",
     "InstrumentConfig",
     "register_instrument",
     "instrument",
@@ -13,6 +14,8 @@ __all__ = [
     "GBM",
     "UVOT",
 ]
+
+XSPEC_COSMO_PLANCK18 = "67.66 -0.534016305544544 0.6888463055445441"
 
 
 _INSTRUMENT_REGISTRY: dict[str, type["InstrumentConfig"]] = {}
