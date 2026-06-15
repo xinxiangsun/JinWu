@@ -5,6 +5,7 @@ LastEditTime: 2025-11-07 14:35:02
 LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/jinwu/src/jinwu/core/utils.py
 '''
+import math
 import numpy as np
 from typing import Union
 import os
@@ -506,14 +507,13 @@ def li_ma_snr(n_on: float, n_off: float, alpha: float, *, signed: bool = True) -
     if n_on == 0.0:
         return 0.0
     if n_off == 0.0:
-        s = float(np.sqrt(2.0 * n_on * np.log(1.0 + alpha)))
+        s = float(np.sqrt(2.0 * n_on * np.log((1.0 + alpha) / alpha)))
     else:
         term1 = n_on * np.log(((1.0 + alpha) / alpha) * (n_on / (n_on + n_off)))
         term2 = n_off * np.log((1.0 + alpha) * (n_off / (n_on + n_off)))
         val = 2.0 * (term1 + term2)
         s = float(np.sqrt(max(val, 0.0)))
     if signed:
-        import math
         return math.copysign(s, n_on - alpha * n_off)
     return s
 
@@ -843,7 +843,7 @@ class LightcurveSNREvaluator:
             used = raw_counts_key_fallback
             if verbose:
                 print(
-                    "[LightcurveSNREvaluator] Using 'raw_corrected_counts' as ON counts.\n"
+                    f"[LightcurveSNREvaluator] Using '{raw_counts_key_fallback}' as ON counts.\n"
                     "If this is actually net counts, SNR will be conservative."
                 )
         else:

@@ -125,11 +125,11 @@ class TestSnrLiMa:
         测试背景计数为零的情况。
 
         When n_bkg=0, returns the correct asymptotic limit
-        sqrt(2 * n_on * log(1+alpha)) instead of inf.
+        sqrt(2 * n_on * log((1+alpha)/alpha)) instead of inf.
         """
         import math
         snr = li_ma_snr(100, 0, 1.0)
-        expected = math.sqrt(2 * 100 * math.log(2.0))
+        expected = math.sqrt(2 * 100 * math.log(2.0 / 1.0))
         assert snr == pytest.approx(expected)
 
     def test_both_zero(self):
