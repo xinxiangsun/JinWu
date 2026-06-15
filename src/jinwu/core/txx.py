@@ -291,7 +291,7 @@ def compute_burst_txx(
             s_pos = max(float(S), 0.0)
             b_pos = max(float(B_raw), 0.0)
             try:
-                snr = li_ma_snr(s_pos, b_pos, float(alpha), signed=True)
+                snr = li_ma_snr(s_pos, b_pos, float(alpha))
                 if net < 0 and np.isfinite(snr):
                     snr = -abs(snr)
             except Exception:

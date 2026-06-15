@@ -160,22 +160,18 @@ class TestSnrLiMa:
 
     def test_background_dominates(self):
         """
-        Test snr_li_ma when background dominates source.
-
-        测试背景占主导地位时的行为。
+        Test that background deficit returns negative significance.
 
         n_on=5, n_off=100, alpha=1 means ON region is severely below
-        background expectation.  The unsigned Li & Ma magnitude is large
-        (~10.26) because the deviation from the background hypothesis is
-        significant, but this is a background *deficit*, not a source
-        detection.  The unsigned wrapper returns this magnitude; the
-        signed variant (tested below) returns a negative value.
+        background expectation.  With signed=True (the default),
+        li_ma_snr returns a negative value ~-10.26 — this is a
+        background deficit, not a source detection.
         """
         import math
         snr = li_ma_snr(5, 100, 1.0)
         assert isinstance(snr, float)
-        # Unsigned magnitude for n_on=5, n_off=100, alpha=1
-        assert snr == pytest.approx(10.26, rel=0.01)
+        assert snr < 0
+        assert snr == pytest.approx(-10.26, rel=0.01)
 
 
 class TestLiMaSigned:
@@ -197,8 +193,8 @@ class TestLiMaSigned:
         assert s == 0.0
 
     def test_unsigned_unchanged(self):
-        """signed=False (default) preserves legacy >=0 behaviour."""
-        s = li_ma_snr(5, 100, 1.0)
+        """signed=False preserves legacy unsigned magnitude."""
+        s = li_ma_snr(5, 100, 1.0, signed=False)
         assert s > 0  # magnitude, not sign
 
     def test_trigger_rejects_deficit(self):

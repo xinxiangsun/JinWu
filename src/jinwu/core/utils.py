@@ -475,7 +475,7 @@ class SFH:
 # Li & Ma SNR 和触发判断工具
 # ======================================================================
 
-def li_ma_snr(n_on: float, n_off: float, alpha: float, *, signed: bool = False) -> float:
+def li_ma_snr(n_on: float, n_off: float, alpha: float, *, signed: bool = True) -> float:
     """Compute Li & Ma significance (Eq. 17 in Li & Ma 1983).
 
     Parameters
@@ -487,10 +487,9 @@ def li_ma_snr(n_on: float, n_off: float, alpha: float, *, signed: bool = False) 
     alpha : float
         Exposure/area scaling: alpha = (A_on/A_off) * (t_on/t_off).
     signed : bool
-        If ``True``, return a signed significance whose sign matches
-        ``sign(n_on - alpha * n_off)`` — positive for source excess,
-        negative for background deficit.  Default ``False`` preserves
-        the legacy behaviour (always >= 0).
+        If ``True`` (default), return a signed significance — positive
+        for source excess, negative for background deficit.  Pass
+        ``signed=False`` to get the legacy unsigned magnitude.
 
     Returns
     -------
@@ -641,7 +640,7 @@ class TriggerDecider:
             return 0.0
         alpha = self.bg.alpha(t_on)
         n_off = float(self.bg.n_off_ref if n_off_ref is None else n_off_ref)
-        return li_ma_snr(n_on=n_on, n_off=n_off, alpha=alpha, signed=True)
+        return li_ma_snr(n_on=n_on, n_off=n_off, alpha=alpha)
 
     def sliding_window(
         self, *, window: float = 1200.0, step: _Optional[float] = None,
@@ -700,7 +699,7 @@ class TriggerDecider:
         for k in range(1, csum.size + 1):
             t_on = k * self.dt
             alpha = self.bg.alpha(t_on)
-            snr = li_ma_snr(n_on=float(csum[k - 1]), n_off=float(self.bg.n_off_ref), alpha=alpha, signed=True)
+            snr = li_ma_snr(n_on=float(csum[k - 1]), n_off=float(self.bg.n_off_ref), alpha=alpha)
             if snr > max_snr:
                 max_snr = snr
             if snr >= float(target) and t_reach is None:
@@ -871,7 +870,7 @@ class LightcurveSNREvaluator:
         n_on = float(self._cum_counts[i1 - 1] - (self._cum_counts[i0 - 1] if i0 > 0 else 0.0))
         t_on = right - left
         alpha = self._alpha(t_on)
-        return li_ma_snr(n_on=n_on, n_off=n_off, alpha=alpha, signed=True)
+        return li_ma_snr(n_on=n_on, n_off=n_off, alpha=alpha)
 
     def _alpha(self, t_on: float) -> float:
         return float(self.area_ratio) * (float(t_on) / float(self.off_exposure_ref))
@@ -949,7 +948,7 @@ class LightcurveSNREvaluator:
                 t_on = k * self.dt
                 alpha = self._alpha(t_on)
                 n_on = float(csum[k - 1])
-                snr = li_ma_snr(n_on=n_on, n_off=float(n_off_exp), alpha=alpha, signed=True)
+                snr = li_ma_snr(n_on=n_on, n_off=float(n_off_exp), alpha=alpha)
                 if snr > max_snr:
                     max_snr = snr
             ok = bool(max_snr >= target)
@@ -997,7 +996,7 @@ class LightcurveSNREvaluator:
             for k in range(1, csum.size + 1):
                 t_on = k * self.dt
                 alpha = self._alpha(t_on)
-                snr = li_ma_snr(n_on=float(csum[k - 1]), n_off=n_off, alpha=alpha, signed=True)
+                snr = li_ma_snr(n_on=float(csum[k - 1]), n_off=n_off, alpha=alpha)
                 if snr > max_snr:
                     max_snr = snr
             max_snrs.append(float(max_snr))

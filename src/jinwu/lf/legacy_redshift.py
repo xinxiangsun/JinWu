@@ -573,7 +573,7 @@ class RedshiftExtrapolator():
             n_bkg = self.bkgnum
             
             # 计算SNR
-            snr = li_ma_snr(n_on=n_src, n_off=n_bkg, alpha=self.area_ratio, signed=True)
+            snr = li_ma_snr(n_on=n_src, n_off=n_bkg, alpha=self.area_ratio)
             return float(snr)
             
         except Exception as e:
@@ -721,7 +721,7 @@ class RedshiftExtrapolator():
 
                 n_off = bkgrate_off * (self._duration if self._duration else 0.0)
                 n_on = rate_src_only * self._duration + self._area_ratio * n_off
-                snr = li_ma_snr(n_on=n_on, n_off=n_off, alpha=self._area_ratio, signed=True)
+                snr = li_ma_snr(n_on=n_on, n_off=n_off, alpha=self._area_ratio)
 
                 xs.AllModels.calcFlux(f"{emin} {emax}")
                 flux = spec.flux[0]

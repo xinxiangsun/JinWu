@@ -1733,7 +1733,7 @@ def autobin(
         bkg_sum = float(np.sum(c_b[run_arr]))
         net_sum = src_sum - alpha_eff * bkg_sum
         if alpha_eff > 0.0:
-            sig = li_ma_snr(src_sum, bkg_sum, alpha_eff, signed=True)
+            sig = li_ma_snr(src_sum, bkg_sum, alpha_eff)
         else:
             sig = float(net_sum / np.sqrt(max(src_sum, 1e-12)))
         if (sig >= float(min_sigma)) and (net_sum > 0.0):
@@ -3290,7 +3290,7 @@ def txx(
                 snr_blk = np.inf if s_pos > 0.0 else 0.0
             else:
                 try:
-                    snr_blk = li_ma_snr(float(s_pos), float(b_pos), float(alpha), signed=True)
+                    snr_blk = li_ma_snr(float(s_pos), float(b_pos), float(alpha))
                 except Exception:
                     snr_blk = float(net_blk / np.sqrt(var_blk))
             if not np.isfinite(snr_blk):
