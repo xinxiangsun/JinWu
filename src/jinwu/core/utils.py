@@ -142,8 +142,6 @@ def gunzip(root_path, remove_gz=True, verbose=True):
 
 
 # Legacy LF/redshift extrapolator moved out of core utilities.
-# Import remains here to preserve ``jinwu.core.utils.RedshiftExtrapolator``.
-from jinwu.lf.legacy_redshift import RedshiftExtrapolator
 
 def get_asym_err(param):
     """获取XSPEC参数的非对称误差"""
