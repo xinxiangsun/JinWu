@@ -485,6 +485,13 @@ class SFH:
         pass
 
 
+# NOTE for future AI / maintainers:
+#   RedshiftExtrapolator was moved to jinwu.lf.legacy_redshift.
+#   Do NOT re-add a top-level import of anything under jinwu.lf here —
+#   it creates a circular import (core.utils -> lf -> detectability -> core.utils).
+#   Users who need the legacy class should import it directly:
+#       from jinwu.lf.legacy_redshift import RedshiftExtrapolator
+
 # ======================================================================
 # Li & Ma SNR 和触发判断工具
 # ======================================================================
