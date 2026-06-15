@@ -51,24 +51,36 @@ def generate_download_url(isot_time):
 
 
 def snr_li_ma(n_src, n_bkg, alpha_area_time):
-    """
-    Calculate the signal-to-noise ratio (SNR) using the Li & Ma formula.
+    """Calculate the Li & Ma significance (Eq. 17 in Li & Ma 1983).
 
-    Parameters:
-    n_src (int): 源区域的计数
-    n_bkg (int): 背景区域的计数
-    alpha_area_time (float): 	•	\alpha：背景区域与源区域之间的归一化因子，反映暴露时间或面积比：
-    \alpha_area_time = \frac{t_{\text{on}} A_{\text{on}}}{t_{\text{off}} A_{\text{off}}}
+    .. deprecated::
+        Prefer :func:`li_ma_snr` for new code.  This wrapper delegates to
+        ``li_ma_snr`` and exists only for backward compatibility.
 
-    Returns:
-    float: The calculated SNR.
+    Parameters
+    ----------
+    n_src : float or array-like
+        ON-region counts.
+    n_bkg : float or array-like
+        OFF-region counts.
+    alpha_area_time : float
+        Exposure/area scaling: alpha = (A_on/A_off)*(t_on/t_off).
+
+    Returns
+    -------
+    float
+        Li & Ma significance.  Unlike the older implementation, this does
+        **not** return ``inf`` when *n_bkg* is zero — it returns the correct
+        asymptotic limit ``sqrt(2 * n_on * ln(1 + alpha))`` instead.
     """
-    if n_bkg == 0:
-        return np.inf  # Avoid division by zero, return infinity if no background counts
-    part1 = n_src*np.log((1 + alpha_area_time) * n_src / alpha_area_time /(n_bkg+n_src))
-    part2 = n_bkg*np.log((1+alpha_area_time)*n_bkg/(n_bkg+n_src))
-    snr = np.sqrt(2 * (part1 + part2))
-    return snr
+    import numpy as _np
+    _n_src = _np.asarray(n_src, dtype=float).ravel()
+    _n_bkg = _np.asarray(n_bkg, dtype=float).ravel()
+    _alpha = float(alpha_area_time)
+    if _n_src.size == 1:
+        return li_ma_snr(float(_n_src[0]), float(_n_bkg[0]), _alpha)
+    return _np.array([li_ma_snr(float(s), float(b), _alpha)
+                      for s, b in zip(_n_src, _n_bkg)])
 
 
 def extract_all_gz_recursive(root_path: Union[str, os.PathLike, Path], 

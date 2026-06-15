@@ -18,6 +18,7 @@ from astropy.cosmology import Planck18 as cosmo
 
 from jinwu.core.config import XSPEC_COSMO_PLANCK18
 from jinwu.core.heasoft import HeasoftEnvManager as hem
+from jinwu.core.utils import snr_li_ma
 
 try:
     import xspec as xs
@@ -38,14 +39,6 @@ def _require_xspec():
         raise ModuleNotFoundError(
             "xspec is required for this functionality. Please install HEASOFT/pyxspec and ensure 'xspec' is importable."
         )
-
-
-def snr_li_ma(n_src, n_bkg, alpha_area_time):
-    if n_bkg == 0:
-        return np.inf
-    part1 = n_src * np.log((1 + alpha_area_time) * n_src / alpha_area_time / (n_bkg + n_src))
-    part2 = n_bkg * np.log((1 + alpha_area_time) * n_bkg / (n_bkg + n_src))
-    return np.sqrt(2 * (part1 + part2))
 
 
 class RedshiftExtrapolator():

@@ -1733,8 +1733,7 @@ def autobin(
         bkg_sum = float(np.sum(c_b[run_arr]))
         net_sum = src_sum - alpha_eff * bkg_sum
         if alpha_eff > 0.0:
-            sig_raw = snr_li_ma(np.asarray([src_sum]), np.asarray([bkg_sum]), alpha_eff)
-            sig = float(np.asarray(sig_raw, dtype=float).reshape(-1)[0])
+            sig = float(snr_li_ma(src_sum, bkg_sum, alpha_eff))
         else:
             sig = float(net_sum / np.sqrt(max(src_sum, 1e-12)))
         if (sig >= float(min_sigma)) and (net_sum > 0.0):
