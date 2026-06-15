@@ -113,10 +113,13 @@ class TestSnrLiMa:
 
         测试源计数为零的情况。
 
-        When n_src=0 and n_bkg>0, SNR should be 0.0 — no signal present.
+        With signed=True (default), n_on=0, n_off>0 is a background deficit:
+        the signed Li & Ma limit is -sqrt(2 * n_off * ln(1+alpha)).
         """
+        import math
         snr = li_ma_snr(0, 10, 1.0)
-        assert snr == 0.0
+        expected = -math.sqrt(2 * 10 * math.log(2.0))
+        assert snr == pytest.approx(expected)
 
     def test_zero_background_counts(self):
         """
@@ -200,6 +203,39 @@ class TestLiMaSigned:
         """A background deficit should never pass a positive threshold."""
         s = li_ma_snr(5, 100, 1.0, signed=True)
         assert s < 7.0  # would not trigger with threshold 7
+
+    def test_n_on_zero_signed_negative(self):
+        """n_on=0, n_off>0 → signed Li & Ma returns negative deficit."""
+        import math
+        s = li_ma_snr(0, 10, 1.0)
+        expected = -math.sqrt(2 * 10 * math.log(2.0))
+        assert s == pytest.approx(expected)
+        assert s < 0
+
+
+class TestTriggerDeciderTarget:
+    """Verify that decide() propagates the target parameter correctly."""
+
+    def test_decide_respects_target(self):
+        from jinwu.core.utils import BackgroundSimple, TriggerDecider
+
+        bg = BackgroundSimple(area_ratio=1.0, t_off_ref=1.0, n_off_ref=1)
+        # Single bin: n_on=15, n_off=1, alpha=1.0 → SNR ≈ 3.83
+        time = np.array([0.0], dtype=float)
+        counts = np.array([15.0], dtype=float)
+        td = TriggerDecider(time, counts, dt=1.0, bg=bg)
+
+        # With target=5, SNR 3.83 should NOT trigger
+        result = td.decide(window=1.0, target=5.0)
+        assert result["triggered"] is False
+
+        # With default target=7, SNR 3.83 should NOT trigger either
+        result7 = td.decide(window=1.0)
+        assert result7["triggered"] is False
+
+        # With target=3, SNR 3.83 SHOULD trigger
+        result3 = td.decide(window=1.0, target=3.0)
+        assert result3["triggered"] is True
 
 
 # ---------------------------------------------------------------------------

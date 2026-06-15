@@ -504,15 +504,22 @@ def li_ma_snr(n_on: float, n_off: float, alpha: float, *, signed: bool = True) -
         return 0.0
     n_on = float(max(n_on, 0.0))
     n_off = float(max(n_off, 0.0))
-    if n_on == 0.0:
-        return 0.0
-    if n_off == 0.0:
+
+    # Compute the unsigned Li & Ma magnitude S = sqrt(2 ln L)
+    if n_on == 0.0 and n_off == 0.0:
+        s = 0.0
+    elif n_on == 0.0:
+        # n_off > 0: term1 -> 0, term2 = n_off * ln(1+alpha)
+        s = float(np.sqrt(2.0 * n_off * np.log(1.0 + alpha)))
+    elif n_off == 0.0:
+        # n_on > 0: term1 = n_on * ln((1+alpha)/alpha), term2 -> 0
         s = float(np.sqrt(2.0 * n_on * np.log((1.0 + alpha) / alpha)))
     else:
         term1 = n_on * np.log(((1.0 + alpha) / alpha) * (n_on / (n_on + n_off)))
         term2 = n_off * np.log((1.0 + alpha) * (n_off / (n_on + n_off)))
         val = 2.0 * (term1 + term2)
         s = float(np.sqrt(max(val, 0.0)))
+
     if signed:
         return math.copysign(s, n_on - alpha * n_off)
     return s
@@ -645,6 +652,7 @@ class TriggerDecider:
 
     def sliding_window(
         self, *, window: float = 1200.0, step: _Optional[float] = None,
+        target: float = 7.0,
     ) -> _Tuple[bool, dict]:
         if window <= 0:
             raise ValueError("window must be positive")
@@ -663,13 +671,15 @@ class TriggerDecider:
             if snr > max_snr:
                 max_snr = snr
                 best = (s, s + window)
-        return bool(max_snr >= 7.0), {"max_snr": max_snr, "best_window": best}
+        return bool(max_snr >= target), {"max_snr": max_snr, "best_window": best}
 
-    def head_window(self, *, window: float = 1200.0) -> _Tuple[bool, dict]:
+    def head_window(
+        self, *, window: float = 1200.0, target: float = 7.0,
+    ) -> _Tuple[bool, dict]:
         left = float(self.time[0])
         right = left + float(window)
         snr = self._snr_window(left, right)
-        return bool(snr >= 7.0), {"snr": snr, "window": (left, right)}
+        return bool(snr >= target), {"snr": snr, "window": (left, right)}
 
     def _find_t0(
         self, mode: _Literal["first_nonzero", "first_time"] = "first_nonzero",
@@ -716,10 +726,10 @@ class TriggerDecider:
         step: _Optional[float] = None,
         t0_mode: _Literal["first_nonzero", "first_time"] = "first_nonzero",
     ) -> dict:
-        slid_ok, slid_stat = self.sliding_window(window=window, step=step)
+        slid_ok, slid_stat = self.sliding_window(window=window, step=step, target=target)
         if slid_ok:
             return {"triggered": True, "method": "sliding", **slid_stat}
-        head_ok, head_stat = self.head_window(window=window)
+        head_ok, head_stat = self.head_window(window=window, target=target)
         if head_ok:
             return {"triggered": True, "method": "head", **head_stat}
         cum_ok, cum_stat = self.cumulative_from_t0(target=target, t0_mode=t0_mode, max_window=None)
