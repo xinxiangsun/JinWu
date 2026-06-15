@@ -51,7 +51,7 @@ from jinwu.core.utils import (
 
 
 # ---------------------------------------------------------------------------
-# 1a. snr_li_ma — Li & Ma 信噪比公式 / Li & Ma SNR formula
+# 1a. li_ma_snr — Li & Ma 信噪比公式 / Li & Ma SNR formula
 # ---------------------------------------------------------------------------
 
 class TestSnrLiMa:
@@ -62,9 +62,9 @@ class TestSnrLiMa:
 
     def test_basic_high_snr(self):
         """
-        Test snr_li_ma with strong source detection.
+        Test li_ma_snr with strong source detection.
 
-        测试强源探测下的 snr_li_ma 计算。
+        测试强源探测下的 li_ma_snr 计算。
 
         强源信号 (n_src=100, n_bkg=10, alpha=1) 应产生一个较大的正 SNR。
         / Strong source signal should yield a large positive SNR.
@@ -81,9 +81,9 @@ class TestSnrLiMa:
 
     def test_alpha_not_one(self):
         """
-        Test snr_li_ma with non-unit alpha (unequal area ratio).
+        Test li_ma_snr with non-unit alpha (unequal area ratio).
 
-        测试非单位 alpha (不等面积比) 下的 snr_li_ma。
+        测试非单位 alpha (不等面积比) 下的 li_ma_snr。
 
         alpha=0.5 表示源区域是背景区域面积的一半。
         / alpha=0.5 means the source region is half the background area.
@@ -94,7 +94,7 @@ class TestSnrLiMa:
 
     def test_alpha_equal_one(self):
         """
-        Test snr_li_ma with alpha=1 (equal source/background area).
+        Test li_ma_snr with alpha=1 (equal source/background area).
 
         测试 alpha=1 (源/背景面积相等) 的情况。
 
@@ -109,7 +109,7 @@ class TestSnrLiMa:
 
     def test_zero_source_counts(self):
         """
-        Test snr_li_ma with zero source counts.
+        Test li_ma_snr with zero source counts.
 
         测试源计数为零的情况。
 
@@ -120,13 +120,12 @@ class TestSnrLiMa:
 
     def test_zero_background_counts(self):
         """
-        Test snr_li_ma with zero background counts.
+        Test li_ma_snr with zero background counts.
 
         测试背景计数为零的情况。
 
-        When n_bkg=0, the function now delegates to li_ma_snr which
-        returns the correct asymptotic limit sqrt(2 * n_on * log(1+alpha))
-        instead of inf.
+        When n_bkg=0, returns the correct asymptotic limit
+        sqrt(2 * n_on * log(1+alpha)) instead of inf.
         """
         import math
         snr = li_ma_snr(100, 0, 1.0)
@@ -135,7 +134,7 @@ class TestSnrLiMa:
 
     def test_both_zero(self):
         """
-        Test snr_li_ma with both source and background zero.
+        Test li_ma_snr with both source and background zero.
 
         测试源和背景计数都为零的情况。
 
@@ -147,7 +146,7 @@ class TestSnrLiMa:
 
     def test_weak_source(self):
         """
-        Test snr_li_ma with weak source signal (low SNR).
+        Test li_ma_snr with weak source signal (low SNR).
 
         测试弱源信号 (低 SNR) 的情况。
 

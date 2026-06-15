@@ -489,7 +489,8 @@ def li_ma_snr(n_on: float, n_off: float, alpha: float, *, signed: bool = True) -
     signed : bool
         If ``True`` (default), return a signed significance — positive
         for source excess, negative for background deficit.  Pass
-        ``signed=False`` to get the legacy unsigned magnitude.
+        ``signed=False`` to get the unsigned magnitude (deviation from
+        background hypothesis regardless of direction).
 
     Returns
     -------
