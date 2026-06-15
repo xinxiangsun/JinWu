@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Union, Literal
 import numpy as np
 from astropy.stats import bayesian_blocks
 
-from .utils import snr_li_ma
+from .utils import li_ma_snr
 
 
 def _cross_target_time(
@@ -291,7 +291,7 @@ def compute_burst_txx(
             s_pos = max(float(S), 0.0)
             b_pos = max(float(B_raw), 0.0)
             try:
-                snr = float(snr_li_ma(s_pos, b_pos, float(alpha)))
+                snr = li_ma_snr(s_pos, b_pos, float(alpha), signed=True)
                 if net < 0 and np.isfinite(snr):
                     snr = -abs(snr)
             except Exception:

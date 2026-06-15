@@ -18,7 +18,7 @@ from astropy.cosmology import Planck18 as cosmo
 
 from jinwu.core.config import XSPEC_COSMO_PLANCK18
 from jinwu.core.heasoft import HeasoftEnvManager as hem
-from jinwu.core.utils import snr_li_ma
+from jinwu.core.utils import li_ma_snr
 
 try:
     import xspec as xs
@@ -573,7 +573,7 @@ class RedshiftExtrapolator():
             n_bkg = self.bkgnum
             
             # 计算SNR
-            snr = snr_li_ma(n_src=n_src, n_bkg=n_bkg, alpha_area_time=self.area_ratio)
+            snr = li_ma_snr(n_on=n_src, n_off=n_bkg, alpha=self.area_ratio, signed=True)
             return float(snr)
             
         except Exception as e:
@@ -721,7 +721,7 @@ class RedshiftExtrapolator():
 
                 n_off = bkgrate_off * (self._duration if self._duration else 0.0)
                 n_on = rate_src_only * self._duration + self._area_ratio * n_off
-                snr = snr_li_ma(n_src=n_on, n_bkg=n_off, alpha_area_time=self._area_ratio)
+                snr = li_ma_snr(n_on=n_on, n_off=n_off, alpha=self._area_ratio, signed=True)
 
                 xs.AllModels.calcFlux(f"{emin} {emax}")
                 flux = spec.flux[0]

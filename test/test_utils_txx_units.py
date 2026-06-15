@@ -41,7 +41,6 @@ import pytest
 # =============================================================================
 
 from jinwu.core.utils import (
-    snr_li_ma,
     li_ma_snr,
     flux_err_from_log10,
     get_asym_err,
@@ -70,7 +69,7 @@ class TestSnrLiMa:
         强源信号 (n_src=100, n_bkg=10, alpha=1) 应产生一个较大的正 SNR。
         / Strong source signal should yield a large positive SNR.
         """
-        snr = snr_li_ma(100, 10, 1.0)
+        snr = li_ma_snr(100, 10, 1.0)
         assert isinstance(snr, float), "SNR should be a float"
         assert snr > 0, "SNR should be positive for strong source"
         assert np.isfinite(snr), "SNR should be finite"
@@ -89,7 +88,7 @@ class TestSnrLiMa:
         alpha=0.5 表示源区域是背景区域面积的一半。
         / alpha=0.5 means the source region is half the background area.
         """
-        snr = snr_li_ma(100, 50, 0.5)
+        snr = li_ma_snr(100, 50, 0.5)
         assert isinstance(snr, float)
         assert snr > 0, "SNR should be positive"
 
@@ -102,7 +101,7 @@ class TestSnrLiMa:
         这是最常见的场景，源区域与背景区域面积相同。
         / Most common case where source and background regions have equal area.
         """
-        snr = snr_li_ma(50, 5, 1.0)
+        snr = li_ma_snr(50, 5, 1.0)
         assert snr > 0
         # Verify the formula gives reasonable values
         # 验证公式给出合理的值
@@ -116,7 +115,7 @@ class TestSnrLiMa:
 
         When n_src=0 and n_bkg>0, SNR should be 0.0 — no signal present.
         """
-        snr = snr_li_ma(0, 10, 1.0)
+        snr = li_ma_snr(0, 10, 1.0)
         assert snr == 0.0
 
     def test_zero_background_counts(self):
@@ -130,7 +129,7 @@ class TestSnrLiMa:
         instead of inf.
         """
         import math
-        snr = snr_li_ma(100, 0, 1.0)
+        snr = li_ma_snr(100, 0, 1.0)
         expected = math.sqrt(2 * 100 * math.log(2.0))
         assert snr == pytest.approx(expected)
 
@@ -143,7 +142,7 @@ class TestSnrLiMa:
         When both are zero, the function returns 0.0 (no information
         → no significance), not inf.
         """
-        snr = snr_li_ma(0, 0, 1.0)
+        snr = li_ma_snr(0, 0, 1.0)
         assert snr == 0.0
 
     def test_weak_source(self):
@@ -155,7 +154,7 @@ class TestSnrLiMa:
         源计数仅略高于背景时，SNR 应该较小。
         / When source counts are only slightly above background, SNR should be low.
         """
-        snr = snr_li_ma(15, 10, 1.0)
+        snr = li_ma_snr(15, 10, 1.0)
         assert snr > 0, "SNR should be positive even for weak source"
         assert snr < 5.0, f"Weak source should have SNR < 5, got {snr:.2f}"
 
@@ -173,7 +172,7 @@ class TestSnrLiMa:
         signed variant (tested below) returns a negative value.
         """
         import math
-        snr = snr_li_ma(5, 100, 1.0)
+        snr = li_ma_snr(5, 100, 1.0)
         assert isinstance(snr, float)
         # Unsigned magnitude for n_on=5, n_off=100, alpha=1
         assert snr == pytest.approx(10.26, rel=0.01)

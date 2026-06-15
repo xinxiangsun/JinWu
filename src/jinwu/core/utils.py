@@ -50,39 +50,6 @@ def generate_download_url(isot_time):
     return url
 
 
-def snr_li_ma(n_src, n_bkg, alpha_area_time):
-    """Calculate the Li & Ma significance (Eq. 17 in Li & Ma 1983).
-
-    .. deprecated::
-        Prefer :func:`li_ma_snr` for new code.  This wrapper delegates to
-        ``li_ma_snr`` and exists only for backward compatibility.
-
-    Parameters
-    ----------
-    n_src : float or array-like
-        ON-region counts.
-    n_bkg : float or array-like
-        OFF-region counts.
-    alpha_area_time : float
-        Exposure/area scaling: alpha = (A_on/A_off)*(t_on/t_off).
-
-    Returns
-    -------
-    float
-        Li & Ma significance.  Unlike the older implementation, this does
-        **not** return ``inf`` when *n_bkg* is zero — it returns the correct
-        asymptotic limit ``sqrt(2 * n_on * ln(1 + alpha))`` instead.
-    """
-    import numpy as _np
-    _n_src = _np.asarray(n_src, dtype=float).ravel()
-    _n_bkg = _np.asarray(n_bkg, dtype=float).ravel()
-    _alpha = float(alpha_area_time)
-    if _n_src.size == 1:
-        return li_ma_snr(float(_n_src[0]), float(_n_bkg[0]), _alpha)
-    return _np.array([li_ma_snr(float(s), float(b), _alpha)
-                      for s, b in zip(_n_src, _n_bkg)])
-
-
 def extract_all_gz_recursive(root_path: Union[str, os.PathLike, Path], 
                              remove_gz: bool = True,
                              verbose: bool = True) -> int:
