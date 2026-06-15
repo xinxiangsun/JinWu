@@ -42,6 +42,7 @@ import pytest
 
 from jinwu.core.utils import (
     snr_li_ma,
+    li_ma_snr,
     flux_err_from_log10,
     get_asym_err,
     generate_download_url,
@@ -164,16 +165,47 @@ class TestSnrLiMa:
 
         测试背景占主导地位时的行为。
 
-        当源计数小于背景时，对数值可能为负，
-        但两个 log 项相加可能为正或负，需验证返回类型。
-        / When source < background, validate return type and finiteness.
+        n_on=5, n_off=100, alpha=1 means ON region is severely below
+        background expectation.  The unsigned Li & Ma magnitude is large
+        (~10.26) because the deviation from the background hypothesis is
+        significant, but this is a background *deficit*, not a source
+        detection.  The unsigned wrapper returns this magnitude; the
+        signed variant (tested below) returns a negative value.
         """
-        # S=5, B=100, alpha=1 → background dominates
-        # S=5, B=100, alpha=1 → 背景占主导
+        import math
         snr = snr_li_ma(5, 100, 1.0)
-        assert isinstance(snr, float), "SNR should still be a float"
-        # May be NaN or a small number — just needs to not crash
-        # 可能为 NaN 或小数 — 只需不崩溃即可
+        assert isinstance(snr, float)
+        # Unsigned magnitude for n_on=5, n_off=100, alpha=1
+        assert snr == pytest.approx(10.26, rel=0.01)
+
+
+class TestLiMaSigned:
+    """Verify signed Li & Ma behaviour for source-detection use."""
+
+    def test_excess_positive(self):
+        """Source excess → positive signed SNR."""
+        s = li_ma_snr(100, 10, 1.0, signed=True)
+        assert s > 0
+
+    def test_deficit_negative(self):
+        """Background deficit → negative signed SNR — not a source trigger."""
+        s = li_ma_snr(5, 100, 1.0, signed=True)
+        assert s < 0
+
+    def test_equal_zero(self):
+        """n_on == alpha * n_off → exactly zero."""
+        s = li_ma_snr(50, 50, 1.0, signed=True)
+        assert s == 0.0
+
+    def test_unsigned_unchanged(self):
+        """signed=False (default) preserves legacy >=0 behaviour."""
+        s = li_ma_snr(5, 100, 1.0)
+        assert s > 0  # magnitude, not sign
+
+    def test_trigger_rejects_deficit(self):
+        """A background deficit should never pass a positive threshold."""
+        s = li_ma_snr(5, 100, 1.0, signed=True)
+        assert s < 7.0  # would not trigger with threshold 7
 
 
 # ---------------------------------------------------------------------------
