@@ -21,21 +21,20 @@ jobs:
           name: python-dist
           path: dist/
 
-  # ── Rust (jinwurs) ─────────────────────────────────
+  # ── Rust (jinwurs, abi3 → 3.11+) ──────────────────
   build-rust:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ['3.11', '3.12', '3.13']
         # ubuntu-latest  → manylinux_2_17（兼容 CentOS 7+, Debian 10+, Ubuntu 20.04+）
         # macos-latest    → Apple Silicon arm64（自动跟踪最新版本）
-        # Intel macOS (macos-13) 已移除，Apple Silicon 是主流，Intel 用户需从源码编译
+        # abi3-py311: 单 wheel 覆盖 CPython 3.11 / 3.12 / 3.13
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.11'
       - uses: PyO3/maturin-action@v1
         with:
           maturin-version: latest
@@ -44,7 +43,7 @@ jobs:
           manylinux: auto
       - uses: actions/upload-artifact@v4
         with:
-          name: rust-wheels-${{ matrix.os }}-py${{ matrix.python-version }}
+          name: rust-wheels-${{ matrix.os }}
           path: dist/
 
   # ── Publish + Release ──────────────────────────────
