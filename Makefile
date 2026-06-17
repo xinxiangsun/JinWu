@@ -88,13 +88,15 @@ sync:
 	@sed -i 's/version: ".*"/version: "$(_VERSION)"/' recipe/meta.yaml
 	@# Cargo.toml (jinwurs)
 	@sed -i 's/^version = ".*"/version = "$(_VERSION)"/' src/jinwurs/Cargo.toml
+	@# pyproject.toml (jinwurs)
+	@sed -i 's/^version = ".*"/version = "$(_VERSION)"/' src/jinwurs/pyproject.toml
 	@echo "✓ 全部同步到 $(_VERSION)"
 
 # ── 一键发布 ──────────────────────────────────────────────
 release: sync
 	@echo ""
 	@echo "→ 提交变更..."
-	git add pyproject.toml recipe/meta.yaml src/jinwurs/Cargo.toml
+	git add pyproject.toml recipe/meta.yaml src/jinwurs/Cargo.toml src/jinwurs/pyproject.toml
 	git diff --cached --stat
 	@echo ""
 	git commit -m "release: jinwu v$(_VERSION)"
