@@ -25,11 +25,11 @@ jobs:
   build-rust:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-13, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         python-version: ['3.11', '3.12', '3.13']
         # ubuntu-latest  → manylinux_2_17（兼容 CentOS 7+, Debian 10+, Ubuntu 20.04+）
-        # macos-13        → Intel x86_64（最后一个 Intel macOS）
         # macos-latest    → Apple Silicon arm64（自动跟踪最新版本）
+        # Intel macOS (macos-13) 已移除，Apple Silicon 是主流，Intel 用户需从源码编译
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
