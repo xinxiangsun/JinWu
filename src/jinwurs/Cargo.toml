@@ -1,0 +1,12 @@
+[package]
+name = "jinwurs"
+version = "0.0.29"
+edition = "2021"
+
+[lib]
+name = "jinwurs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"

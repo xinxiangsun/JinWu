@@ -13,18 +13,18 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "numpy",
-    "scipy",
+    "numpy>=1.24",
+    "scipy>=1.9",
     "astropy>=7.1.0",
-    "emcee",
-    "bxa",
-    "pymc",
+    "emcee>=3.0",
+    "bxa>=4.0",
+    "pymc>=5.0",
     "swiftbat",
-    "regions",
-    "ipyaladin",
-    "requests",
-    "pillow",
-    "batanalysis"
+    "regions>=0.5",
+    "ipyaladin>=0.1",
+    "requests>=2.25",
+    "pillow>=9.0",
+    "batanalysis>=2.1"
 ]
 keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
 
@@ -50,6 +50,7 @@ docs = [
     "sphinx-automodapi>=0.17",
     "myst-parser>=3",
 ]
+rust = ["jinwurs"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,35 +1,63 @@
+{% set name = "jinwu" %}
+{% set version = "0.0.29" %}
+{% set python_min = "3.11" %}
+
 package:
-  name: jinwu
-  version: "0.0.27"
+  name: {{ name|lower }}
+  version: "0.0.29"
 
 source:
-  url: https://pypi.io/packages/source/j/jinwu/jinwu-0.0.27.tar.gz
-  sha256: "0b2885dfd44fbaaa3ff5ba42fd3991e5e5e8d1f6927c4592e248f6bdf34534e9 "
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
+  sha256: 5eeaa86b8b8c632dbba587dd66c79a4ff3402b4b2f2cbe1842d0752c58388fdb
 
 build:
   noarch: python
   number: 0
-  script: "{{ PYTHON }} -m pip install . --no-deps --ignore-installed -vv"
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
-dependencies:
+requirements:
   host:
-    - python >=3.11
+    - python {{ python_min }}
     - pip
+    - setuptools
   run:
-    - python >=3.11
+    - python >={{ python_min }}
     - numpy
     - scipy
-    - astropy
+    - astropy >=7.1.0
     - emcee
+    - bxa
+    - pymc
+    - regions
+    - ipyaladin
+    - requests
+    - pillow
+    - batanalysis >=2.1
+  # --- 以下依赖不在 conda-forge，代码已 try/except 降级 ---
+  # swiftbat: BSD-3-Clause, PyPI-only (https://github.com/lanl/swiftbat_python)
+  # heasoft / pyxspec: conda install -c conda-forge heasoft  # 可选加速 — 如果 jinwurs 也发布了 conda 包，取消下面注释
+  # run_constrained:
+  #   - jinwurs >=0.1.0
+
+test:
+  imports:
+    - jinwu
+  requires:
+    - pip
+    - python {{ python_min }}
+  commands:
+    - pip check
 
 about:
   home: https://github.com/xinxiangsun/jinwu
   license: GPL-3.0-or-later
   license_file: LICENSE
-  summary: "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
+  summary: Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis.
   description: |
-    JinWu is a toolkit for joint inference and physical modeling of high-energy transient light-curves and spectra, supporting unified analysis and flexible extension.
-  doc_url: https://github.com/xinxiangsun/jinwu/blob/master/README.md
+    JinWu (金乌) is a toolkit for joint inference and physical modeling of
+    high-energy transient light-curves and spectra, supporting unified
+    analysis and flexible extension.
+  doc_url: https://jinwu.readthedocs.io
   dev_url: https://github.com/xinxiangsun/jinwu
 
 extra:
