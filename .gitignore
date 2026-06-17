@@ -2,9 +2,12 @@
 __pycache__/
 *.py[cod]
 *.pyo
-*.so
 *.egg-info/
 *.egg
+
+# === Rust (jinwurs) ===
+src/jinwurs/target/
+src/jinwurs/Cargo.lock
 
 # === Build & Distribution ===
 build/
@@ -21,7 +24,6 @@ env/
 # === Sphinx Documentation ===
 docs/_build/
 docs/api/
-docs/api.rst.automodapi/
 docs/**/*.automodapi
 
 # === Testing & Coverage ===
@@ -45,6 +47,7 @@ htmlcov/
 .LSOverride
 Icon?
 ._*
+*.swp
 
 # === Environment ===
 .env
@@ -52,42 +55,15 @@ Icon?
 # === Logs ===
 *.log
 
-# === External Dependencies ===
-external_sources/
-test/data/
+# === Rust (jinwurs) ===
+src/jinwurs/target/
+src/jinwurs/Cargo.lock
 
 # === AI Coding Agents ===
 .codex/
 .agents/
-AGENTS.md
-CLAUDE.md
-.cursorrules
-.windsurfrules
 
-
-# Files that might appear on external disk drives
-.Spotlight-V100
-.Trashes
-
-# macOS-specific temp files
-*.swp
-
-# distribute files
-*.egg-info/
-build/
-dist/
-*/*.egg-info/
-*/__pycache__
-*/*/__pycache__/
-
-__pycache__/
-*/__pycache__/
-*/jinwu.egg-info/
-*/*/__pycache__/
-*/dist/
-./dist/
-*/*.pyc
-*/recipe/
-
-test/*
-external_sources/*
+# === External Dependencies (large / not in repo) ===
+external_sources/
+test/
+tests/

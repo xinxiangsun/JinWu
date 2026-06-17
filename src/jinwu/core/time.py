@@ -392,7 +392,7 @@ class TimeGECAM(TimeFromEpoch):
 
 class TimeHXMT(TimeFromEpoch):
     """
-    HXMT MET: seconds since 1998-01-01 00:00:00 TT (CXC time reference)
+    HXMT MET: seconds since 1998-01-01 00:00:00 TT (CXC time reference) + 441763197.0 seconds offset
     
     Reference: https://heasarc.gsfc.nasa.gov/docs/hxmt/
     Note: Uses TT (Terrestrial Time) scale, with CXC epoch offset

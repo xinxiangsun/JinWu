@@ -1,0 +1,38 @@
+{% set name = "jinwurs" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwurs-{{ version }}.tar.gz
+  sha256: placeholder
+
+build:
+  number: 0
+  # ⚠️ 不能 noarch — Rust .so 是平台相关的
+  script: {{ PYTHON }} -m pip install . -vv
+
+requirements:
+  build:
+    - {{ compiler('rust') }}
+    - maturin >=1.0
+  host:
+    - python
+    - pip
+    - maturin
+  run:
+    - python
+
+test:
+  imports:
+    - jinwurs
+  commands:
+    - pip check
+
+about:
+  home: https://github.com/xinxiangsun/jinwu
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: Rust-accelerated kernels for jinwu — fast rebinning & statistics
