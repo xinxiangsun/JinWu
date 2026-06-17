@@ -58,8 +58,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: dist/
-          merge-multiple: true
+          pattern: '*'
+          path: artifacts/
+
+      - name: Collect all wheels
+        run: |
+          mkdir -p dist
+          find artifacts -name '*.whl' -o -name '*.tar.gz' | xargs cp -t dist/
+          echo "=== All packages ==="
+          ls -lh dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
