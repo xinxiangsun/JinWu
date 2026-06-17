@@ -96,7 +96,7 @@ sync:
 release: sync
 	@echo ""
 	@echo "→ 提交变更..."
-	git add pyproject.toml recipe/meta.yaml src/jinwurs/Cargo.toml src/jinwurs/pyproject.toml
+	git add pyproject.toml recipe/meta.yaml src/jinwurs/Cargo.toml src/jinwurs/pyproject.toml src/jinwurs/README.md
 	git diff --cached --stat
 	@echo ""
 	git commit -m "release: jinwu v$(_VERSION)"
