@@ -1,6 +1,6 @@
 [package]
 name = "jinwurs"
-version = "0.0.30"
+version = "0.0.31"
 edition = "2021"
 description = "Rust-accelerated kernels for jinwu — fast rebinning and X-ray statistics"
 license = "GPL-3.0-or-later"
