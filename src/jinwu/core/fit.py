@@ -17,10 +17,11 @@ LightcurveData and LightcurveDataset inputs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Callable, Optional, Dict, Any, Literal, Mapping, Union, Sequence
 from pathlib import Path
 import math
+import json
 import os
 import re
 import warnings
@@ -45,6 +46,12 @@ __all__ = [
     "fit_spectrum_from_files",
     "fit",
     "fit_prepared",
+    "fit_xray_models",
+    "resolve_xray_model_specs",
+    "calculate_model_fit_metrics",
+    "XRayModelSpec",
+    "ModelFitMetrics",
+    "XRayModelComparisonResult",
     "run_xspec_chain",
 ]
 
@@ -176,6 +183,196 @@ class FitResult:
         if np.isscalar(time):
             return float(result[0]) if result.size > 0 else float(result)
         return result
+
+
+@dataclass(frozen=True, slots=True)
+class XRayModelSpec:
+    """Stable definition of one XSPEC candidate used in model comparison."""
+
+    key: str
+    expression: str
+    family: str
+    absorption_mode: Literal["free", "zero", "none"]
+    critical_parameters: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelFitMetrics:
+    """Information criteria for one fit to one fixed dataset."""
+
+    statistic: float
+    dof: int
+    free_parameters: int
+    effective_bins: int
+    aic: float
+    aicc: float | None
+    bic: float
+    delta: float | None = None
+    delta_aic: float | None = None
+    delta_aicc: float | None = None
+    delta_bic: float | None = None
+    akaike_weight: float | None = None
+    ranking_metric: str = "aicc"
+
+
+@dataclass(slots=True)
+class XRayModelComparisonResult:
+    """All candidate fits and the model adopted for downstream products."""
+
+    candidates: dict[str, dict[str, Any]]
+    metrics: dict[str, ModelFitMetrics]
+    failures: dict[str, str]
+    ranking: tuple[str, ...]
+    adopted_key: str
+    adopted_reason: str
+    selection_metric: str
+    warnings: tuple[str, ...] = ()
+    absorption_comparisons: dict[str, dict[str, Any]] = field(default_factory=dict)
+    comparison_json: str | None = None
+    comparison_txt: str | None = None
+
+    @property
+    def adopted_fit(self) -> dict[str, Any]:
+        return self.candidates[self.adopted_key]
+
+    def to_dict(self, *, include_candidates: bool = True) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "adopted_key": self.adopted_key,
+            "adopted_reason": self.adopted_reason,
+            "selection_metric": self.selection_metric,
+            "ranking": list(self.ranking),
+            "metrics": {
+                key: {
+                    "statistic": value.statistic,
+                    "dof": value.dof,
+                    "free_parameters": value.free_parameters,
+                    "effective_bins": value.effective_bins,
+                    "aic": value.aic,
+                    "aicc": value.aicc,
+                    "bic": value.bic,
+                    "delta": value.delta,
+                    "delta_aic": value.delta_aic,
+                    "delta_aicc": value.delta_aicc,
+                    "delta_bic": value.delta_bic,
+                    "akaike_weight": value.akaike_weight,
+                    "ranking_metric": value.ranking_metric,
+                }
+                for key, value in self.metrics.items()
+            },
+            "failures": dict(self.failures),
+            "warnings": list(self.warnings),
+            "absorption_comparisons": self.absorption_comparisons,
+            "comparison_json": self.comparison_json,
+            "comparison_txt": self.comparison_txt,
+        }
+        if include_candidates:
+            payload["candidates"] = {
+                key: _compact_xray_fit(value) for key, value in self.candidates.items()
+            }
+        return payload
+
+
+_XRAY_MODEL_SPECS: tuple[XRayModelSpec, ...] = (
+    XRayModelSpec(
+        "powerlaw_free_nh", "tbabs*ztbabs*cflux*powerlaw", "powerlaw", "free",
+        ("powerlaw.PhoIndex",),
+    ),
+    XRayModelSpec(
+        "powerlaw_nh0", "tbabs*ztbabs*cflux*powerlaw", "powerlaw", "zero",
+        ("powerlaw.PhoIndex",),
+    ),
+    XRayModelSpec("apec", "cflux*apec", "apec", "none", ("apec.kT",)),
+    XRayModelSpec(
+        "bbody_free_nh", "tbabs*ztbabs*cflux*bbody", "bbody", "free",
+        ("bbody.kT",),
+    ),
+    XRayModelSpec(
+        "bbody_nh0", "tbabs*ztbabs*cflux*bbody", "bbody", "zero",
+        ("bbody.kT",),
+    ),
+    XRayModelSpec(
+        "bknpower_free_nh", "tbabs*ztbabs*cflux*bknpower", "bknpower", "free",
+        ("bknpower.PhoIndx1", "bknpower.BreakE", "bknpower.PhoIndx2"),
+    ),
+    XRayModelSpec(
+        "bknpower_nh0", "tbabs*ztbabs*cflux*bknpower", "bknpower", "zero",
+        ("bknpower.PhoIndx1", "bknpower.BreakE", "bknpower.PhoIndx2"),
+    ),
+)
+
+
+def resolve_xray_model_specs(
+    *,
+    model_class: str = "auto",
+    absorption_mode: str = "auto",
+    candidate_keys: Sequence[str] | None = None,
+) -> tuple[XRayModelSpec, ...]:
+    """Resolve a deterministic candidate set without importing XSPEC."""
+
+    by_key = {spec.key: spec for spec in _XRAY_MODEL_SPECS}
+    if candidate_keys is not None:
+        unknown = [key for key in candidate_keys if key not in by_key]
+        if unknown:
+            raise ValueError(f"Unknown X-ray model candidates: {', '.join(unknown)}")
+        if not candidate_keys:
+            raise ValueError("candidate_keys cannot be empty")
+        return tuple(by_key[key] for key in candidate_keys)
+
+    model_class = str(model_class).lower()
+    if model_class not in {"auto", "powerlaw"}:
+        raise ValueError("model_class must be 'auto' or 'powerlaw'")
+    absorption_mode = str(absorption_mode).lower()
+    if absorption_mode not in {"auto", "free", "zero"}:
+        raise ValueError("absorption_mode must be 'auto', 'free', or 'zero'")
+
+    allowed_families = {"powerlaw", "bknpower"}
+    if model_class == "auto":
+        allowed_families.update({"apec", "bbody"})
+    selected = []
+    for spec in _XRAY_MODEL_SPECS:
+        if spec.family not in allowed_families:
+            continue
+        if spec.absorption_mode == "none" or absorption_mode == "auto":
+            selected.append(spec)
+        elif spec.absorption_mode == absorption_mode:
+            selected.append(spec)
+    return tuple(selected)
+
+
+def calculate_model_fit_metrics(
+    statistic: float,
+    dof: int,
+    free_parameters: int,
+) -> ModelFitMetrics:
+    """Calculate AIC, AICc, and BIC from one likelihood fit."""
+
+    statistic = float(statistic)
+    dof = int(dof)
+    free_parameters = int(free_parameters)
+    if not math.isfinite(statistic):
+        raise ValueError("fit statistic must be finite")
+    if dof < 0 or free_parameters < 0:
+        raise ValueError("dof and free_parameters must be non-negative")
+    n = dof + free_parameters
+    if n <= 0:
+        raise ValueError("effective bin count must be positive")
+    aic = statistic + 2.0 * free_parameters
+    aicc = None
+    if n > free_parameters + 1:
+        aicc = aic + (
+            2.0 * free_parameters * (free_parameters + 1)
+            / (n - free_parameters - 1)
+        )
+    bic = statistic + free_parameters * math.log(n)
+    return ModelFitMetrics(
+        statistic=statistic,
+        dof=dof,
+        free_parameters=free_parameters,
+        effective_bins=n,
+        aic=aic,
+        aicc=aicc,
+        bic=bic,
+    )
 
 
 # ---------- Astropy 自定义模型类 ----------
@@ -1797,7 +1994,12 @@ def run_xspec_chain(
     )
 
 
-def _generate_xspec_result(model, spectrum) -> dict:
+def _generate_xspec_result(
+    model,
+    spectrum,
+    *,
+    flux_range_keV: tuple[float, float] | None = None,
+) -> dict:
     """
     根据XSPEC模型和光谱自动生成结果字典
 
@@ -1834,8 +2036,21 @@ def _generate_xspec_result(model, spectrum) -> dict:
 
                 param_dict = {
                     'value': param_val,
-                    'frozen': param.frozen
+                    'frozen': bool(param.frozen),
+                    'index': _model_parameter_index(model, param),
+                    'link': str(getattr(param, "link", "") or ""),
                 }
+                lower = getattr(param, "min", None)
+                upper = getattr(param, "max", None)
+                parameter_values = getattr(param, "values", ())
+                if lower is None and len(parameter_values) >= 6:
+                    lower = parameter_values[2]
+                if upper is None and len(parameter_values) >= 6:
+                    upper = parameter_values[5]
+                if lower is not None:
+                    param_dict["min"] = float(lower)
+                if upper is not None:
+                    param_dict["max"] = float(upper)
 
                 if not param.frozen:
                     try:
@@ -1844,7 +2059,10 @@ def _generate_xspec_result(model, spectrum) -> dict:
                         err_hi = abs(array[1])
                         param_dict['error_lo'] = err_lo
                         param_dict['error_hi'] = err_hi
-                        lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (-{err_lo:.4f}, +{err_hi:.4f})(1sigma error)")
+                        lines.append(
+                            f"{comp_name}.{param_name}: {param_val:.4f} "
+                            f"(-{err_lo:.4f}, +{err_hi:.4f}) (profile interval)"
+                        )
                     except Exception:
                         lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (error calculation failed)")
                 else:
@@ -1856,8 +2074,13 @@ def _generate_xspec_result(model, spectrum) -> dict:
             continue
 
     try:
-        emin = model.cflux.Emin.values[0] if hasattr(model, 'cflux') else None
-        emax = model.cflux.Emax.values[0] if hasattr(model, 'cflux') else None
+        if hasattr(model, 'cflux'):
+            emin = model.cflux.Emin.values[0]
+            emax = model.cflux.Emax.values[0]
+        elif flux_range_keV is not None:
+            emin, emax = flux_range_keV
+        else:
+            raise ValueError("No flux energy range is defined")
         xspec.AllModels.calcFlux(f"{emin} {emax}")
         flux_erg = float(spectrum.flux[0])
         flux_photons = float(spectrum.flux[3])
@@ -1869,7 +2092,8 @@ def _generate_xspec_result(model, spectrum) -> dict:
 
     result['flux_abs'] = {
         'erg_cm2_s': flux_erg,
-        'photons_cm2_s': flux_photons
+        'photons_cm2_s': flux_photons,
+        'energy_range_keV': (emin, emax) if emin is not None and emax is not None else None,
     }
 
     if flux_erg is not None and emin is not None and emax is not None:
@@ -1941,6 +2165,25 @@ def _generate_xspec_result(model, spectrum) -> dict:
     result['text'] = "\n".join(lines)
 
     return result
+
+
+def _count_free_xspec_parameters(models: Sequence[Any]) -> int:
+    """Count thawed, unlinked XSPEC parameters across data groups."""
+
+    count = 0
+    for model in models:
+        for component_name in getattr(model, "componentNames", ()):
+            component = getattr(model, component_name, None)
+            if component is None:
+                continue
+            for parameter_name in getattr(component, "parameterNames", ()):
+                parameter = getattr(component, parameter_name, None)
+                if parameter is None or bool(getattr(parameter, "frozen", False)):
+                    continue
+                if str(getattr(parameter, "link", "") or "").strip():
+                    continue
+                count += 1
+    return count
 
 
 def fit_spectrum(
@@ -2205,21 +2448,46 @@ def _model_parameter_index(model, parameter) -> int:
     return int(start) + index - 1
 
 
-def _prepared_error_parameters(model, model_name: str, models=None) -> str:
-    parameters = []
-    if "ztbabs" in model_name.lower() and hasattr(model, "zTBabs"):
+def _prepared_error_parameters(
+    model,
+    model_name: str,
+    models=None,
+    *,
+    intrinsic_nh_mode: str = "free",
+    delta_stat: float = 1.0,
+) -> str:
+    parameter_indices = []
+    prefix = "1." if float(delta_stat) == 1.0 else f"{float(delta_stat):g}"
+    if (
+        intrinsic_nh_mode == "free"
+        and "ztbabs" in model_name.lower()
+        and hasattr(model, "zTBabs")
+    ):
         if hasattr(model.zTBabs, "nH"):
-            parameters.append(f"1. {_model_parameter_index(model, model.zTBabs.nH)}")
+            parameter_indices.append(str(_model_parameter_index(model, model.zTBabs.nH)))
     for group_model in models or [model]:
         if hasattr(group_model, "cflux") and hasattr(group_model.cflux, "lg10Flux"):
-            parameters.append(
-                f"1. {_model_parameter_index(group_model, group_model.cflux.lg10Flux)}"
+            parameter_indices.append(
+                str(_model_parameter_index(group_model, group_model.cflux.lg10Flux))
             )
     if hasattr(model, "powerlaw") and hasattr(model.powerlaw, "PhoIndex"):
-        parameters.append(f"1. {_model_parameter_index(model, model.powerlaw.PhoIndex)}")
+        parameter_indices.append(str(_model_parameter_index(model, model.powerlaw.PhoIndex)))
+        if not hasattr(model, "cflux") and hasattr(model.powerlaw, "norm"):
+            parameter_indices.append(str(_model_parameter_index(model, model.powerlaw.norm)))
     elif hasattr(model, "zpowerlw") and hasattr(model.zpowerlw, "PhoIndex"):
-        parameters.append(f"1. {_model_parameter_index(model, model.zpowerlw.PhoIndex)}")
-    return " ".join(parameters)
+        parameter_indices.append(str(_model_parameter_index(model, model.zpowerlw.PhoIndex)))
+        if not hasattr(model, "cflux") and hasattr(model.zpowerlw, "norm"):
+            parameter_indices.append(str(_model_parameter_index(model, model.zpowerlw.norm)))
+    elif hasattr(model, "apec") and hasattr(model.apec, "kT"):
+        parameter_indices.append(str(_model_parameter_index(model, model.apec.kT)))
+    elif hasattr(model, "bbody") and hasattr(model.bbody, "kT"):
+        parameter_indices.append(str(_model_parameter_index(model, model.bbody.kT)))
+    elif hasattr(model, "bknpower"):
+        for name in ("PhoIndx1", "BreakE", "PhoIndx2"):
+            parameter = getattr(model.bknpower, name, None)
+            if parameter is not None:
+                parameter_indices.append(str(_model_parameter_index(model, parameter)))
+    return " ".join((prefix, *parameter_indices)) if parameter_indices else ""
 
 
 def _set_prepared_parameter_bounds(parameter, value: float, lower: float, upper: float) -> None:
@@ -2231,16 +2499,33 @@ def _set_prepared_parameter_bounds(parameter, value: float, lower: float, upper:
         parameter.values = f"{value},,{lower},{lower},{upper},{upper}"
 
 
-def _configure_prepared_model(model, *, model_name: str, emin: float, emax: float, redshift: float) -> None:
+def _configure_prepared_model(
+    model,
+    *,
+    model_name: str,
+    emin: float,
+    emax: float,
+    redshift: float,
+    galactic_nh_1e22: float | None,
+    freeze_galactic_nh: bool,
+    intrinsic_nh_mode: str = "free",
+) -> None:
+    if intrinsic_nh_mode not in {"free", "zero"}:
+        raise ValueError("intrinsic_nh_mode must be 'free' or 'zero'")
     if hasattr(model, "TBabs") and hasattr(model.TBabs, "nH"):
-        model.TBabs.nH = 1.0
-        model.TBabs.nH.frozen = True
+        if galactic_nh_1e22 is not None:
+            if not np.isfinite(galactic_nh_1e22) or galactic_nh_1e22 < 0:
+                raise ValueError("galactic_nh_1e22 must be finite and non-negative")
+            model.TBabs.nH = float(galactic_nh_1e22)
+            model.TBabs.nH.frozen = bool(freeze_galactic_nh)
 
     if "ztbabs" in model_name.lower() and hasattr(model, "zTBabs"):
         if hasattr(model.zTBabs, "nH"):
-            model.zTBabs.nH = 0.5
-            _set_prepared_parameter_bounds(model.zTBabs.nH, 0.5, 0.0, 100.0)
-        if redshift > 0 and hasattr(model.zTBabs, "Redshift"):
+            initial_nh = 0.0 if intrinsic_nh_mode == "zero" else 0.5
+            model.zTBabs.nH = initial_nh
+            _set_prepared_parameter_bounds(model.zTBabs.nH, initial_nh, 0.0, 100.0)
+            model.zTBabs.nH.frozen = intrinsic_nh_mode == "zero"
+        if hasattr(model.zTBabs, "Redshift"):
             model.zTBabs.Redshift = redshift
             model.zTBabs.Redshift.frozen = True
 
@@ -2259,8 +2544,13 @@ def _configure_prepared_model(model, *, model_name: str, emin: float, emax: floa
         model.powerlaw.PhoIndex = 2.0
         _set_prepared_parameter_bounds(model.powerlaw.PhoIndex, 2.0, 0.0, 9.0)
         if hasattr(model.powerlaw, "norm"):
-            model.powerlaw.norm = 1.0
-            model.powerlaw.norm.frozen = True
+            if hasattr(model, "cflux"):
+                model.powerlaw.norm = 1.0
+                model.powerlaw.norm.frozen = True
+            else:
+                model.powerlaw.norm = 1e-3
+                _set_prepared_parameter_bounds(model.powerlaw.norm, 1e-3, 0.0, 1e24)
+                model.powerlaw.norm.frozen = False
 
     if hasattr(model, "zpowerlw") and hasattr(model.zpowerlw, "PhoIndex"):
         model.zpowerlw.PhoIndex = 2.0
@@ -2268,6 +2558,46 @@ def _configure_prepared_model(model, *, model_name: str, emin: float, emax: floa
         if redshift > 0 and hasattr(model.zpowerlw, "Redshift"):
             model.zpowerlw.Redshift = redshift
             model.zpowerlw.Redshift.frozen = True
+        if hasattr(model.zpowerlw, "norm") and hasattr(model, "cflux"):
+            model.zpowerlw.norm = 1.0
+            model.zpowerlw.norm.frozen = True
+
+    if hasattr(model, "apec"):
+        if hasattr(model.apec, "kT"):
+            model.apec.kT = 1.0
+            _set_prepared_parameter_bounds(model.apec.kT, 1.0, 0.008, 64.0)
+        if hasattr(model.apec, "Abundanc"):
+            model.apec.Abundanc = 1.0
+            model.apec.Abundanc.frozen = True
+        if hasattr(model.apec, "Redshift"):
+            model.apec.Redshift = redshift
+            model.apec.Redshift.frozen = True
+        if hasattr(model.apec, "norm"):
+            model.apec.norm = 1.0
+            model.apec.norm.frozen = True
+
+    if hasattr(model, "bbody"):
+        if hasattr(model.bbody, "kT"):
+            model.bbody.kT = min(max(0.3, emin), emax)
+            _set_prepared_parameter_bounds(model.bbody.kT, model.bbody.kT.values[0], 0.01, max(10.0, emax))
+        if hasattr(model.bbody, "norm"):
+            model.bbody.norm = 1.0
+            model.bbody.norm.frozen = True
+
+    if hasattr(model, "bknpower"):
+        if hasattr(model.bknpower, "PhoIndx1"):
+            model.bknpower.PhoIndx1 = 1.5
+            _set_prepared_parameter_bounds(model.bknpower.PhoIndx1, 1.5, 0.0, 9.0)
+        if hasattr(model.bknpower, "BreakE"):
+            break_energy = math.sqrt(emin * emax)
+            model.bknpower.BreakE = break_energy
+            _set_prepared_parameter_bounds(model.bknpower.BreakE, break_energy, emin, emax)
+        if hasattr(model.bknpower, "PhoIndx2"):
+            model.bknpower.PhoIndx2 = 2.5
+            _set_prepared_parameter_bounds(model.bknpower.PhoIndx2, 2.5, 0.0, 9.0)
+        if hasattr(model.bknpower, "norm"):
+            model.bknpower.norm = 1.0
+            model.bknpower.norm.frozen = True
 
 
 def _prepared_input_dict(prepared) -> dict[str, str | int | None]:
@@ -2368,8 +2698,6 @@ def _link_parameter(parameter, reference) -> None:
 
 
 def _link_default_prepared_model_groups(models, model_name: str) -> None:
-    if model_name.lower().replace(" ", "") != "tbabs*ztbabs*cflux*powerlaw":
-        return
     if len(models) <= 1:
         return
     reference = models[0]
@@ -2380,6 +2708,22 @@ def _link_default_prepared_model_groups(models, model_name: str) -> None:
         if hasattr(reference, "powerlaw") and hasattr(model, "powerlaw"):
             if hasattr(reference.powerlaw, "PhoIndex") and hasattr(model.powerlaw, "PhoIndex"):
                 _link_parameter(model.powerlaw.PhoIndex, reference.powerlaw.PhoIndex)
+        for component_name, parameter_names in (
+            ("apec", ("kT", "Abundanc", "Redshift")),
+            ("bbody", ("kT",)),
+            ("bknpower", ("PhoIndx1", "BreakE", "PhoIndx2")),
+        ):
+            reference_component = getattr(reference, component_name, None)
+            component = getattr(model, component_name, None)
+            if reference_component is None or component is None:
+                continue
+            for parameter_name in parameter_names:
+                reference_parameter = getattr(reference_component, parameter_name, None)
+                parameter = getattr(component, parameter_name, None)
+                if reference_parameter is None or parameter is None:
+                    continue
+                if not bool(getattr(parameter, "frozen", False)):
+                    _link_parameter(parameter, reference_parameter)
 
 
 def _set_prepared_xspec_links(spectrum, prepared) -> None:
@@ -2532,13 +2876,21 @@ def fit_prepared(
     model_name: str = "tbabs*ztbabs*cflux*powerlaw",
     redshift: float = 0.0,
     stat_method: str = "cstat",
+    abundance: str = "wilm",
+    cross_section: str = "vern",
+    galactic_nh_1e22: float | None = None,
+    freeze_galactic_nh: bool = True,
+    intrinsic_nh_mode: Literal["free", "zero"] = "free",
     calculate_errors: bool = True,
     error_command: str | None = None,
+    error_delta_stat: float = 1.0,
     srcname: str | None = None,
     instname: str | None = None,
     plot_backend: str = "matplotlib",
     plot_format: str = "png",
+    plot_formats: Sequence[str] | None = None,
     plot_density: int = 300,
+    plot_required: bool = False,
 ) -> dict:
     """Fit one prepared spectrum or multiple prepared spectra with XSPEC."""
     from jinwu.core.plot import plotfit
@@ -2577,7 +2929,8 @@ def fit_prepared(
 
     xspec.AllData.clear()
     xspec.AllModels.clear()
-    xspec.Xset.abund = "wilm"
+    xspec.Xset.abund = abundance
+    xspec.Xset.xsect = cross_section
     xspec.Fit.query = "yes"
     xspec.Fit.statMethod = stat_method
 
@@ -2619,12 +2972,27 @@ def fit_prepared(
             emin=group["energy_range"]["emin"],
             emax=group["energy_range"]["emax"],
             redshift=redshift,
+            galactic_nh_1e22=galactic_nh_1e22,
+            freeze_galactic_nh=freeze_galactic_nh,
+            intrinsic_nh_mode=intrinsic_nh_mode,
         )
     _link_default_prepared_model_groups(group_models, model_name)
-    xspec.Fit.perform()
+    perform_text = _capture_xspec_log(
+        xspec,
+        output / "fit_prepared.xspec_perform.tmp.log",
+        xspec.Fit.perform,
+        warnings_list,
+    )
 
-    command = error_command or _prepared_error_parameters(model, model_name, group_models)
+    command = error_command or _prepared_error_parameters(
+        model,
+        model_name,
+        group_models,
+        intrinsic_nh_mode=intrinsic_nh_mode,
+        delta_stat=error_delta_stat,
+    )
     error_text = ""
+    profile_errors_succeeded = False
     if calculate_errors and command:
         try:
             error_text = _capture_xspec_log(
@@ -2633,10 +3001,22 @@ def fit_prepared(
                 lambda: xspec.Fit.error(command),
                 warnings_list,
             )
+            profile_errors_succeeded = True
+            for line in error_text.splitlines():
+                if "warning" in line.lower() or "pegged" in line.lower():
+                    warnings_list.append(f"XSPEC profile error: {line.strip()}")
         except Exception as exc:
             warnings_list.append(f"XSPEC error calculation failed: {exc}")
 
-    results = _generate_xspec_result(model, xspec_spectra[0])
+    results = _generate_xspec_result(
+        model,
+        xspec_spectra[0],
+        flux_range_keV=fit_ranges[first_key],
+    )
+    if not profile_errors_succeeded:
+        for parameter in (results.get("parameters") or {}).values():
+            parameter.pop("error_lo", None)
+            parameter.pop("error_hi", None)
     prepared_inputs = [_prepared_input_dict(spectrum) for spectrum in prepared_spectra]
     if srcname is None:
         first = prepared_spectra[0]
@@ -2655,7 +3035,18 @@ def fit_prepared(
     per_group = []
     for group, group_model in zip(data_groups, group_models):
         spectrum_index = group["spectrum_indices"][0]
-        group_result = _generate_xspec_result(group_model, xspec_spectra[spectrum_index - 1])
+        group_result = _generate_xspec_result(
+            group_model,
+            xspec_spectra[spectrum_index - 1],
+            flux_range_keV=(
+                group["energy_range"]["emin"],
+                group["energy_range"]["emax"],
+            ),
+        )
+        if not profile_errors_succeeded:
+            for parameter in (group_result.get("parameters") or {}).values():
+                parameter.pop("error_lo", None)
+                parameter.pop("error_hi", None)
         cflux = {}
         if hasattr(group_model, "cflux"):
             for name in ("Emin", "Emax", "lg10Flux"):
@@ -2708,29 +3099,590 @@ def fit_prepared(
     results["report_txt"] = str(report)
     results["warnings"] = warnings_list
     results["group_min"] = prepared_spectra[0].group_min
+    results["xspec_settings"] = {
+        "abundance": abundance,
+        "cross_section": cross_section,
+        "requested_statistic": stat_method,
+        "galactic_nh_1e22": galactic_nh_1e22,
+        "freeze_galactic_nh": freeze_galactic_nh,
+        "intrinsic_nh_mode": intrinsic_nh_mode,
+        "error_delta_stat": error_delta_stat,
+        "profile_confidence": 0.90 if abs(error_delta_stat - 2.706) < 1e-6 else None,
+        "profile_errors_succeeded": profile_errors_succeeded,
+    }
+    results["effective_statistic"] = (
+        "wstat"
+        if stat_method.lower() == "cstat"
+        and any(spectrum.background_pha is not None for spectrum in prepared_spectra)
+        else stat_method.lower()
+    )
+    results["free_parameter_count"] = _count_free_xspec_parameters(group_models)
     results["group_mins"] = {
         _prepared_spectrum_key(spectrum): spectrum.group_min
         for spectrum in prepared_spectra
     }
 
-    try:
-        figure_path, _ = plotfit(
-            srcname=srcname,
-            instname=instname,
-            group_min=prepared_spectra[0].group_min,
-            modelname=model_name,
-            redshift=redshift,
-            outputdir=output,
-            backend=plot_backend,
-            output_format=plot_format,
-            density=plot_density,
+    requested_formats = (
+        tuple(plot_formats) if plot_formats is not None else (plot_format,)
+    )
+    plot_paths = []
+    plot_errors = []
+    for requested_format in requested_formats:
+        try:
+            figure_path, figure = plotfit(
+                srcname=srcname,
+                instname=instname,
+                group_min=prepared_spectra[0].group_min,
+                modelname=model_name,
+                redshift=redshift,
+                outputdir=output,
+                backend=plot_backend,
+                output_format=requested_format,
+                density=plot_density,
+            )
+            if figure_path is not None:
+                plot_paths.append(str(figure_path))
+            if figure is not None:
+                try:
+                    import matplotlib.pyplot as plt
+
+                    plt.close(figure)
+                except Exception:
+                    pass
+        except Exception as exc:
+            plot_errors.append(f"{requested_format}: {exc}")
+    results["plot_fit"] = plot_paths[0] if plot_paths else None
+    results["plot_fits"] = plot_paths
+    if plot_errors:
+        results["plot_fit_error"] = "; ".join(plot_errors)
+        warnings_list.extend(f"fit plot failed: {message}" for message in plot_errors)
+    if plot_required and len(plot_paths) != len(requested_formats):
+        raise RuntimeError(
+            "Required XSPEC fit plots were not produced: " + "; ".join(plot_errors)
         )
-        results["plot_fit"] = str(figure_path) if figure_path else None
-    except Exception as exc:
-        results["plot_fit"] = None
-        results["plot_fit_error"] = str(exc)
-        warnings_list.append(f"fit plot failed: {exc}")
+
+    from jinwu.core.products import save_xspec_session
+
+    products = save_xspec_session(
+        xspec,
+        output_dir=output,
+        label=label,
+        result=results,
+        report_txt=report,
+        transcript="\n\n".join(
+            part
+            for part in (perform_text.strip(), error_text.strip(), show_text.strip())
+            if part
+        ),
+        plots=plot_paths,
+        input_paths=[
+            value
+            for item in prepared_inputs
+            for value in item.values()
+            if isinstance(value, str) and Path(value).exists()
+        ],
+    )
+    results["fit_products"] = {
+        "result_json": str(products.result_json),
+        "report_txt": str(products.report_txt),
+        "xspec_log": str(products.xspec_log),
+        "xcm": str(products.xcm),
+        "plots": [str(path) for path in products.plots],
+        "replay_cwd": str(products.replay_cwd),
+    }
     return results
+
+
+def _compact_xray_fit(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the serializable scientific surface of a candidate fit."""
+
+    keys = (
+        "model_key", "model_family", "absorption_mode", "model", "parameters",
+        "statistics", "effective_statistic", "free_parameter_count", "energy_range", "energy_ranges",
+        "flux_abs", "rate", "fit_products", "report_txt", "plot_fit", "plot_fits",
+        "warnings", "xspec_settings", "derived_parameters", "metrics",
+    )
+    return {key: result.get(key) for key in keys if key in result}
+
+
+def _parameter_by_name(
+    parameters: Mapping[str, Mapping[str, Any]],
+    requested: str,
+) -> Mapping[str, Any] | None:
+    requested_lower = requested.lower()
+    for name, value in parameters.items():
+        if name.lower() == requested_lower:
+            return value
+    return None
+
+
+def _metric_value(metrics: ModelFitMetrics, metric: str) -> float:
+    value = getattr(metrics, metric)
+    if value is None:
+        raise ValueError(f"Metric {metric} is unavailable")
+    return float(value)
+
+
+def _decorate_model_metrics(
+    metrics: Mapping[str, ModelFitMetrics],
+    requested_metric: str,
+) -> tuple[dict[str, ModelFitMetrics], tuple[str, ...], str, list[str]]:
+    metric = requested_metric.lower()
+    if metric not in {"aic", "aicc", "bic"}:
+        raise ValueError("selection_metric must be 'aic', 'aicc', or 'bic'")
+    warnings_list: list[str] = []
+    if metric == "aicc" and any(item.aicc is None for item in metrics.values()):
+        metric = "aic"
+        warnings_list.append(
+            "AICc is unavailable for at least one candidate because n <= k + 1; "
+            "ranking fell back to AIC."
+        )
+    ranking = tuple(sorted(metrics, key=lambda key: _metric_value(metrics[key], metric)))
+    best = _metric_value(metrics[ranking[0]], metric)
+    deltas = {key: _metric_value(value, metric) - best for key, value in metrics.items()}
+    best_aic = min(item.aic for item in metrics.values())
+    best_bic = min(item.bic for item in metrics.values())
+    delta_aic = {key: item.aic - best_aic for key, item in metrics.items()}
+    delta_bic = {key: item.bic - best_bic for key, item in metrics.items()}
+    if all(item.aicc is not None for item in metrics.values()):
+        best_aicc = min(float(item.aicc) for item in metrics.values())
+        delta_aicc = {
+            key: float(item.aicc) - best_aicc for key, item in metrics.items()
+        }
+        weight_deltas = delta_aicc
+    else:
+        delta_aicc = {key: None for key in metrics}
+        weight_deltas = delta_aic
+    normalizer = sum(math.exp(-0.5 * delta) for delta in weight_deltas.values())
+    decorated = {
+        key: replace(
+            value,
+            delta=deltas[key],
+            delta_aic=delta_aic[key],
+            delta_aicc=delta_aicc[key],
+            delta_bic=delta_bic[key],
+            akaike_weight=(math.exp(-0.5 * weight_deltas[key]) / normalizer),
+            ranking_metric=metric,
+        )
+        for key, value in metrics.items()
+    }
+    return decorated, ranking, metric, warnings_list
+
+
+def _nh_interval_touches_zero(result: Mapping[str, Any]) -> tuple[bool, str]:
+    parameter = _parameter_by_name(result.get("parameters") or {}, "zTBabs.nH")
+    if parameter is None:
+        return True, "zTBabs.nH is missing"
+    value = float(parameter.get("value", 0.0))
+    error_low = parameter.get("error_lo")
+    if error_low is None or not math.isfinite(float(error_low)):
+        return True, "lower profile error is unavailable"
+    return value - float(error_low) <= 0.0, "90% profile interval reaches zero"
+
+
+def _candidate_is_well_constrained(
+    spec: XRayModelSpec,
+    result: Mapping[str, Any],
+) -> tuple[bool, list[str]]:
+    parameters = result.get("parameters") or {}
+    problems: list[str] = []
+    critical_parameters = list(spec.critical_parameters)
+    if spec.absorption_mode == "free":
+        critical_parameters.append("zTBabs.nH")
+    for name in critical_parameters:
+        parameter = _parameter_by_name(parameters, name)
+        if parameter is None:
+            problems.append(f"missing critical parameter {name}")
+            continue
+        value = float(parameter.get("value", math.nan))
+        error_low = parameter.get("error_lo")
+        error_high = parameter.get("error_hi")
+        if not math.isfinite(value):
+            problems.append(f"non-finite {name}")
+        if error_low is None or error_high is None:
+            problems.append(f"profile error unavailable for {name}")
+        elif not all(math.isfinite(float(item)) and float(item) > 0 for item in (error_low, error_high)):
+            problems.append(f"invalid profile error for {name}")
+        lower = parameter.get("min")
+        upper = parameter.get("max")
+        scale = max(abs(value), 1.0)
+        span = (
+            float(upper) - float(lower)
+            if lower is not None and upper is not None
+            else 0.0
+        )
+        boundary_tolerance = max(1e-5 * scale, 1e-3 * max(span, 0.0))
+        if lower is not None and value - float(lower) <= boundary_tolerance:
+            problems.append(f"{name} is at its lower bound")
+        if upper is not None and float(upper) - value <= boundary_tolerance:
+            problems.append(f"{name} is at its upper bound")
+        if error_low is not None and lower is not None:
+            if value - float(error_low) <= float(lower):
+                problems.append(f"{name} profile interval reaches its lower bound")
+        if error_high is not None and upper is not None:
+            if value + float(error_high) >= float(upper):
+                problems.append(f"{name} profile interval reaches its upper bound")
+    return not problems, problems
+
+
+def _absorption_comparisons(
+    candidates: Mapping[str, Mapping[str, Any]],
+    metrics: Mapping[str, ModelFitMetrics],
+) -> dict[str, dict[str, Any]]:
+    comparisons: dict[str, dict[str, Any]] = {}
+    for family in ("powerlaw", "bbody", "bknpower"):
+        free_key = f"{family}_free_nh"
+        zero_key = f"{family}_nh0"
+        if free_key not in candidates or zero_key not in candidates:
+            continue
+        free_metric = metrics[free_key]
+        zero_metric = metrics[zero_key]
+        parameter = _parameter_by_name(
+            candidates[free_key].get("parameters") or {}, "zTBabs.nH"
+        ) or {}
+        delta_c = zero_metric.statistic - free_metric.statistic
+        boundary_p = (
+            1.0
+            if delta_c <= 0.0
+            else 0.5 * math.erfc(math.sqrt(delta_c / 2.0))
+        )
+        comparisons[family] = {
+            "free_key": free_key,
+            "zero_key": zero_key,
+            "delta_c_zero_minus_free": delta_c,
+            "delta_aic_zero_minus_free": zero_metric.aic - free_metric.aic,
+            "delta_aicc_zero_minus_free": (
+                None
+                if zero_metric.aicc is None or free_metric.aicc is None
+                else zero_metric.aicc - free_metric.aicc
+            ),
+            "delta_bic_zero_minus_free": zero_metric.bic - free_metric.bic,
+            "nh_best": parameter.get("value"),
+            "nh_error_low_90": parameter.get("error_lo"),
+            "nh_error_high_90": parameter.get("error_hi"),
+            "boundary_lrt_p_reference_only": boundary_p,
+            "warning": (
+                "The boundary likelihood-ratio p-value is descriptive only; "
+                "no F-test is used for intrinsic absorption."
+            ),
+        }
+    return comparisons
+
+
+def _choose_xray_model(
+    specs: Mapping[str, XRayModelSpec],
+    candidates: Mapping[str, Mapping[str, Any]],
+    metrics: Mapping[str, ModelFitMetrics],
+    ranking: Sequence[str],
+    metric: str,
+) -> tuple[str, str, list[str]]:
+    warnings_list: list[str] = []
+
+    def score(key: str) -> float:
+        return _metric_value(metrics[key], metric)
+
+    def best_family(family: str) -> str | None:
+        keys = [key for key in ranking if specs[key].family == family]
+        if not keys:
+            return None
+        free = next((key for key in keys if specs[key].absorption_mode == "free"), None)
+        zero = next((key for key in keys if specs[key].absorption_mode == "zero"), None)
+        if free and zero:
+            touches_zero, _ = _nh_interval_touches_zero(candidates[free])
+            if touches_zero and score(zero) - score(free) <= 2.0:
+                return zero
+            if abs(score(zero) - score(free)) < 2.0:
+                return min((free, zero), key=lambda key: metrics[key].free_parameters)
+        best = keys[0]
+        equivalent = [key for key in keys if score(key) - score(best) < 2.0]
+        return min(equivalent, key=lambda key: metrics[key].free_parameters)
+
+    baseline = best_family("powerlaw")
+    if baseline is None:
+        raw = ranking[0]
+        return raw, "No power-law baseline succeeded; adopted the best available candidate.", warnings_list
+
+    adopted = baseline
+    reason = (
+        f"Adopted the preferred power-law candidate {baseline}; models within "
+        "Delta criterion < 2 were treated as indistinguishable and simplified."
+    )
+    baseline_constrained, baseline_problems = _candidate_is_well_constrained(
+        specs[baseline], candidates[baseline]
+    )
+    if not baseline_constrained:
+        warnings_list.append(
+            f"Adopted power-law baseline {baseline} has constrained-parameter "
+            f"diagnostics requiring review: {'; '.join(baseline_problems)}."
+        )
+    challengers = []
+    for family in ("apec", "bbody", "bknpower"):
+        key = best_family(family)
+        if key is None:
+            continue
+        improvement = score(baseline) - score(key)
+        constrained, problems = _candidate_is_well_constrained(specs[key], candidates[key])
+        if improvement >= 6.0 and constrained:
+            challengers.append((improvement, key))
+        elif improvement >= 6.0:
+            warnings_list.append(
+                f"{key} improved {metric.upper()} by {improvement:.3g} but was not "
+                f"auto-adopted: {'; '.join(problems)}."
+            )
+    if challengers:
+        improvement, adopted = max(challengers)
+        reason = (
+            f"{adopted} replaced the preferred power-law model because it improved "
+            f"{metric.upper()} by {improvement:.3g} and its critical parameters had "
+            "valid profile errors away from configured bounds."
+        )
+    return adopted, reason, warnings_list
+
+
+def _write_xray_candidate_summary(
+    path: Path,
+    spec: XRayModelSpec,
+    result: Mapping[str, Any] | None,
+    metrics: ModelFitMetrics | None,
+    failure: str | None = None,
+) -> None:
+    lines = [f"候选模型：{spec.key}", f"XSPEC 表达式：{spec.expression}"]
+    if spec.family == "apec":
+        lines.append("吸收假设：按配置完全不包含银河系或本征吸收。")
+    else:
+        lines.append(
+            "吸收假设：银河系 TBabs 固定；"
+            + ("本征 zTBabs.nH 自由。" if spec.absorption_mode == "free" else "本征 zTBabs.nH 固定为 0。")
+        )
+    if failure is not None:
+        lines.append(f"拟合失败：{failure}")
+    elif result is not None and metrics is not None:
+        lines.append(
+            f"统计量：{result.get('effective_statistic', 'unknown')}="
+            f"{metrics.statistic:.6g}/{metrics.dof}；k={metrics.free_parameters}；"
+            f"AIC={metrics.aic:.6g}；AICc={metrics.aicc if metrics.aicc is not None else 'N/A'}；"
+            f"BIC={metrics.bic:.6g}；Delta={metrics.delta if metrics.delta is not None else 'N/A'}；"
+            f"weight={metrics.akaike_weight if metrics.akaike_weight is not None else 'N/A'}。"
+        )
+        lines.append("参数：")
+        for name, parameter in (result.get("parameters") or {}).items():
+            value = parameter.get("value")
+            if parameter.get("frozen"):
+                lines.append(f"  {name}={value}（固定）")
+            else:
+                lines.append(
+                    f"  {name}={value} (-{parameter.get('error_lo', 'N/A')}/"
+                    f"+{parameter.get('error_hi', 'N/A')})"
+                )
+        flux_parameter = _parameter_by_name(
+            result.get("parameters") or {}, "cflux.lg10Flux"
+        )
+        if flux_parameter is not None:
+            lg_flux = float(flux_parameter["value"])
+            lines.append(f"未吸收 flux={10.0 ** lg_flux:.6g} erg s^-1 cm^-2。")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def fit_xray_models(
+    prepared,
+    *,
+    outdir: str | Path,
+    model_class: str = "auto",
+    absorption_mode: str = "auto",
+    candidate_keys: Sequence[str] | None = None,
+    selection_metric: str = "aicc",
+    galactic_nh_1e22: float | None = None,
+    redshift: float = 0.0,
+    **fit_kwargs: Any,
+) -> XRayModelComparisonResult:
+    """Fit and compare a controlled set of XSPEC X-ray spectral models."""
+
+    specs_tuple = resolve_xray_model_specs(
+        model_class=model_class,
+        absorption_mode=absorption_mode,
+        candidate_keys=candidate_keys,
+    )
+    specs = {spec.key: spec for spec in specs_tuple}
+    output = Path(outdir).expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    candidates: dict[str, dict[str, Any]] = {}
+    raw_metrics: dict[str, ModelFitMetrics] = {}
+    failures: dict[str, str] = {}
+    warning_messages: list[str] = []
+
+    forbidden = {
+        "model_name", "intrinsic_nh_mode", "error_command", "error_delta_stat",
+        "freeze_galactic_nh",
+    }
+    overlap = forbidden.intersection(fit_kwargs)
+    if overlap:
+        raise TypeError(f"fit_xray_models controls these arguments: {', '.join(sorted(overlap))}")
+    if not math.isfinite(float(redshift)) or float(redshift) < 0:
+        raise ValueError("redshift must be finite and non-negative")
+    if any("tbabs" in spec.expression.lower() for spec in specs_tuple):
+        if galactic_nh_1e22 is None:
+            raise ValueError(
+                "galactic_nh_1e22 is required when any candidate contains TBabs"
+            )
+        if not math.isfinite(float(galactic_nh_1e22)) or float(galactic_nh_1e22) < 0:
+            raise ValueError("galactic_nh_1e22 must be finite and non-negative")
+
+    for spec in specs_tuple:
+        candidate_dir = output / "models" / spec.key
+        candidate_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            result = fit_prepared(
+                prepared,
+                outdir=candidate_dir,
+                model_name=spec.expression,
+                intrinsic_nh_mode=(
+                    "zero" if spec.absorption_mode == "zero" else "free"
+                ),
+                error_delta_stat=2.706,
+                galactic_nh_1e22=galactic_nh_1e22,
+                freeze_galactic_nh=True,
+                redshift=redshift,
+                **fit_kwargs,
+            )
+            statistics = result.get("statistics") or {}
+            metrics = calculate_model_fit_metrics(
+                statistics["value"],
+                statistics["dof"],
+                result.get("free_parameter_count", 0),
+            )
+            result["model_key"] = spec.key
+            result["model_family"] = spec.family
+            result["absorption_mode"] = spec.absorption_mode
+            result["derived_parameters"] = {}
+            if spec.family == "bbody":
+                parameter = _parameter_by_name(result.get("parameters") or {}, "bbody.kT")
+                if parameter is not None:
+                    result["derived_parameters"]["rest_kT_keV"] = (
+                        (1.0 + float(redshift)) * float(parameter["value"])
+                    )
+            if spec.family == "bknpower":
+                parameter = _parameter_by_name(result.get("parameters") or {}, "bknpower.BreakE")
+                if parameter is not None:
+                    result["derived_parameters"]["rest_break_energy_keV"] = (
+                        (1.0 + float(redshift)) * float(parameter["value"])
+                    )
+            if spec.family == "apec":
+                message = (
+                    "APEC candidate intentionally omits both Galactic and intrinsic "
+                    "absorption; its information criterion tests that distinct assumption."
+                )
+                result.setdefault("warnings", []).append(message)
+            candidates[spec.key] = result
+            raw_metrics[spec.key] = metrics
+            _write_xray_candidate_summary(
+                candidate_dir / "summary_zh.txt", spec, result, metrics
+            )
+        except Exception as exc:
+            failure = f"{type(exc).__name__}: {exc}"
+            failures[spec.key] = failure
+            failure_payload = {
+                "model_key": spec.key,
+                "model_expression": spec.expression,
+                "status": "failed",
+                "error": failure,
+            }
+            (candidate_dir / "fit_failure.json").write_text(
+                json.dumps(failure_payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            _write_xray_candidate_summary(
+                candidate_dir / "summary_zh.txt", spec, None, None, failure
+            )
+
+    if not candidates:
+        raise RuntimeError(
+            "All X-ray model candidates failed: "
+            + "; ".join(f"{key}: {value}" for key, value in failures.items())
+        )
+
+    metrics, ranking, effective_metric, metric_warnings = _decorate_model_metrics(
+        raw_metrics, selection_metric
+    )
+    warning_messages.extend(metric_warnings)
+    adopted_key, adopted_reason, selection_warnings = _choose_xray_model(
+        specs, candidates, metrics, ranking, effective_metric
+    )
+    warning_messages.extend(selection_warnings)
+    absorption = _absorption_comparisons(candidates, metrics)
+    for key, result in candidates.items():
+        result["metrics"] = {
+            "statistic": metrics[key].statistic,
+            "dof": metrics[key].dof,
+            "free_parameters": metrics[key].free_parameters,
+            "effective_bins": metrics[key].effective_bins,
+            "aic": metrics[key].aic,
+            "aicc": metrics[key].aicc,
+            "bic": metrics[key].bic,
+            "delta": metrics[key].delta,
+            "delta_aic": metrics[key].delta_aic,
+            "delta_aicc": metrics[key].delta_aicc,
+            "delta_bic": metrics[key].delta_bic,
+            "akaike_weight": metrics[key].akaike_weight,
+            "ranking_metric": metrics[key].ranking_metric,
+        }
+        result_json = (result.get("fit_products") or {}).get("result_json")
+        if result_json:
+            serializable = {
+                item_key: item_value
+                for item_key, item_value in result.items()
+                if item_key != "prepared"
+            }
+            Path(result_json).write_text(
+                json.dumps(serializable, ensure_ascii=False, indent=2, default=str) + "\n",
+                encoding="utf-8",
+            )
+        _write_xray_candidate_summary(
+            output / "models" / key / "summary_zh.txt",
+            specs[key],
+            result,
+            metrics[key],
+        )
+
+    comparison = XRayModelComparisonResult(
+        candidates=candidates,
+        metrics=metrics,
+        failures=failures,
+        ranking=ranking,
+        adopted_key=adopted_key,
+        adopted_reason=adopted_reason,
+        selection_metric=effective_metric,
+        warnings=tuple(warning_messages),
+        absorption_comparisons=absorption,
+    )
+    json_path = output / "model_comparison.json"
+    text_path = output / "model_comparison.txt"
+    comparison.comparison_json = str(json_path)
+    comparison.comparison_txt = str(text_path)
+    json_path.write_text(
+        json.dumps(comparison.to_dict(), ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
+    text_lines = [
+        f"Adopted model: {adopted_key}",
+        f"Reason: {adopted_reason}",
+        f"Ranking metric: {effective_metric}",
+        "",
+        "key statistic/dof k AIC AICc BIC delta weight",
+    ]
+    for key in ranking:
+        item = metrics[key]
+        text_lines.append(
+            f"{key} {item.statistic:.6g}/{item.dof} {item.free_parameters} "
+            f"{item.aic:.6g} {item.aicc if item.aicc is not None else 'N/A'} "
+            f"{item.bic:.6g} {item.delta:.6g} {item.akaike_weight:.6g}"
+        )
+    if failures:
+        text_lines.extend(["", "Failed candidates:"])
+        text_lines.extend(f"{key}: {value}" for key, value in failures.items())
+    if warning_messages:
+        text_lines.extend(["", "Warnings:", *warning_messages])
+    text_path.write_text("\n".join(text_lines) + "\n", encoding="utf-8")
+    return comparison
 
 
 def _validate_fit_catalogs(catalogs) -> None:

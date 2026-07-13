@@ -458,8 +458,10 @@ class LightcurveData(LightcurveDataBase):
             return None
         from .time import TimeDelta
 
-        absolute_times = self.absolute_time
-        dt = TimeDelta(absolute_times[index], format='sec') if index is not None else TimeDelta(absolute_times, format='sec')
+        # timezero_obj already represents the first retained sample in UTC.
+        # Adding absolute_time would apply the MET timezero a second time.
+        relative_times = self.time_rel if self.time_rel is not None else self.time
+        dt = TimeDelta(relative_times[index], format='sec') if index is not None else TimeDelta(relative_times, format='sec')
         return self.timezero_obj + dt
 
     @property
@@ -797,8 +799,10 @@ class EventData(EventDataBase):
             return None
         from astropy.time import TimeDelta
 
-        absolute_times = self.absolute_time
-        dt = TimeDelta(absolute_times[index], format='sec') if index is not None else TimeDelta(absolute_times, format='sec')
+        # timezero_obj already represents the first retained event in UTC.
+        # Adding absolute_time would apply the MET timezero a second time.
+        relative_times = self.time_rel if self.time_rel.size > 0 else self.time
+        dt = TimeDelta(relative_times[index], format='sec') if index is not None else TimeDelta(relative_times, format='sec')
         return self.timezero_obj + dt
 
     def get_energy(self, rmf: Optional[RmfData] = None) -> Optional[np.ndarray]:

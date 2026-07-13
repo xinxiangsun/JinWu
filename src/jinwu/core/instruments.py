@@ -1208,8 +1208,12 @@ class WXTScanner(LayoutScanner):
             return "source_lightcurve"
         if re.search(r"s\d+bk\.reg$", lower_name):
             return "background_region"
+        if re.search(r"s\d+(?:src)?\.reg$", lower_name):
+            return "source_region"
         if lower_name.endswith("arm.reg"):
             return "arm_region"
+        if lower_name.endswith(".cat"):
+            return "source_catalog"
         if lower_name.endswith(".reg"):
             return "region"
         if lower_name.endswith(".mkf"):
@@ -1219,7 +1223,7 @@ class WXTScanner(LayoutScanner):
         if lower_name.endswith((".exp", ".exp.gz")):
             return "exposure"
         if lower_name.endswith(
-            (".gif", ".pdf", ".cat", ".conf", ".img", ".prefilter", "_ufbp.fits", "_ufhp.fits")
+            (".gif", ".pdf", ".conf", ".img", ".prefilter", "_ufbp.fits", "_ufhp.fits")
         ):
             return "ancillary"
         return None

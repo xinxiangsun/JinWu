@@ -1,16 +1,28 @@
-"""轻量级 xselect-like 功能（纯 Python 实现，最小可用版）
+"""XSELECT product extraction and lightweight pure-Python helpers.
 
-目标：提供事件筛选、从事件生成 PHA、以及写出 OGIP-style PHA 文件的基础工具。
-本模块为最小可用实现，便于后续逐步增加 region、GTI 合并、复杂表达式解析、分组/重整等功能。
+The module exposes two deliberately separate paths:
 
-注意：该实现依赖于同包内 `data.py/io.py` 中的数据类与读取器（`read_evt`、`PhaData` 等），以及
-`astropy` 与 `numpy`。输出的 PHA 文件使用常见的 `SPECTRUM` BinTable HDU 布局。
+* :func:`extract_products_with_xselect` drives the HEASoft ``xselect``
+  executable non-interactively and writes standard spectra, light curves,
+  filtered events, and images.
+* :class:`XSelectSession` and the module-level ``extract_*`` functions provide
+  lightweight pure-Python event filtering and product construction.
+
+The external runner requires an initialized HEASoft environment with
+``xselect`` on ``PATH``. It does not initialize or mutate HEASoft itself.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import os
 from pathlib import Path
-from typing import Optional, Tuple, Any, cast
+import re
+import shutil
+import subprocess
+import tempfile
+from typing import Any, Literal, Mapping, Optional, Sequence, Tuple, cast
+import warnings
 
 import numpy as np
 from astropy.io import fits
@@ -22,14 +34,684 @@ from ..ftools import region as regionmod
 from ..ftools import ftselect as exprmod
 from . import gti as gtimod
 from ..ftools import xselect_mdb
-from pathlib import Path as _Path
-import warnings
 # ftools: local pure-Python replacements for common HEASOFT utilities
 from .. import ftools
 
 __all__ = [
-    'select_events', 'accumulate_spectrum_from_events', 'write_pha', 'XSelectSession',
+    'XSelectExecutionError',
+    'XSelectOutputPaths',
+    'XSelectProductKind',
+    'XSelectRole',
+    'XSelectRunResult',
+    'build_xselect_output_paths',
+    'extract_products_with_xselect',
+    'extract_spectrum_with_xselect',
+    'select_events',
+    'accumulate_spectrum_from_events',
+    'write_pha',
+    'XSelectSession',
 ]
+
+
+XSelectProductKind = Literal['spectrum', 'lightcurve', 'events', 'image']
+XSelectRole = Literal['src', 'bkg', 'all']
+
+_XSELECT_PRODUCT_ORDER: tuple[XSelectProductKind, ...] = (
+    'spectrum',
+    'lightcurve',
+    'image',
+    'events',  # Keep events last: EXTRACT EVENTS changes XSELECT's workspace.
+)
+_XSELECT_PRODUCT_LAYOUT: dict[XSelectProductKind, tuple[str, str]] = {
+    'spectrum': ('spec', '.pha'),
+    'lightcurve': ('lc', '.lc'),
+    'events': ('evt', '.evt'),
+    'image': ('img', '.img'),
+}
+_XSELECT_PRODUCT_ALIASES: dict[str, XSelectProductKind | Literal['all']] = {
+    'spectrum': 'spectrum',
+    'spec': 'spectrum',
+    'pha': 'spectrum',
+    'lightcurve': 'lightcurve',
+    'curve': 'lightcurve',
+    'lc': 'lightcurve',
+    'events': 'events',
+    'event': 'events',
+    'evt': 'events',
+    'image': 'image',
+    'img': 'image',
+    'all': 'all',
+}
+_XSELECT_ROLE_ALIASES: dict[str, XSelectRole] = {
+    'src': 'src',
+    'source': 'src',
+    'bkg': 'bkg',
+    'background': 'bkg',
+    'back': 'bkg',
+    'all': 'all',
+    'full': 'all',
+}
+
+
+@dataclass(frozen=True)
+class XSelectOutputPaths:
+    """Deterministic output paths for one XSELECT extraction.
+
+    Product names follow this contract::
+
+        <prefix>[_<label>]_<role>_<product-tag>.<extension>
+
+    The standard product tags and extensions are ``spec.pha``, ``lc.lc``,
+    ``evt.evt``, and ``img.img``. Control files use ``xselect.xco`` and
+    ``xselect.log``. For example::
+
+        grb050904_wt_seg003_src_spec.pha
+        grb050904_wt_seg003_src_lc.lc
+        grb050904_wt_seg003_src_evt.evt
+        grb050904_wt_seg003_src_img.img
+    """
+
+    spectrum: Path | None
+    lightcurve: Path | None
+    events: Path | None
+    image: Path | None
+    command_file: Path
+    log_file: Path
+
+    def selected(self) -> dict[XSelectProductKind, Path]:
+        """Return only requested science products in execution order."""
+        out: dict[XSelectProductKind, Path] = {}
+        for kind in _XSELECT_PRODUCT_ORDER:
+            path = getattr(self, kind)
+            if path is not None:
+                out[kind] = path
+        return out
+
+
+@dataclass(frozen=True)
+class XSelectRunResult:
+    """Result and provenance for a completed external XSELECT run."""
+
+    event_path: Path
+    outputs: XSelectOutputPaths
+    session_name: str
+    returncode: int
+    commands: tuple[str, ...]
+    requested_lc_binsize_s: float | None
+    effective_lc_binsize_s: float | None
+    event_timedel_s: float | None
+    image_binsize: int | None = None
+
+    @property
+    def spectrum(self) -> Path | None:
+        return self.outputs.spectrum
+
+    @property
+    def lightcurve(self) -> Path | None:
+        return self.outputs.lightcurve
+
+    @property
+    def events(self) -> Path | None:
+        return self.outputs.events
+
+    @property
+    def image(self) -> Path | None:
+        return self.outputs.image
+
+
+class XSelectExecutionError(RuntimeError):
+    """External XSELECT failed or did not create valid requested products."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        log_path: Path,
+        returncode: int | None = None,
+    ) -> None:
+        super().__init__(f"{message}; see {log_path}")
+        self.log_path = log_path
+        self.returncode = returncode
+
+
+def _safe_filename_token(value: str, *, field: str) -> str:
+    token = re.sub(r'[^A-Za-z0-9._-]+', '_', str(value).strip())
+    token = re.sub(r'_+', '_', token).strip('._-')
+    if not token:
+        raise ValueError(f'{field} must contain at least one filename-safe character')
+    return token
+
+
+def _default_xselect_prefix(event: Path) -> str:
+    """Strip FITS/event and compression suffixes while preserving mission tags."""
+    name = event.name
+    for suffix in ('.gz', '.bz2', '.xz'):
+        if name.lower().endswith(suffix):
+            name = name[:-len(suffix)]
+            break
+    for suffix in ('.evt', '.fits', '.fit'):
+        if name.lower().endswith(suffix):
+            name = name[:-len(suffix)]
+            break
+    return name
+
+
+def _normalize_xselect_role(role: str) -> XSelectRole:
+    try:
+        return _XSELECT_ROLE_ALIASES[str(role).strip().lower()]
+    except KeyError as exc:
+        allowed = ', '.join(sorted(_XSELECT_ROLE_ALIASES))
+        raise ValueError(f'Unknown XSELECT role {role!r}; expected one of: {allowed}') from exc
+
+
+def _normalize_xselect_products(
+    products: str | Sequence[str],
+) -> tuple[XSelectProductKind, ...]:
+    values = [products] if isinstance(products, str) else list(products)
+    if not values:
+        raise ValueError('products must contain at least one product kind')
+
+    requested: set[XSelectProductKind] = set()
+    for value in values:
+        key = str(value).strip().lower()
+        try:
+            normalized = _XSELECT_PRODUCT_ALIASES[key]
+        except KeyError as exc:
+            allowed = ', '.join(sorted(_XSELECT_PRODUCT_ALIASES))
+            raise ValueError(
+                f'Unknown XSELECT product {value!r}; expected one of: {allowed}'
+            ) from exc
+        if normalized == 'all':
+            requested.update(_XSELECT_PRODUCT_ORDER)
+        else:
+            requested.add(normalized)
+    return tuple(kind for kind in _XSELECT_PRODUCT_ORDER if kind in requested)
+
+
+def build_xselect_output_paths(
+    event_path: str | Path,
+    output_dir: str | Path,
+    *,
+    products: str | Sequence[str] = ('spectrum',),
+    prefix: str | None = None,
+    label: str | None = None,
+    role: str = 'all',
+) -> XSelectOutputPaths:
+    """Build product paths using the public XSELECT naming convention.
+
+    ``prefix`` defaults to the complete event-file stem. It is intentionally
+    not stripped of mission suffixes such as ``_cl`` because doing so can make
+    products from distinct event files collide. ``label`` should describe a
+    caller-defined selection such as ``wt_seg003``; floating time bounds are
+    not encoded automatically.
+    """
+    event = Path(event_path)
+    outdir = Path(output_dir)
+    normalized_products = _normalize_xselect_products(products)
+    normalized_role = _normalize_xselect_role(role)
+
+    name_parts = [
+        _safe_filename_token(
+            prefix if prefix is not None else _default_xselect_prefix(event),
+            field='prefix',
+        )
+    ]
+    if label is not None:
+        name_parts.append(_safe_filename_token(label, field='label'))
+    name_parts.append(normalized_role)
+    base = '_'.join(name_parts)
+
+    selected = set(normalized_products)
+
+    def product_path(kind: XSelectProductKind) -> Path | None:
+        if kind not in selected:
+            return None
+        tag, extension = _XSELECT_PRODUCT_LAYOUT[kind]
+        return outdir / f'{base}_{tag}{extension}'
+
+    return XSelectOutputPaths(
+        spectrum=product_path('spectrum'),
+        lightcurve=product_path('lightcurve'),
+        events=product_path('events'),
+        image=product_path('image'),
+        command_file=outdir / f'{base}_xselect.xco',
+        log_file=outdir / f'{base}_xselect.log',
+    )
+
+
+def _xselect_session_name(command_path: Path) -> str:
+    stem = re.sub(r'[^A-Za-z0-9]', '', command_path.stem)
+    return f'jw{stem[-18:] or "session"}'
+
+
+def _xselect_safe_lc_binsize(
+    event_path: Path,
+    requested_binsize_s: float | None,
+) -> tuple[float | None, float | None]:
+    """Avoid XSELECT's interactive prompt when binsize is below TIMEDEL."""
+    timedel_values: list[float] = []
+    try:
+        with fits.open(event_path, memmap=False) as hdul:
+            for hdu in hdul:
+                value = hdu.header.get('TIMEDEL')
+                try:
+                    value_float = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if np.isfinite(value_float) and value_float > 0:
+                    timedel_values.append(value_float)
+    except OSError:
+        pass
+
+    event_timedel = max(timedel_values) if timedel_values else None
+    if requested_binsize_s is None:
+        return None, event_timedel
+
+    requested = float(requested_binsize_s)
+    if not np.isfinite(requested) or requested <= 0:
+        raise ValueError('lc_binsize must be a finite positive number of seconds')
+    if event_timedel is not None and requested < event_timedel:
+        effective = event_timedel * 1.01
+        warnings.warn(
+            f'lc_binsize={requested:g} s is below event TIMEDEL={event_timedel:g} s; '
+            f'using {effective:g} s to keep XSELECT non-interactive',
+            RuntimeWarning,
+            stacklevel=3,
+        )
+        return effective, event_timedel
+    return requested, event_timedel
+
+
+def _normalize_region_paths(
+    region: str | Path | Sequence[str | Path] | None,
+) -> tuple[Path, ...]:
+    if region is None:
+        return ()
+    values: Sequence[str | Path]
+    if isinstance(region, (str, Path)):
+        values = (region,)
+    else:
+        values = region
+    paths: list[Path] = []
+    for value in values:
+        path = Path(value).expanduser().resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f'XSELECT region file not found: {path}')
+        if any(char.isspace() for char in str(path)):
+            raise ValueError(f'XSELECT region paths cannot contain whitespace: {path}')
+        paths.append(path)
+    return tuple(paths)
+
+
+def _format_xselect_time_bound(value: float | str, time_format: str) -> str:
+    if time_format == 'ut':
+        text = str(value).strip()
+        if not text:
+            raise ValueError('UT time bounds cannot be empty')
+        return text
+    numeric = float(value)
+    if not np.isfinite(numeric):
+        raise ValueError(f'{time_format.upper()} time bounds must be finite')
+    return f'{numeric:.9f}'
+
+
+def _build_external_xselect_commands(
+    *,
+    event_path: Path,
+    outputs: XSelectOutputPaths,
+    session_name: str,
+    products: tuple[XSelectProductKind, ...],
+    time_range: tuple[float | str, float | str] | None,
+    time_format: str,
+    pha_range: tuple[int, int] | None,
+    region_paths: tuple[Path, ...],
+    lc_binsize_s: float | None,
+    image_binsize: int | None,
+) -> tuple[str, ...]:
+    commands = [
+        session_name,
+        'read events',
+        str(event_path.parent),
+        event_path.name,
+        'yes',
+        # EP mission initialization may consume one additional response after
+        # "Reset the mission?".  A blank is a no-op at the normal command
+        # prompt and prevents the first real filter command from being lost.
+        '',
+    ]
+
+    if time_range is not None:
+        if len(time_range) != 2:
+            raise ValueError('time_range must contain exactly (start, stop)')
+        start = _format_xselect_time_bound(time_range[0], time_format)
+        stop = _format_xselect_time_bound(time_range[1], time_format)
+        if time_format != 'ut' and float(stop) <= float(start):
+            raise ValueError('time_range stop must be greater than start')
+        commands.extend([f'filter time {time_format}', f'{start}, {stop}', 'x'])
+
+    if pha_range is not None:
+        if len(pha_range) != 2:
+            raise ValueError('pha_range must contain exactly (lower, upper)')
+        lower, upper = int(pha_range[0]), int(pha_range[1])
+        if lower < 0 or upper <= lower:
+            raise ValueError('pha_range must satisfy 0 <= lower < upper')
+        commands.append(f'filter pha_cutoff {lower} {upper}')
+
+    if region_paths:
+        joined = ' '.join(str(path) for path in region_paths)
+        commands.append(f'filter region "{joined}"')
+
+    selected_paths = outputs.selected()
+    for kind in products:
+        output = selected_paths[kind]
+        if kind == 'lightcurve' and lc_binsize_s is not None:
+            commands.append(f'set binsize {lc_binsize_s:.9g}')
+        if kind == 'image' and image_binsize is not None:
+            commands.append(f'set xybinsize {image_binsize}')
+        extract_kind = 'curve' if kind == 'lightcurve' else kind
+        if kind == 'spectrum':
+            extract_kind = 'spectrum'
+        commands.extend([f'extract {extract_kind}', f'save {extract_kind} {output.name}'])
+        if kind == 'events':
+            # SAVE EVENTS asks whether to read the filtered event list back in.
+            commands.append('no')
+
+    commands.extend(['exit', 'no', ''])
+    return tuple(commands)
+
+
+def _resolve_xselect_executable(
+    executable: str | Path | None,
+    environment: Mapping[str, str],
+) -> str:
+    requested = str(executable) if executable is not None else 'xselect'
+    if os.sep in requested:
+        path = Path(requested).expanduser()
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path.resolve())
+        raise RuntimeError(f'XSELECT executable is not executable: {path}')
+    found = shutil.which(requested, path=environment.get('PATH'))
+    if found is None:
+        raise RuntimeError(
+            'xselect executable not found. Initialize HEASoft/HEADAS in the '
+            'active environment or pass xselect_executable explicitly.'
+        )
+    return found
+
+
+def _write_external_xselect_log(
+    path: Path,
+    *,
+    executable: str,
+    commands: tuple[str, ...],
+    returncode: int | None,
+    stdout: str,
+    stderr: str,
+    error: str | None = None,
+) -> None:
+    sections = [
+        f'COMMAND: {executable} < {path.with_suffix(".xco").name}',
+        f'RETURN_CODE: {returncode if returncode is not None else "NOT_STARTED"}',
+    ]
+    if error is not None:
+        sections.extend(['ERROR:', error])
+    sections.extend(
+        [
+            'XCO:',
+            '\n'.join(commands),
+            'STDOUT:',
+            stdout,
+            'STDERR:',
+            stderr,
+        ]
+    )
+    path.write_text('\n'.join(sections), encoding='utf-8')
+
+
+def _validate_external_xselect_product(path: Path, kind: XSelectProductKind) -> None:
+    if not path.is_file() or path.stat().st_size <= 0:
+        raise ValueError(f'{kind} output is missing or empty: {path.name}')
+    try:
+        with fits.open(path, memmap=False) as hdul:
+            if len(hdul) == 0:
+                raise ValueError('FITS file contains no HDUs')
+    except Exception as exc:
+        raise ValueError(f'{kind} output is not a readable FITS file: {path.name}') from exc
+
+
+def extract_products_with_xselect(
+    event_path: str | Path,
+    output_dir: str | Path,
+    *,
+    products: str | Sequence[str] = ('spectrum',),
+    prefix: str | None = None,
+    label: str | None = None,
+    role: str = 'all',
+    time_range: tuple[float | str, float | str] | None = None,
+    time_format: Literal['scc', 'mjd', 'ut'] = 'scc',
+    pha_range: tuple[int, int] | None = None,
+    region: str | Path | Sequence[str | Path] | None = None,
+    lc_binsize: float | None = None,
+    image_binsize: int | None = None,
+    overwrite: bool = False,
+    xselect_executable: str | Path | None = None,
+    env: Mapping[str, str] | None = None,
+    timeout: float | None = None,
+) -> XSelectRunResult:
+    """Extract one or more products by driving HEASoft XSELECT.
+
+    Parameters
+    ----------
+    event_path:
+        Input FITS event file. Its parent directory and basename are supplied
+        separately to XSELECT, matching the interactive ``read events`` flow.
+    output_dir:
+        Directory for science products, the replayable ``.xco`` file, and log.
+    products:
+        Any of ``spectrum``, ``lightcurve``, ``events``, ``image`` or their
+        aliases. ``all`` requests all four products.
+    prefix, label, role:
+        Naming components. The resulting contract is
+        ``<prefix>[_<label>]_<role>_<tag>.<extension>``.
+    time_range, time_format:
+        Optional XSELECT time filter. Numeric SCC/MJD values are passed without
+        conversion; UT values are passed as strings.
+    pha_range:
+        Inclusive XSELECT PHA/PI cutoff pair, emitted as
+        ``filter pha_cutoff lower upper``.
+    region:
+        One or more DS9 region files in physical or WCS coordinates.
+    lc_binsize:
+        Requested light-curve bin size in seconds. If it is below an event-file
+        ``TIMEDEL``, the effective value is raised to ``1.01 * TIMEDEL`` to
+        avoid XSELECT's interactive continue prompt.
+    image_binsize:
+        Positive integer spatial rebinning factor passed through
+        ``set xybinsize`` before image extraction.
+    overwrite:
+        Replace requested science products. Command and log files are always
+        refreshed because they describe the current run.
+    env:
+        Environment overrides merged onto the current process environment.
+
+    Notes
+    -----
+    XSELECT runs in an isolated temporary working directory so stale session
+    files cannot contaminate another extraction. Products are moved into
+    ``output_dir`` only after every requested output exists and opens as FITS.
+    """
+    event = Path(event_path).expanduser().resolve()
+    if not event.is_file():
+        raise FileNotFoundError(f'XSELECT event file not found: {event}')
+
+    normalized_products = _normalize_xselect_products(products)
+    if time_format not in {'scc', 'mjd', 'ut'}:
+        raise ValueError("time_format must be one of 'scc', 'mjd', or 'ut'")
+    if lc_binsize is not None and 'lightcurve' not in normalized_products:
+        raise ValueError('lc_binsize requires the lightcurve product')
+    if image_binsize is not None and 'image' not in normalized_products:
+        raise ValueError('image_binsize requires the image product')
+    if image_binsize is not None:
+        if isinstance(image_binsize, bool) or int(image_binsize) != image_binsize or int(image_binsize) < 1:
+            raise ValueError('image_binsize must be a positive integer')
+        image_binsize = int(image_binsize)
+
+    outdir = Path(output_dir).expanduser().resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+    outputs = build_xselect_output_paths(
+        event,
+        outdir,
+        products=normalized_products,
+        prefix=prefix,
+        label=label,
+        role=role,
+    )
+
+    selected_paths = outputs.selected()
+    existing = [path for path in selected_paths.values() if path.exists()]
+    if existing and not overwrite:
+        names = ', '.join(path.name for path in existing)
+        raise FileExistsError(f'XSELECT output already exists: {names}')
+
+    region_paths = _normalize_region_paths(region)
+    requested_binsize = float(lc_binsize) if lc_binsize is not None else None
+    effective_binsize, event_timedel = _xselect_safe_lc_binsize(
+        event,
+        requested_binsize if 'lightcurve' in normalized_products else None,
+    )
+
+    run_env = os.environ.copy()
+    if env is not None:
+        run_env.update({str(key): str(value) for key, value in env.items()})
+    executable = _resolve_xselect_executable(xselect_executable, run_env)
+    session_name = _xselect_session_name(outputs.command_file)
+    commands = _build_external_xselect_commands(
+        event_path=event,
+        outputs=outputs,
+        session_name=session_name,
+        products=normalized_products,
+        time_range=time_range,
+        time_format=time_format,
+        pha_range=pha_range,
+        region_paths=region_paths,
+        lc_binsize_s=effective_binsize,
+        image_binsize=image_binsize,
+    )
+    xco_text = '\n'.join(commands)
+    outputs.command_file.write_text(xco_text, encoding='utf-8')
+
+    stdout = ''
+    stderr = ''
+    returncode: int | None = None
+    with tempfile.TemporaryDirectory(prefix='.jinwu_xselect_', dir=outdir) as workdir_text:
+        workdir = Path(workdir_text)
+        try:
+            proc = subprocess.run(
+                [executable],
+                input=xco_text,
+                cwd=workdir,
+                env=run_env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+            )
+            stdout = proc.stdout or ''
+            stderr = proc.stderr or ''
+            returncode = int(proc.returncode)
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.stdout if isinstance(exc.stdout, str) else ''
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ''
+            _write_external_xselect_log(
+                outputs.log_file,
+                executable=executable,
+                commands=commands,
+                returncode=None,
+                stdout=stdout,
+                stderr=stderr,
+                error=f'XSELECT timed out after {timeout} seconds',
+            )
+            raise XSelectExecutionError(
+                f'XSELECT timed out for {event.name}',
+                log_path=outputs.log_file,
+            ) from exc
+
+        product_errors: list[str] = []
+        transcript_markers = (
+            'Command not found; type ? for a command listing',
+            'You should not see this!',
+        )
+        for marker in transcript_markers:
+            if marker in stdout:
+                product_errors.append(f'XSELECT interaction failed: {marker}')
+        for kind, final_path in selected_paths.items():
+            temporary_path = workdir / final_path.name
+            try:
+                _validate_external_xselect_product(temporary_path, kind)
+            except ValueError as exc:
+                product_errors.append(str(exc))
+
+        # If xselect produced valid output files, a non-zero exit code from a
+        # late cleanup crash (e.g. HEASoft munmap_chunk SIGABRT) is harmless.
+        if returncode != 0 and product_errors:
+            product_errors.append(f'XSELECT returned {returncode}')
+
+        _write_external_xselect_log(
+            outputs.log_file,
+            executable=executable,
+            commands=commands,
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+            error='; '.join(product_errors) if product_errors else None,
+        )
+        if product_errors:
+            raise XSelectExecutionError(
+                f'XSELECT failed for {event.name}: {"; ".join(product_errors)}',
+                log_path=outputs.log_file,
+                returncode=returncode,
+            )
+
+        for final_path in selected_paths.values():
+            if final_path.exists():
+                final_path.unlink()
+            shutil.move(str(workdir / final_path.name), str(final_path))
+
+    return XSelectRunResult(
+        event_path=event,
+        outputs=outputs,
+        session_name=session_name,
+        returncode=returncode if returncode is not None else 0,
+        commands=commands,
+        requested_lc_binsize_s=requested_binsize,
+        effective_lc_binsize_s=effective_binsize,
+        event_timedel_s=event_timedel,
+        image_binsize=image_binsize,
+    )
+
+
+def extract_spectrum_with_xselect(
+    event_path: str | Path,
+    output_dir: str | Path,
+    **kwargs: Any,
+) -> Path:
+    """Convenience wrapper returning one XSELECT-extracted PHA path.
+
+    All keyword arguments are forwarded to
+    :func:`extract_products_with_xselect`, except that ``products`` is fixed to
+    ``('spectrum',)``.
+    """
+    if 'products' in kwargs:
+        raise TypeError('extract_spectrum_with_xselect fixes products to spectrum')
+    result = extract_products_with_xselect(
+        event_path,
+        output_dir,
+        products=('spectrum',),
+        **kwargs,
+    )
+    if result.spectrum is None:  # pragma: no cover - protected by products above
+        raise RuntimeError('XSELECT did not return a spectrum path')
+    return result.spectrum
 
 
 def _new_event_like(ev: EventData, **updates: Any) -> EventData:
@@ -325,7 +1007,7 @@ def _get_mdb_tree(use_cache: bool = True):
         return _MDB_TREE
     # guess path relative to package
     try:
-        base = _Path(__file__).resolve().parents[1]
+        base = Path(__file__).resolve().parents[1]
         mdb_path = base / 'data' / 'xselect.mdb'
         cache_path = str(mdb_path) + '.pkl'
         if mdb_path.exists():

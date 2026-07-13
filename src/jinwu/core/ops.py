@@ -3286,13 +3286,11 @@ def txx(
         if bkg_evt is not None and alpha > 0.0:
             s_pos = max(float(s_blk), 0.0)
             b_pos = max(float(b_raw_blk), 0.0)
-            if b_pos <= 0.0:
-                snr_blk = np.inf if s_pos > 0.0 else 0.0
-            else:
-                try:
-                    snr_blk = li_ma_snr(float(s_pos), float(b_pos), float(alpha))
-                except Exception:
-                    snr_blk = float(net_blk / np.sqrt(var_blk))
+            try:
+                # Keep the exact Li & Ma boundary branches, including N_off=0.
+                snr_blk = li_ma_snr(float(s_pos), float(b_pos), float(alpha))
+            except Exception:
+                snr_blk = float(net_blk / np.sqrt(var_blk))
             if not np.isfinite(snr_blk):
                 snr_blk = float(net_blk / np.sqrt(var_blk))
             if net_blk < 0.0 and np.isfinite(snr_blk):

@@ -17,10 +17,14 @@ from __future__ import annotations
 from PIL import Image
 from typing import Optional, Union, List, Tuple, Any, Callable, cast, Literal
 from pathlib import Path
+import re
 import warnings
 import os
 
-import xspec
+try:  # Most plotting helpers do not require PyXspec.
+    import xspec
+except ImportError:  # pragma: no cover - exercised in XSPEC-free environments
+    xspec = None
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
@@ -69,6 +73,13 @@ def _ensure_axes(ax: Optional[Axes], figsize=(7.5, 4.5)) -> Axes:
         return ax
     fig, ax = plt.subplots(figsize=figsize)
     return ax
+
+
+def _safe_filename_token(value: Any) -> str:
+    """Return a portable filename component without changing display labels."""
+    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
+    token = re.sub(r"_+", "_", token).strip("._-")
+    return token or "unnamed"
 
 
 # ----------------------------
@@ -414,13 +425,9 @@ def plot_lightcurve(
         elif hasattr(lc, 'telescop') and lc.telescop is not None:
             instrume = str(lc.telescop)
 
-        # 检查必需的时间参考对象
-        if not hasattr(lc, 'timezero_obj') or lc.timezero_obj is None:
-            raise ValueError(
-                "LightcurveData 缺少 timezero_obj 字段。"
-                "绘图需要时间参考对象以正确显示 UTC 时间标签。"
-            )
-        timezero_obj_lc = lc.timezero_obj
+        # UTC labels are optional; synthetic and mission-agnostic products may
+        # only have a numeric timezero.
+        timezero_obj_lc = getattr(lc, 'timezero_obj', None)
 
         # 推断 bin 宽度（秒）
         binsize_val: Optional[float] = None
@@ -742,6 +749,9 @@ def plot_event_txx(
     figsize: Tuple[float, float] = (10.5, 8.2),
     out: Optional[PathLike] = None,
     timezero: Optional[Any] = None,
+    min_t100_bins: int | None = None,
+    focus_t100: bool = False,
+    t100_context_fraction: float = 0.25,
 ) -> tuple[Figure, tuple[Axes, Axes]]:
     """可视化事件 Txx 结果：Source/Background + Bayesian Blocks 风格图。
 
@@ -753,6 +763,10 @@ def plot_event_txx(
     - srcname: 图中显示的源名称（缺省时自动从元信息推断）。
     - timezero: 时间零点。支持数值秒（与事件时间同标尺）或 astropy.time.Time。
     - out: 若提供路径则保存图片。
+    - min_t100_bins: T100 内诊断光变的最少 bin 数。给定时会减小分箱以满足该要求。
+    - focus_t100: 是否将图的横轴聚焦到 T100 及两侧少量上下文。默认显示
+      全部分析时段。
+    - t100_context_fraction: T100 两侧显示的上下文比例。
     """
 
     evt: Optional[Any] = None
@@ -994,16 +1008,56 @@ def plot_event_txx(
                         return med
         return np.nan
 
-    # 原始光变：优先使用固定 binsize 还原全时段 light curve。
+    def _safe_float(key: str, default: float = np.nan) -> float:
+        val = txx_result.get(key, default)
+        try:
+            return float(val)
+        except Exception:
+            return float(default)
+
+    t100_start = _safe_float("t100_tstart", bb_edges[0])
+    t100_stop = _safe_float("t100_tstop", bb_edges[-1])
+    t100_duration = t100_stop - t100_start
+
+    # A compact T100 window avoids visually collapsing the burst inside a
+    # long observation while retaining enough pre/post-burst context.
+    display_start = float(bb_edges[0])
+    display_stop = float(bb_edges[-1])
+    if (
+        focus_t100
+        and np.isfinite(t100_duration)
+        and t100_duration > 0.0
+        and np.isfinite(t100_context_fraction)
+        and t100_context_fraction >= 0.0
+    ):
+        margin = t100_duration * float(t100_context_fraction)
+        display_start = max(display_start, t100_start - margin)
+        display_stop = min(display_stop, t100_stop + margin)
+        if display_stop <= display_start:
+            display_start = float(bb_edges[0])
+            display_stop = float(bb_edges[-1])
+
+    # 原始光变：优先使用固定 binsize，并保证 T100 至少有指定数量的点。
     bs_lc = _infer_lc_binsize()
+    if (
+        min_t100_bins is not None
+        and min_t100_bins > 0
+        and np.isfinite(t100_duration)
+        and t100_duration > 0.0
+    ):
+        required_binsize = t100_duration / float(min_t100_bins)
+        bs_lc = required_binsize if not (np.isfinite(bs_lc) and bs_lc > 0.0) else min(bs_lc, required_binsize)
     if np.isfinite(bs_lc) and bs_lc > 0.0:
-        lc_edges = np.arange(float(bb_edges[0]), float(bb_edges[-1]) + bs_lc, bs_lc, dtype=float)
+        lc_edges = np.arange(display_start, display_stop + bs_lc, bs_lc, dtype=float)
         if lc_edges.size < 2:
-            lc_edges = np.asarray([float(bb_edges[0]), float(bb_edges[-1])], dtype=float)
-        elif lc_edges[-1] < float(bb_edges[-1]):
-            lc_edges = np.append(lc_edges, float(bb_edges[-1]))
+            lc_edges = np.asarray([display_start, display_stop], dtype=float)
+        elif lc_edges[-1] < display_stop:
+            lc_edges = np.append(lc_edges, display_stop)
+        elif lc_edges[-1] > display_stop:
+            lc_edges[-1] = display_stop
     else:
-        lc_edges = np.asarray(bb_edges, dtype=float)
+        interior = bb_edges[(bb_edges > display_start) & (bb_edges < display_stop)]
+        lc_edges = np.concatenate(([display_start], interior, [display_stop]))
 
     src_hist_lc, _ = np.histogram(evt_time, bins=lc_edges)
     n_lc = max(lc_edges.size - 1, 0)
@@ -1058,15 +1112,6 @@ def plot_event_txx(
     net_rate_lc = (src_hist_lc.astype(float) - bkg_counts_lc) / lc_width
     net_err_rate_lc = np.sqrt(np.maximum(src_hist_lc.astype(float), 0.0) + bkg_var_for_net) / lc_width
 
-    def _safe_float(key: str, default: float = np.nan) -> float:
-        val = txx_result.get(key, default)
-        try:
-            return float(val)
-        except Exception:
-            return float(default)
-
-    t100_start = _safe_float("t100_tstart", bb_edges[0])
-    t100_stop = _safe_float("t100_tstop", bb_edges[-1])
     t90_start = _safe_float("t90_tstart")
     t90_stop = _safe_float("t90_tstop")
     t90_val = _safe_float("t90")
@@ -1332,7 +1377,7 @@ def plot_event_txx(
         if h_show_blk:
             ax_blocks.legend(h_show_blk, l_show_blk, loc="upper right", fontsize=8)
 
-    if x_lc_edges.size >= 2:
+    if focus_t100 and x_lc_edges.size >= 2:
         x_lo = float(x_lc_edges[0])
         x_hi = float(x_lc_edges[-1])
         ax_mid.set_xlim(x_lo, x_hi)
@@ -1433,9 +1478,17 @@ def plot_xspec_origin(
             redshiftstr = 'True'
         else:
             redshiftstr = 'False'
-        ps_file = str(f"{srcname}_{instname}_{plottype}_{modelname}_redshift{redshiftstr}_groupmin{group_min}.ps")
+        ps_file = str(
+            f"{_safe_filename_token(srcname)}_{_safe_filename_token(instname)}_"
+            f"{_safe_filename_token(plottype)}_{_safe_filename_token(modelname)}_"
+            f"redshift{redshiftstr}_groupmin{group_min}.ps"
+        )
     else:
-        ps_file = str(f"{srcname}_{instname}_{plottype}_{modelname}_redshiftUnknown_groupmin{group_min}.ps")
+        ps_file = str(
+            f"{_safe_filename_token(srcname)}_{_safe_filename_token(instname)}_"
+            f"{_safe_filename_token(plottype)}_{_safe_filename_token(modelname)}_"
+            f"redshiftUnknown_groupmin{group_min}.ps"
+        )
     xspec.Plot.device = f"{ps_file}/{device}"
     
     # 设置绘图参数
@@ -1607,7 +1660,12 @@ def plotfit(
 
     redshiftstr = "True" if redshift and redshift != 0 else "False"
     plot_tag = "ldata_eeufspec_delchi"
-    ps_file = outputdir / f"{srcname}_{instname}_{plot_tag}_{modelname}_redshift{redshiftstr}_groupmin{group_min}.ps"
+    filename_stem = (
+        f"{_safe_filename_token(srcname)}_{_safe_filename_token(instname)}_"
+        f"{plot_tag}_{_safe_filename_token(modelname)}_"
+        f"redshift{redshiftstr}_groupmin{group_min}"
+    )
+    ps_file = outputdir / f"{filename_stem}.ps"
 
     if backend == "xspec":
         xspec.Plot.device = f"{ps_file}/cps"
@@ -1774,6 +1832,6 @@ def plotfit(
 
     output_file = None
     if output_format:
-        output_file = outputdir / f"{srcname}_{instname}_{plot_tag}_{modelname}_redshift{redshiftstr}_groupmin{group_min}.{output_format}"
+        output_file = outputdir / f"{filename_stem}.{output_format}"
         fig.savefig(output_file, dpi=density, bbox_inches="tight")
     return output_file, fig

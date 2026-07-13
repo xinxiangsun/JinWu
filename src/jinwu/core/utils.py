@@ -368,7 +368,7 @@ def _parse_nhtot_response(html, coord_str=""):
     }
 
 
-def nhtot(ra, dec, equinox=2000):
+def nhtot(ra, dec, equinox=2000, timeout=30.0):
     """
     Query the Swift UKSSDC nhtot service for Galactic hydrogen column density
     using the method of Willingale et al. (2013, MNRAS, 431, 394).
@@ -383,6 +383,8 @@ def nhtot(ra, dec, equinox=2000):
         (e.g. "+56:10:15.6").
     equinox : int
         Equinox: 2000 for J2000, 1950 for B1950.
+    timeout : float
+        Network timeout in seconds.
 
     Returns
     -------
@@ -420,7 +422,7 @@ def nhtot(ra, dec, equinox=2000):
 
     try:
         req = urllib.request.Request(url, data=params)
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=float(timeout)) as resp:
             html = resp.read().decode('utf-8', errors='replace')
     except Exception as e:
         return {

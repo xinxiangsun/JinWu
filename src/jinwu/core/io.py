@@ -165,29 +165,11 @@ def _mission_timezero_object(telescop: Optional[str], timezero: float, *, allow_
     if telescop is None:
         return None
     try:
-        from .time import Time
+        from .time import Time, time_from_mission_seconds
 
-        format_map = {
-            'FERMI': 'fermi',
-            'EP': 'ep',
-            'LEIA': 'leia',
-            'GECAM': 'gecam',
-            'HXMT': 'hxmt',
-            'SWIFT': 'swift',
-            'GRID': 'grid',
-            'MAXI': 'maxi',
-            'SUZAKU': 'suzaku',
-            'XMM': 'newton',
-            'NEWTON': 'newton',
-            'XRISM': 'xrism',
-        }
-        met_format = None
-        for key, fmt in format_map.items():
-            if key in telescop:
-                met_format = fmt
-                break
-        if met_format is not None:
-            return Time(timezero, format=met_format)
+        mission_time = time_from_mission_seconds(telescop, timezero)
+        if mission_time is not None:
+            return mission_time
         if allow_unix_fallback:
             try:
                 return Time(timezero, format='unix', scale='utc')

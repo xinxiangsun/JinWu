@@ -30,6 +30,7 @@ from astropy.time.formats import TimeFromEpoch, TimeUnix, TimeNumeric
 from astropy.time.core import ScaleValueError
 import erfa
 import numpy as np
+import re
 from astropy.io import fits
 from typing import Tuple, List, Dict, Optional, Union, cast
 import matplotlib.pyplot as plt
@@ -47,6 +48,8 @@ __all__ = [
     'TimeGrid', 'TimeMAXI', 'TimeLIGO', 'TimeSuzaku', 'TimeNewton', 'TimeXRISM','TimeAstroSat',
     # Swift helpers
     'swift_leapseconds_utc', 'swift_leapseconds_met', 'swift_utcf_at_utc',
+    # Mission metadata helpers
+    'mission_time_format', 'time_from_mission_seconds',
     # Interval utilities
     'check_time_overlap', 'get_overlap_duration', 'plot_time_intervals', 'compare_time_intervals',
     'extract_time_interval'
@@ -603,6 +606,69 @@ class TimeAstrSat(TimeFromEpoch):
     epoch_val2 = None
     epoch_scale = 'utc'
     epoch_format = 'iso'
+
+
+_MISSION_TIME_FORMATS = {
+    'EP': 'ep',
+    'EINSTEIN PROBE': 'ep',
+    'WXT': 'ep',
+    'FXT': 'ep',
+    'FERMI': 'fermi',
+    'SWIFT': 'swiftmet',
+    'LEIA': 'leia',
+    'GECAM': 'gecam',
+    'HXMT': 'hxmt',
+    'GRID': 'grid',
+    'MAXI': 'maxi',
+    'SUZAKU': 'suzaku',
+    'XMM': 'newton',
+    'XMM NEWTON': 'newton',
+    'NEWTON': 'newton',
+    'XRISM': 'xrism',
+    'ASTROSAT': 'astrosat',
+}
+
+
+def mission_time_format(mission: str | None) -> str | None:
+    """Return Jinwu's registered MET format for an instrument mission.
+
+    This deliberately maps only known mission clocks.  A caller receiving
+    ``None`` must retain relative seconds rather than inventing a UTC epoch.
+    """
+    if mission is None:
+        return None
+    normalized = " ".join(re.findall(r"[A-Z0-9]+", str(mission).upper()))
+    if not normalized:
+        return None
+    if normalized in _MISSION_TIME_FORMATS:
+        return _MISSION_TIME_FORMATS[normalized]
+    for name, time_format in _MISSION_TIME_FORMATS.items():
+        if " " in name and name in normalized:
+            return time_format
+    for token in normalized.split():
+        if token in _MISSION_TIME_FORMATS:
+            return _MISSION_TIME_FORMATS[token]
+    return None
+
+
+def time_from_mission_seconds(mission: str | None, seconds: float) -> Time | None:
+    """Build an absolute :class:`Time` from a registered mission MET value.
+
+    ``None`` indicates either an unknown mission clock or a non-finite MET;
+    callers can then render their data in relative seconds with an explicit
+    warning instead of silently assuming an epoch.
+    """
+    time_format = mission_time_format(mission)
+    try:
+        met = float(seconds)
+    except (TypeError, ValueError):
+        return None
+    if time_format is None or not np.isfinite(met):
+        return None
+    try:
+        return Time(met, format=time_format)
+    except (TypeError, ValueError, ScaleValueError):
+        return None
 
 # ============================================================================
 # 自定义格式通过 TimeFromEpoch 元类自动注册到 astropy.time.Time
@@ -1369,4 +1435,3 @@ def plot_time_intervals(
         print(f"✅ Time comparison plot saved: {save_path}")
     
     return fig
-
