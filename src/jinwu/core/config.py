@@ -58,9 +58,11 @@ class RegionConfig:
     """Region generation and review defaults."""
 
     require_review: bool = True
-    minimum_coverage_fraction: float = 0.1
     source_radius_arcsec: float | None = None
     background_sectors: tuple[tuple[float, float, float, float], ...] = ()
+    background_strategy: str = "catalog_or_generated"
+    background_orientation: str = "event_roll"
+    background_polygon_samples: int = 80
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,14 +317,16 @@ class WXT(InstrumentConfig):
             ),
             "regions": RegionConfig(
                 require_review=True,
-                minimum_coverage_fraction=0.9,
-                source_radius_arcsec=547.605,
+                source_radius_arcsec=540.0,
                 background_sectors=(
-                    (15.0, 75.0, 1095.211, 2738.025),
-                    (105.0, 165.0, 1095.211, 2738.025),
-                    (195.0, 255.0, 1095.211, 2738.025),
-                    (285.0, 345.0, 1095.211, 2738.025),
+                    (15.0, 75.0, 1080.0, 2160.0),
+                    (105.0, 165.0, 1080.0, 2160.0),
+                    (195.0, 255.0, 1080.0, 2160.0),
+                    (285.0, 345.0, 1080.0, 2160.0),
                 ),
+                background_strategy="generated_cross4lobes",
+                background_orientation="footprint_edge",
+                background_polygon_samples=240,
             ),
             "background_scaling": BackgroundScalingConfig(),
             "duration": DurationConfig(),

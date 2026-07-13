@@ -1222,8 +1222,10 @@ class WXTScanner(LayoutScanner):
             return "exposure_correction"
         if lower_name.endswith((".exp", ".exp.gz")):
             return "exposure"
+        if lower_name.endswith(".img"):
+            return "image"
         if lower_name.endswith(
-            (".gif", ".pdf", ".conf", ".img", ".prefilter", "_ufbp.fits", "_ufhp.fits")
+            (".gif", ".pdf", ".conf", ".prefilter", "_ufbp.fits", "_ufhp.fits")
         ):
             return "ancillary"
         return None

@@ -95,6 +95,7 @@ class WXTObservationFiles:
     detector: str
     source_id: str | None
     exposure_correction: Path | None = None
+    image: Path | None = None
     arm_region: Path | None = None
     gti: Path | None = None
     source_region: Path | None = None
@@ -112,6 +113,8 @@ class ExposureMeasure:
     coverage_fraction: float
     zero_exposure_fraction: float
     nan_fraction: float
+    requested_area_pixels: float | None = None
+    in_map_fraction: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,10 @@ class BackgroundScalingResult:
     background: ExposureMeasure
     background_before_arm: ExposureMeasure
     arm_excluded_exposure: float
+    exposure_product: str
+    exposure_path: str
+    exposure_sha256: str
+    fallback_warning: str | None = None
     method: str = "exposure_map_ratio"
 
 
@@ -319,6 +326,7 @@ def discover_wxt_files(input_data: WXTPointingInput) -> WXTObservationFiles:
         cleaned_event=cleaned_event,
         exposure_map=exposure,
         exposure_correction=_single_file(manifest, "exposure_correction", required=False),
+        image=_single_file(manifest, "image", required=False),
         arm_region=_single_file(manifest, "arm_region", required=False),
         rmf=rmf,
         arf=arf,
@@ -342,49 +350,114 @@ def discover_wxt_files(input_data: WXTPointingInput) -> WXTObservationFiles:
     )
 
 
-def _region_to_mask(region, wcs: WCS, shape: tuple[int, int], mode: str) -> np.ndarray:
+@dataclass(frozen=True, slots=True)
+class _MaskStamp:
+    """A finite region mask with its zero-based image bounding box."""
+
+    data: np.ndarray
+    ixmin: int
+    ixmax: int
+    iymin: int
+    iymax: int
+
+
+@dataclass(frozen=True, slots=True)
+class _CombinedMaskGeometry:
+    mask: np.ndarray
+    requested_area_pixels: float
+    in_map_area_pixels: float
+
+
+def _pixel_region(region, wcs: WCS):
     if hasattr(region, "to_pixel"):
-        pixel_region = region.to_pixel(wcs)
+        return region.to_pixel(wcs)
     elif hasattr(region, "to_mask"):
-        pixel_region = region
+        return region
     else:  # pragma: no cover - guarded by the regions parser
         raise TypeError(f"Unsupported region object: {type(region).__name__}")
-    if hasattr(pixel_region, "inner_radius") and hasattr(pixel_region, "outer_radius"):
-        from regions import CirclePixelRegion
 
-        outer = CirclePixelRegion(pixel_region.center, pixel_region.outer_radius)
-        inner = CirclePixelRegion(pixel_region.center, pixel_region.inner_radius)
-        outer_image = outer.to_mask(mode=mode).to_image(shape)
-        inner_image = inner.to_mask(mode=mode).to_image(shape)
-        outer_array = np.zeros(shape) if outer_image is None else np.asarray(outer_image, dtype=float)
-        inner_array = np.zeros(shape) if inner_image is None else np.asarray(inner_image, dtype=float)
-        return np.clip(outer_array - inner_array, 0.0, 1.0)
+
+def _region_mask_object(pixel_region, mode: str):
     try:
-        region_mask = pixel_region.to_mask(mode=mode)
+        return pixel_region.to_mask(mode=mode)
     except NotImplementedError:
-        region_mask = pixel_region.to_mask(mode="subpixels", subpixels=8)
-    image = region_mask.to_image(shape)
-    if image is None:
-        return np.zeros(shape, dtype=float)
-    return np.clip(np.asarray(image, dtype=float), 0.0, 1.0)
+        return pixel_region.to_mask(mode="subpixels", subpixels=8)
 
 
-def _combined_region_mask(
+def _stamp_from_mask(region_mask) -> _MaskStamp:
+    bbox = region_mask.bbox
+    return _MaskStamp(
+        data=np.clip(np.asarray(region_mask.data, dtype=float), 0.0, 1.0),
+        ixmin=int(bbox.ixmin),
+        ixmax=int(bbox.ixmax),
+        iymin=int(bbox.iymin),
+        iymax=int(bbox.iymax),
+    )
+
+
+def _paint_stamp(canvas: np.ndarray, stamp: _MaskStamp, *, x0: int, y0: int) -> None:
+    y_start = stamp.iymin - y0
+    y_stop = stamp.iymax - y0
+    x_start = stamp.ixmin - x0
+    x_stop = stamp.ixmax - x0
+    canvas[y_start:y_stop, x_start:x_stop] = np.maximum(
+        canvas[y_start:y_stop, x_start:x_stop], stamp.data
+    )
+
+
+def _annulus_stamp(pixel_region, mode: str) -> _MaskStamp:
+    from regions import CirclePixelRegion
+
+    outer = _stamp_from_mask(
+        _region_mask_object(
+            CirclePixelRegion(pixel_region.center, pixel_region.outer_radius), mode
+        )
+    )
+    inner = _stamp_from_mask(
+        _region_mask_object(
+            CirclePixelRegion(pixel_region.center, pixel_region.inner_radius), mode
+        )
+    )
+    ixmin = min(outer.ixmin, inner.ixmin)
+    ixmax = max(outer.ixmax, inner.ixmax)
+    iymin = min(outer.iymin, inner.iymin)
+    iymax = max(outer.iymax, inner.iymax)
+    data = np.zeros((iymax - iymin, ixmax - ixmin), dtype=float)
+    _paint_stamp(data, outer, x0=ixmin, y0=iymin)
+    inner_data = np.zeros_like(data)
+    _paint_stamp(inner_data, inner, x0=ixmin, y0=iymin)
+    return _MaskStamp(
+        data=np.clip(data - inner_data, 0.0, 1.0),
+        ixmin=ixmin,
+        ixmax=ixmax,
+        iymin=iymin,
+        iymax=iymax,
+    )
+
+
+def _region_stamp(region, wcs: WCS, mode: str) -> _MaskStamp:
+    pixel_region = _pixel_region(region, wcs)
+    if hasattr(pixel_region, "inner_radius") and hasattr(pixel_region, "outer_radius"):
+        return _annulus_stamp(pixel_region, mode)
+    return _stamp_from_mask(_region_mask_object(pixel_region, mode))
+
+
+def _combined_region_geometry(
     region_paths: Sequence[Path],
     wcs: WCS,
     header: fits.Header,
     shape: tuple[int, int],
     *,
     mode: str,
-) -> np.ndarray:
+) -> _CombinedMaskGeometry:
     try:
         from regions import Regions
     except ImportError as exc:  # pragma: no cover - depends on optional runtime env
         raise ImportError(
             "WXT region/exposure processing requires the 'regions' package"
         ) from exc
-    include = np.zeros(shape, dtype=float)
-    exclude = np.zeros(shape, dtype=float)
+
+    stamped_regions: list[tuple[_MaskStamp, bool]] = []
     n_include = 0
     for path_index, path in enumerate(region_paths):
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -404,20 +477,62 @@ def _combined_region_mask(
             else:
                 text = re.sub(r"(?im)^\s*physical\s*$", "image", text)
         for region in Regions.parse(text, format="ds9"):
-            mask = _region_to_mask(region, wcs, shape, mode)
-            is_include = bool(region.meta.get("include", True))
-            if path_index > 0:
-                # ``exclusion_regions`` are semantic masks: a positive
-                # polygon in an ARM file is still an area to remove.
-                exclude = np.maximum(exclude, mask)
-            elif is_include:
-                include = np.maximum(include, mask)
-                n_include += 1
-            else:
-                exclude = np.maximum(exclude, mask)
+            is_include = path_index == 0 and bool(region.meta.get("include", True))
+            stamped_regions.append((_region_stamp(region, wcs, mode), is_include))
+            n_include += int(is_include)
     if n_include == 0:
         raise ValueError("Effective extraction region contains no inclusion shape")
-    return include * (1.0 - exclude)
+
+    ixmin = min(stamp.ixmin for stamp, _ in stamped_regions)
+    ixmax = max(stamp.ixmax for stamp, _ in stamped_regions)
+    iymin = min(stamp.iymin for stamp, _ in stamped_regions)
+    iymax = max(stamp.iymax for stamp, _ in stamped_regions)
+    canvas_shape = (iymax - iymin, ixmax - ixmin)
+    if canvas_shape[0] <= 0 or canvas_shape[1] <= 0:
+        raise ValueError("Effective extraction region has invalid geometric bounds")
+    if canvas_shape[0] * canvas_shape[1] > 16_000_000:
+        raise ValueError(
+            "Effective extraction region spans an unreasonably large pixel canvas"
+        )
+
+    include = np.zeros(canvas_shape, dtype=float)
+    exclude = np.zeros(canvas_shape, dtype=float)
+    for stamp, is_include in stamped_regions:
+        target = include if is_include else exclude
+        _paint_stamp(target, stamp, x0=ixmin, y0=iymin)
+    effective = include * (1.0 - exclude)
+    requested_area = float(effective.sum())
+    if requested_area <= 0.0:
+        raise ValueError("Effective extraction region has zero geometric area")
+
+    in_x0 = max(ixmin, 0)
+    in_x1 = min(ixmax, shape[1])
+    in_y0 = max(iymin, 0)
+    in_y1 = min(iymax, shape[0])
+    image_mask = np.zeros(shape, dtype=float)
+    if in_x1 > in_x0 and in_y1 > in_y0:
+        image_mask[in_y0:in_y1, in_x0:in_x1] = effective[
+            in_y0 - iymin:in_y1 - iymin,
+            in_x0 - ixmin:in_x1 - ixmin,
+        ]
+    return _CombinedMaskGeometry(
+        mask=image_mask,
+        requested_area_pixels=requested_area,
+        in_map_area_pixels=float(image_mask.sum()),
+    )
+
+
+def _combined_region_mask(
+    region_paths: Sequence[Path],
+    wcs: WCS,
+    header: fits.Header,
+    shape: tuple[int, int],
+    *,
+    mode: str,
+) -> np.ndarray:
+    return _combined_region_geometry(
+        region_paths, wcs, header, shape, mode=mode
+    ).mask
 
 
 def _physical_region_to_image(text: str, header: fits.Header) -> str:
@@ -447,14 +562,19 @@ def _physical_region_to_image(text: str, header: fits.Header) -> str:
         shape = match.group("shape").lower()
         if len(values) < 2:
             raise ValueError(f"Physical DS9 region lacks center coordinates: {line}")
-        values[0] = sx * values[0] + ox
-        values[1] = sy * values[1] + oy
+        # FITS physical coordinates are detector pixels, whereas DS9 image
+        # coordinates are one-based.  ``regions`` converts the latter back to
+        # zero-based arrays, so the LTM/LTV transform needs the corresponding
+        # half-pixel convention here.  This also makes a region converted from
+        # the event X/Y WCS land on the same pixels of an exposure map.
+        values[0] = sx * values[0] + ox - 0.5
+        values[1] = sy * values[1] + oy - 0.5
         if shape == "polygon":
             if len(values) % 2:
                 raise ValueError(f"Physical polygon has an odd coordinate count: {line}")
             for index in range(2, len(values), 2):
-                values[index] = sx * values[index] + ox
-                values[index + 1] = sy * values[index + 1] + oy
+                values[index] = sx * values[index] + ox - 0.5
+                values[index + 1] = sy * values[index + 1] + oy - 0.5
         elif shape in {"circle", "annulus"}:
             for index in range(2, len(values)):
                 values[index] *= radial_scale
@@ -471,7 +591,12 @@ def _physical_region_to_image(text: str, header: fits.Header) -> str:
     return "\n".join(transform_line(line) for line in text.splitlines()) + "\n"
 
 
-def _measure_mask(exposure: np.ndarray, mask: np.ndarray) -> ExposureMeasure:
+def _measure_mask(
+    exposure: np.ndarray,
+    mask: np.ndarray,
+    *,
+    requested_area_pixels: float | None = None,
+) -> ExposureMeasure:
     area = float(mask.sum())
     if not np.isfinite(area) or area <= 0:
         raise ValueError("Region has zero geometric area on the exposure map")
@@ -483,6 +608,9 @@ def _measure_mask(exposure: np.ndarray, mask: np.ndarray) -> ExposureMeasure:
     exposure_sum = float(np.sum(mask * np.where(positive, exposure, 0.0)))
     if exposure_sum <= 0:
         raise ValueError("Region has no positive exposure")
+    requested_area = float(requested_area_pixels if requested_area_pixels is not None else area)
+    if requested_area < area:
+        raise ValueError("Requested region area cannot be smaller than its in-map area")
     return ExposureMeasure(
         exposure_sum=exposure_sum,
         geometric_area_pixels=area,
@@ -490,6 +618,8 @@ def _measure_mask(exposure: np.ndarray, mask: np.ndarray) -> ExposureMeasure:
         coverage_fraction=valid_area / area,
         zero_exposure_fraction=zero_area / area,
         nan_fraction=nan_area / area,
+        requested_area_pixels=requested_area,
+        in_map_fraction=area / requested_area,
     )
 
 
@@ -510,8 +640,12 @@ def measure_region_exposure(
         header = image_hdu.header.copy()
         wcs = WCS(header)
     paths = [Path(include_region), *(Path(item) for item in exclusion_regions)]
-    mask = _combined_region_mask(paths, wcs, header, exposure.shape, mode=mask_mode)
-    return _measure_mask(exposure, mask)
+    geometry = _combined_region_geometry(paths, wcs, header, exposure.shape, mode=mask_mode)
+    return _measure_mask(
+        exposure,
+        geometry.mask,
+        requested_area_pixels=geometry.requested_area_pixels,
+    )
 
 
 def _write_source_region(path: Path, ra: float, dec: float, radius_arcsec: float) -> None:
@@ -522,40 +656,173 @@ def _write_source_region(path: Path, ra: float, dec: float, radius_arcsec: float
     )
 
 
-def _sector_polygon(
+def _event_xy_wcs(event_path: Path) -> WCS:
+    """Build the detector X/Y WCS used by XSELECT region files."""
+    with fits.open(event_path, memmap=False) as hdul:
+        event_hdu = next(
+            (
+                hdu
+                for hdu in hdul
+                if getattr(hdu, "columns", None) is not None
+                and {"X", "Y"}.issubset(
+                    {str(name).upper() for name in hdu.columns.names}
+                )
+            ),
+            None,
+        )
+        if event_hdu is None:
+            raise ValueError(f"WXT event file lacks an X/Y event table: {event_path}")
+        header = event_hdu.header
+        names = [str(name).upper() for name in event_hdu.columns.names]
+        x_index = names.index("X") + 1
+        y_index = names.index("Y") + 1
+
+        def keyword(prefix: str, index: int) -> Any:
+            value = header.get(f"{prefix}{index}")
+            if value is None:
+                raise ValueError(
+                    f"WXT event file lacks {prefix}{index} for X/Y WCS: {event_path}"
+                )
+            return value
+
+        wcs = WCS(naxis=2)
+        wcs.wcs.ctype = [keyword("TCTYP", x_index), keyword("TCTYP", y_index)]
+        wcs.wcs.crpix = [keyword("TCRPX", x_index), keyword("TCRPX", y_index)]
+        wcs.wcs.crval = [keyword("TCRVL", x_index), keyword("TCRVL", y_index)]
+        wcs.wcs.cdelt = [keyword("TCDLT", x_index), keyword("TCDLT", y_index)]
+        x_unit = header.get(f"TCUNI{x_index}")
+        y_unit = header.get(f"TCUNI{y_index}")
+        if x_unit is not None and y_unit is not None:
+            wcs.wcs.cunit = [x_unit, y_unit]
+    return wcs
+
+
+def _sector_polygon_physical(
     center: SkyCoord,
     start_deg: float,
     stop_deg: float,
     inner_arcsec: float,
     outer_arcsec: float,
+    event_wcs: WCS,
     *,
     samples: int = 80,
 ) -> str:
     angles = np.linspace(start_deg, stop_deg, samples) * u.deg
     outer = center.directional_offset_by(angles, outer_arcsec * u.arcsec)
     inner = center.directional_offset_by(angles[::-1], inner_arcsec * u.arcsec)
-    coords = zip(
-        np.concatenate((outer.ra.deg, inner.ra.deg)),
-        np.concatenate((outer.dec.deg, inner.dec.deg)),
+    coords = SkyCoord(
+        ra=np.concatenate((outer.ra.deg, inner.ra.deg)) * u.deg,
+        dec=np.concatenate((outer.dec.deg, inner.dec.deg)) * u.deg,
+        frame="fk5",
     )
-    return "polygon(" + ",".join(f"{ra:.7f},{dec:.7f}" for ra, dec in coords) + ")"
+    # ``world_to_pixel`` is zero-based, while the DS9 image coordinates used
+    # by XSELECT are one-based.  A physical region is interpreted directly in
+    # the event detector X/Y system, so add exactly one pixel here.
+    detector_x, detector_y = event_wcs.world_to_pixel(coords)
+    physical_x = np.asarray(detector_x, dtype=float) + 1.0
+    physical_y = np.asarray(detector_y, dtype=float) + 1.0
+    if not np.all(np.isfinite(physical_x)) or not np.all(np.isfinite(physical_y)):
+        raise ValueError("Cross4lobes region extends outside the reference-map WCS")
+    coords = zip(physical_x, physical_y)
+    return "polygon(" + ",".join(f"{x:.7f},{y:.7f}" for x, y in coords) + ")"
 
 
 def _write_background_region(
     path: Path,
     ra: float,
     dec: float,
-    roll_deg: float,
+    base_pa_deg: float,
     sectors: Sequence[tuple[float, float, float, float]],
+    *,
+    samples: int,
+    event_path: Path,
 ) -> None:
     center = SkyCoord(ra, dec, unit="deg", frame="fk5")
-    roll = float(roll_deg) % 90.0
-    lines = ["# Region file format: DS9 version 4.1", "fk5"]
+    event_wcs = _event_xy_wcs(event_path)
+    lines = ["# Region file format: DS9 version 4.1", "physical"]
     lines.extend(
-        _sector_polygon(center, roll + start, roll + stop, inner, outer)
+        _sector_polygon_physical(
+            center,
+            float(base_pa_deg) + start,
+            float(base_pa_deg) + stop,
+            inner,
+            outer,
+            event_wcs,
+            samples=samples,
+        )
         for start, stop, inner, outer in sectors
     )
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
+
+
+def _infer_footprint_edge_pa_deg(path: Path) -> float:
+    """Infer the four-fold background orientation from a non-zero footprint."""
+    from scipy.spatial import ConvexHull
+
+    with fits.open(path, memmap=False) as hdul:
+        image_hdu = next(
+            (hdu for hdu in hdul if hdu.data is not None and hdu.data.ndim == 2),
+            None,
+        )
+        if image_hdu is None:
+            raise ValueError(f"Footprint image contains no 2-D image: {path}")
+        data = np.asarray(image_hdu.data, dtype=float)
+        wcs = WCS(image_hdu.header).celestial
+
+    mask = np.isfinite(data) & (data > 0)
+    ys, xs = np.nonzero(mask)
+    if xs.size < 200:
+        raise ValueError(f"Footprint image has too few non-zero pixels: {path}")
+    hull = ConvexHull(np.column_stack((xs.astype(float), ys.astype(float))))
+    vertices = np.column_stack((xs[hull.vertices], ys[hull.vertices])).astype(float)
+    segments = np.roll(vertices, -1, axis=0) - vertices
+    lengths = np.hypot(segments[:, 0], segments[:, 1])
+    angles = np.degrees(np.arctan2(segments[:, 1], segments[:, 0])) % 180.0
+    folded = np.where(angles >= 90.0, angles - 90.0, angles)
+    phase = np.deg2rad(2.0 * folded)
+    edge_angle = 0.5 * np.degrees(
+        np.arctan2(np.sum(lengths * np.sin(phase)), np.sum(lengths * np.cos(phase)))
+    )
+    if edge_angle < 0.0:
+        edge_angle += 90.0
+
+    ny, nx = data.shape
+    x0, y0 = (nx - 1.0) / 2.0, (ny - 1.0) / 2.0
+    step = min(80.0, max(1.0, min(nx, ny) / 4.0))
+    x1 = x0 + step * np.cos(np.deg2rad(edge_angle))
+    y1 = y0 + step * np.sin(np.deg2rad(edge_angle))
+    center = wcs.pixel_to_world(x0, y0)
+    direction = wcs.pixel_to_world(x1, y1)
+    return float(center.position_angle(direction).to_value(u.deg) % 360.0)
+
+
+def _alpha_exposure_product(
+    files: WXTObservationFiles,
+) -> tuple[Path, str, str | None]:
+    """Return the WXT exposure map used for ON/OFF background scaling.
+
+    ``.expcorr`` contains the ARM mask.  The source region intentionally does
+    not exclude ARM, while the effective background region already does, so
+    both exposure integrals must use the unmasked ``.exp`` product.
+    """
+    return files.exposure_map, "exp", None
+
+
+def _cross4lobes_orientation(
+    files: WXTObservationFiles,
+) -> tuple[float, Path, str]:
+    """Return the footprint-derived PA and its provenance for cross4lobes."""
+    if files.image is not None:
+        return _infer_footprint_edge_pa_deg(files.image), files.image, "img"
+    if files.exposure_correction is not None:
+        return (
+            _infer_footprint_edge_pa_deg(files.exposure_correction),
+            files.exposure_correction,
+            "expcorr",
+        )
+    raise ValueError(
+        "WXT cross4lobes background requires an .img footprint or .expcorr fallback"
+    )
 
 
 _DS9_REGION_SHAPE = re.compile(
@@ -583,19 +850,6 @@ def _validate_arm_region(path: str | Path) -> tuple[str, ...]:
     if not shape_lines:
         raise ValueError(f"WXT ARM region contains no DS9 shapes: {region_path}")
     return tuple(shape_lines)
-
-
-def _event_roll(path: Path) -> float | None:
-    with fits.open(path, memmap=False) as hdul:
-        for hdu in hdul:
-            for key in ("PA_PNT", "ROLL_PNT", "ROLL"):
-                value = hdu.header.get(key)
-                if value is not None:
-                    try:
-                        return float(value)
-                    except (TypeError, ValueError):
-                        continue
-    return None
 
 
 def _fits_extension(hdul: fits.HDUList, preferred: str):
@@ -993,8 +1247,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def stage_code_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
         core = Path(__file__).resolve().parents[2] / "core"
         dependencies = {
+            "discover": (core / "instruments.py",),
             "galactic_absorption": (core / "galactic.py", core / "utils.py"),
             "pipeline_spectrum": (),
+            "regions": (core / "xselect.py",),
             "provisional_events": (core / "xselect.py",),
             "final_events": (core / "xselect.py",),
             "lightcurves": (core / "products.py", core / "time.py", core / "xselect.py"),
@@ -1050,7 +1306,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def _files(self, context: Mapping[str, StageResult]) -> WXTObservationFiles:
         data = context["discover"].data
         path_fields = {
-            "cleaned_event", "exposure_map", "exposure_correction", "arm_region",
+            "cleaned_event", "exposure_map", "exposure_correction", "image", "arm_region",
             "rmf", "arf", "gti", "source_region", "background_region", "source_catalog",
             "pipeline_source_pha", "pipeline_background_pha",
         }
@@ -1186,14 +1442,26 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             },
         )
 
-    def _copy_or_generate_regions(self, files: WXTObservationFiles) -> tuple[Path, Path, str, str]:
+    def _copy_or_generate_regions(
+        self, files: WXTObservationFiles
+    ) -> tuple[Path, Path, str, str, dict[str, Any]]:
         region_dir = self.workspace / "regions"
         region_dir.mkdir(parents=True, exist_ok=True)
         source_out = region_dir / "source.reg"
         background_out = region_dir / "background.reg"
 
         source_input = Path(self.input.source_region).expanduser().resolve() if self.input.source_region else files.source_region
-        background_input = Path(self.input.background_region).expanduser().resolve() if self.input.background_region else files.background_region
+        background_input = (
+            Path(self.input.background_region).expanduser().resolve()
+            if self.input.background_region
+            else None
+        )
+        background_metadata: dict[str, Any] = {
+            "background_strategy": self.config.regions.background_strategy,
+            "official_background_region": (
+                str(files.background_region) if files.background_region else None
+            ),
+        }
         if source_input is not None:
             shutil.copy2(source_input, source_out)
             source_origin = "user" if self.input.source_region else "official"
@@ -1208,26 +1476,51 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
 
         if background_input is not None:
             shutil.copy2(background_input, background_out)
-            background_origin = "user" if self.input.background_region else "official"
+            background_origin = "user"
+            background_metadata["background_strategy"] = "user_region"
         else:
             if self.input.ra_deg is None or self.input.dec_deg is None:
                 raise ValueError("Generating a WXT background region requires ra_deg and dec_deg")
-            roll = _event_roll(files.cleaned_event)
-            if roll is None:
-                raise ValueError("Generating a WXT background region requires PA_PNT/ROLL")
+            if self.config.regions.background_strategy != "generated_cross4lobes":
+                raise ValueError(
+                    "WXT requires background_strategy='generated_cross4lobes' "
+                    "unless an explicit background_region is provided"
+                )
+            if self.config.regions.background_orientation != "footprint_edge":
+                raise ValueError(
+                    "WXT generated_cross4lobes requires background_orientation='footprint_edge'"
+                )
+            base_pa, orientation_path, orientation_product = _cross4lobes_orientation(files)
             _write_background_region(
                 background_out,
                 self.input.ra_deg,
                 self.input.dec_deg,
-                roll,
+                base_pa,
                 self.config.regions.background_sectors,
+                samples=self.config.regions.background_polygon_samples,
+                event_path=files.cleaned_event,
             )
-            background_origin = "generated"
-        return source_out, background_out, source_origin, background_origin
+            background_origin = "generated_cross4lobes"
+            background_metadata.update(
+                {
+                    "base_pa_deg": base_pa,
+                    "orientation_path": str(orientation_path),
+                    "orientation_product": orientation_product,
+                    "orientation_sha256": _file_hash(orientation_path),
+                    "coordinate_frame": "physical",
+                    "event_wcs_path": str(files.cleaned_event),
+                    "event_wcs_sha256": _file_hash(files.cleaned_event),
+                    "sectors": [list(item) for item in self.config.regions.background_sectors],
+                    "polygon_samples": self.config.regions.background_polygon_samples,
+                }
+            )
+        return source_out, background_out, source_origin, background_origin, background_metadata
 
     def _stage_regions(self, context) -> StageResult:
         files = self._files(context)
-        source, background, source_origin, background_origin = self._copy_or_generate_regions(files)
+        source, background, source_origin, background_origin, background_metadata = (
+            self._copy_or_generate_regions(files)
+        )
         arm_shapes: tuple[str, ...] = ()
         effective_background = background
         if files.arm_region is not None:
@@ -1247,8 +1540,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "arm": str(files.arm_region) if files.arm_region else None,
                 "source_origin": source_origin,
                 "background_origin": background_origin,
+                **background_metadata,
                 "source_sha256": _file_hash(source),
                 "background_sha256": _file_hash(background),
+                "background_effective_sha256": _file_hash(effective_background),
                 "arm_sha256": _file_hash(files.arm_region) if files.arm_region else None,
                 "background_effective_semantics": (
                     "background_minus_arm" if files.arm_region else "background"
@@ -1264,7 +1559,11 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "background_effective_region": str(effective_background),
                 "manifest": str(region_manifest),
             },
-            data={"source_origin": source_origin, "background_origin": background_origin},
+            data={
+                "source_origin": source_origin,
+                "background_origin": background_origin,
+                **background_metadata,
+            },
         )
 
     def _region_paths(self, context) -> tuple[Path, Path, list[Path]]:
@@ -1298,12 +1597,12 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         files = self._files(context)
         source_region, background_region, background_regions = self._region_paths(context)
         mode = self.config.background_scaling.mask_mode
-        source = measure_region_exposure(files.exposure_map, source_region, mask_mode=mode)
-        before = measure_region_exposure(files.exposure_map, background_region, mask_mode=mode)
+        alpha_map, alpha_product, fallback_warning = _alpha_exposure_product(files)
+        source = measure_region_exposure(alpha_map, source_region, mask_mode=mode)
+        before = measure_region_exposure(alpha_map, background_region, mask_mode=mode)
         background = measure_region_exposure(
-            files.exposure_map,
-            background_region,
-            exclusion_regions=(files.arm_region,) if files.arm_region else (),
+            alpha_map,
+            background_regions[0],
             mask_mode=mode,
         )
         alpha = source.exposure_sum / background.exposure_sum
@@ -1315,6 +1614,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             background=background,
             background_before_arm=before,
             arm_excluded_exposure=max(before.exposure_sum - background.exposure_sum, 0.0),
+            exposure_product=alpha_product,
+            exposure_path=str(alpha_map),
+            exposure_sha256=_file_hash(alpha_map),
+            fallback_warning=fallback_warning,
         )
         qc = _json_dump(self.workspace / "regions" / "exposure_qc.json", asdict(scaling))
         needs_review = (
@@ -1322,11 +1625,17 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             and not self.input.auto_approve_regions
             and not self.approval_path.is_file()
         )
-        low_coverage = min(source.coverage_fraction, background.coverage_fraction) < self.config.regions.minimum_coverage_fraction
         if self.input.auto_approve_regions and not self.approval_path.exists():
             self.approve_regions(note="auto-approved by WXTPointingInput")
         data = asdict(scaling)
-        data["low_coverage_warning"] = low_coverage
+        data["exposure_coverage_warning"] = (
+            min(source.coverage_fraction, background.coverage_fraction) < 1.0
+        )
+        data["boundary_clipping_warning"] = (
+            min(source.in_map_fraction, background.in_map_fraction) < 1.0
+        )
+        if fallback_warning is not None:
+            data["warning"] = fallback_warning
         if needs_review:
             return StageResult(
                 status=PipelineStatus.NEEDS_REVIEW,
