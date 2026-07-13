@@ -1,10 +1,10 @@
 {% set name = "jinwu" %}
-{% set version = "0.0.31" %}
+{% set version = "0.1.2" %}
 {% set python_min = "3.11" %}
 
 package:
   name: {{ name|lower }}
-  version: "0.0.31"
+  version: "0.1.2"
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
