@@ -2490,6 +2490,40 @@ def _prepared_error_parameters(
     return " ".join((prefix, *parameter_indices)) if parameter_indices else ""
 
 
+def _profile_error_metadata(delta_stat: float) -> dict[str, Any]:
+    """Describe the one-parameter XSPEC profile interval for ``delta_stat``."""
+
+    try:
+        value = float(delta_stat)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("error_delta_stat must be finite and positive") from exc
+    if not math.isfinite(value) or value <= 0.0:
+        raise ValueError("error_delta_stat must be finite and positive")
+    metadata: dict[str, Any] = {
+        "error_delta_stat": value,
+        "profile_error_kind": "single_parameter_profile",
+        "profile_confidence": None,
+        "profile_sigma": None,
+        "profile_error_label": f"single-parameter profile (delta statistic={value:g})",
+    }
+    if math.isclose(value, 1.0, rel_tol=0.0, abs_tol=1e-9):
+        metadata.update(
+            {
+                "profile_confidence": 0.682689492137,
+                "profile_sigma": 1.0,
+                "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+            }
+        )
+    elif math.isclose(value, 2.706, rel_tol=0.0, abs_tol=1e-6):
+        metadata.update(
+            {
+                "profile_confidence": 0.90,
+                "profile_error_label": "single-parameter profile 90%",
+            }
+        )
+    return metadata
+
+
 def _set_prepared_parameter_bounds(parameter, value: float, lower: float, upper: float) -> None:
     """Set bounds on fake test parameters and real PyXspec parameters."""
     try:
@@ -2896,6 +2930,7 @@ def fit_prepared(
     from jinwu.core.plot import plotfit
     from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum
 
+    error_metadata = _profile_error_metadata(error_delta_stat)
     if isinstance(prepared, PreparedSpectrum):
         prepared_spectra = [prepared]
     elif isinstance(prepared, PreparedJointSpectrum):
@@ -3106,8 +3141,9 @@ def fit_prepared(
         "galactic_nh_1e22": galactic_nh_1e22,
         "freeze_galactic_nh": freeze_galactic_nh,
         "intrinsic_nh_mode": intrinsic_nh_mode,
-        "error_delta_stat": error_delta_stat,
-        "profile_confidence": 0.90 if abs(error_delta_stat - 2.706) < 1e-6 else None,
+        **error_metadata,
+        "calculate_errors": calculate_errors,
+        "error_command": command if calculate_errors else None,
         "profile_errors_succeeded": profile_errors_succeeded,
     }
     results["effective_statistic"] = (
@@ -3340,6 +3376,7 @@ def _absorption_comparisons(
         parameter = _parameter_by_name(
             candidates[free_key].get("parameters") or {}, "zTBabs.nH"
         ) or {}
+        xspec_settings = candidates[free_key].get("xspec_settings") or {}
         delta_c = zero_metric.statistic - free_metric.statistic
         boundary_p = (
             1.0
@@ -3358,8 +3395,19 @@ def _absorption_comparisons(
             ),
             "delta_bic_zero_minus_free": zero_metric.bic - free_metric.bic,
             "nh_best": parameter.get("value"),
-            "nh_error_low_90": parameter.get("error_lo"),
-            "nh_error_high_90": parameter.get("error_hi"),
+            "nh_error_lo": parameter.get("error_lo"),
+            "nh_error_hi": parameter.get("error_hi"),
+            "profile_error": {
+                key: xspec_settings.get(key)
+                for key in (
+                    "error_delta_stat",
+                    "profile_error_kind",
+                    "profile_confidence",
+                    "profile_sigma",
+                    "profile_error_label",
+                    "profile_errors_succeeded",
+                )
+            },
             "boundary_lrt_p_reference_only": boundary_p,
             "warning": (
                 "The boundary likelihood-ratio p-value is descriptive only; "
@@ -3457,6 +3505,17 @@ def _write_xray_candidate_summary(
     if failure is not None:
         lines.append(f"拟合失败：{failure}")
     elif result is not None and metrics is not None:
+        settings = result.get("xspec_settings") or {}
+        if not settings.get("calculate_errors", True):
+            lines.append("XSPEC error 未启用，以下仅报告 best-fit 参数。")
+        elif settings.get("profile_errors_succeeded"):
+            lines.append(
+                "XSPEC error："
+                + str(settings.get("profile_error_label") or "single-parameter profile interval")
+                + f"；delta statistic={settings.get('error_delta_stat', 'N/A')}。"
+            )
+        elif settings.get("profile_errors_succeeded") is False:
+            lines.append("XSPEC error 未成功，以下仅报告 best-fit 参数。")
         lines.append(
             f"统计量：{result.get('effective_statistic', 'unknown')}="
             f"{metrics.statistic:.6g}/{metrics.dof}；k={metrics.free_parameters}；"
@@ -3470,10 +3529,12 @@ def _write_xray_candidate_summary(
             if parameter.get("frozen"):
                 lines.append(f"  {name}={value}（固定）")
             else:
-                lines.append(
-                    f"  {name}={value} (-{parameter.get('error_lo', 'N/A')}/"
-                    f"+{parameter.get('error_hi', 'N/A')})"
-                )
+                error_lo = parameter.get("error_lo")
+                error_hi = parameter.get("error_hi")
+                if settings.get("profile_errors_succeeded") and error_lo is not None and error_hi is not None:
+                    lines.append(f"  {name}={value} (-{error_lo}/+{error_hi})")
+                else:
+                    lines.append(f"  {name}={value}")
         flux_parameter = _parameter_by_name(
             result.get("parameters") or {}, "cflux.lg10Flux"
         )
@@ -3481,6 +3542,38 @@ def _write_xray_candidate_summary(
             lg_flux = float(flux_parameter["value"])
             lines.append(f"未吸收 flux={10.0 ** lg_flux:.6g} erg s^-1 cm^-2。")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_xray_failure_log(
+    candidate_dir: Path,
+    spec: XRayModelSpec,
+    failure: str,
+) -> Path:
+    """Promote any partial XSPEC transcript into one stable failure log."""
+
+    log_path = candidate_dir / "fit_failure.log"
+    lines = [
+        "[jinwu_xray_candidate_failure]",
+        f"model_key: {spec.key}",
+        f"model_expression: {spec.expression}",
+        f"error: {failure}",
+    ]
+    temporary_logs = sorted(candidate_dir.glob("*.tmp.log"))
+    if temporary_logs:
+        lines.append("")
+        lines.append("[captured_xspec_transcript]")
+    for path in temporary_logs:
+        try:
+            transcript = path.read_text(encoding="utf-8", errors="replace").rstrip()
+        except OSError as exc:
+            transcript = f"<could not read {path.name}: {exc}>"
+        lines.extend((f"--- {path.name} ---", transcript))
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    log_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return log_path
 
 
 def fit_xray_models(
@@ -3493,6 +3586,7 @@ def fit_xray_models(
     selection_metric: str = "aicc",
     galactic_nh_1e22: float | None = None,
     redshift: float = 0.0,
+    error_delta_stat: float = 1.0,
     **fit_kwargs: Any,
 ) -> XRayModelComparisonResult:
     """Fit and compare a controlled set of XSPEC X-ray spectral models."""
@@ -3519,6 +3613,7 @@ def fit_xray_models(
         raise TypeError(f"fit_xray_models controls these arguments: {', '.join(sorted(overlap))}")
     if not math.isfinite(float(redshift)) or float(redshift) < 0:
         raise ValueError("redshift must be finite and non-negative")
+    error_metadata = _profile_error_metadata(error_delta_stat)
     if any("tbabs" in spec.expression.lower() for spec in specs_tuple):
         if galactic_nh_1e22 is None:
             raise ValueError(
@@ -3538,7 +3633,7 @@ def fit_xray_models(
                 intrinsic_nh_mode=(
                     "zero" if spec.absorption_mode == "zero" else "free"
                 ),
-                error_delta_stat=2.706,
+                error_delta_stat=float(error_delta_stat),
                 galactic_nh_1e22=galactic_nh_1e22,
                 freeze_galactic_nh=True,
                 redshift=redshift,
@@ -3580,11 +3675,20 @@ def fit_xray_models(
         except Exception as exc:
             failure = f"{type(exc).__name__}: {exc}"
             failures[spec.key] = failure
+            failure_log = _write_xray_failure_log(candidate_dir, spec, failure)
+            # A failed comparison candidate must not advertise a replayable
+            # XSPEC session, even if the exception occurred after XSPEC saved it.
+            for xcm in candidate_dir.glob("*.xcm"):
+                try:
+                    xcm.unlink()
+                except OSError:
+                    pass
             failure_payload = {
                 "model_key": spec.key,
                 "model_expression": spec.expression,
                 "status": "failed",
                 "error": failure,
+                "xspec_log": str(failure_log),
             }
             (candidate_dir / "fit_failure.json").write_text(
                 json.dumps(failure_payload, ensure_ascii=False, indent=2) + "\n",
@@ -3662,10 +3766,17 @@ def fit_xray_models(
         json.dumps(comparison.to_dict(), ensure_ascii=False, indent=2, default=str) + "\n",
         encoding="utf-8",
     )
+    profile_error_line = (
+        "Profile errors: " + str(error_metadata["profile_error_label"])
+        if fit_kwargs.get("calculate_errors", True)
+        else "Profile errors: disabled"
+    )
     text_lines = [
         f"Adopted model: {adopted_key}",
         f"Reason: {adopted_reason}",
         f"Ranking metric: {effective_metric}",
+        profile_error_line,
+        f"Profile error delta statistic: {error_metadata['error_delta_stat']:g}",
         "",
         "key statistic/dof k AIC AICc BIC delta weight",
     ]

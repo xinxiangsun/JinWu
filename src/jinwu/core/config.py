@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 from typing import Any, ClassVar, Mapping
 
@@ -115,11 +116,21 @@ class FitConfig:
     abundance: str = "wilm"
     cross_section: str = "vern"
     calculate_errors: bool = True
+    error_delta_stat: float = 1.0
     model_class: str = "auto"
     absorption_mode: str = "auto"
     candidate_keys: tuple[str, ...] | None = None
     selection_metric: str = "aicc"
     comparison_intervals: tuple[str, ...] = ("pipeline", "t100", "t90")
+
+    def __post_init__(self) -> None:
+        try:
+            value = float(self.error_delta_stat)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("error_delta_stat must be finite and positive") from exc
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("error_delta_stat must be finite and positive")
+        object.__setattr__(self, "error_delta_stat", value)
 
 
 @dataclass(frozen=True, slots=True)

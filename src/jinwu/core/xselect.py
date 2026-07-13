@@ -44,6 +44,7 @@ __all__ = [
     'XSelectRole',
     'XSelectRunResult',
     'build_xselect_output_paths',
+    'build_effective_ds9_region',
     'extract_products_with_xselect',
     'extract_spectrum_with_xselect',
     'select_events',
@@ -55,6 +56,14 @@ __all__ = [
 
 XSelectProductKind = Literal['spectrum', 'lightcurve', 'events', 'image']
 XSelectRole = Literal['src', 'bkg', 'all']
+
+_DS9_SHAPE_LINE = re.compile(
+    r'^(?P<prefix>\s*(?:[a-z][a-z0-9_]*\s*;\s*)?)'
+    r'(?P<sign>[+-]?)\s*'
+    r'(?P<body>(?:circle|annulus|polygon|ellipse|box|sector)\s*\([^)]*\))'
+    r'(?P<tail>.*)$',
+    re.IGNORECASE,
+)
 
 _XSELECT_PRODUCT_ORDER: tuple[XSelectProductKind, ...] = (
     'spectrum',
@@ -343,6 +352,79 @@ def _normalize_region_paths(
     return tuple(paths)
 
 
+def build_effective_ds9_region(
+    include_region: str | Path,
+    exclusion_regions: Sequence[str | Path],
+    output_path: str | Path,
+    *,
+    default_frame: str | None = None,
+) -> Path:
+    """Write one DS9 region representing include minus all exclusions.
+
+    Geometry lines in exclusion files are normalized to negative DS9 shapes,
+    regardless of whether the input mask used ``polygon`` or ``-polygon``.
+    Coordinate-system directives are retained.  ``default_frame`` is inserted
+    before a frameless inclusion file, which is useful for mission products
+    whose DS9 regions are implicitly in physical detector coordinates.  The
+    source files are never modified.
+    """
+
+    include = Path(include_region).expanduser().resolve()
+    exclusions = tuple(Path(path).expanduser().resolve() for path in exclusion_regions)
+    output = Path(output_path).expanduser().resolve()
+    if not include.is_file():
+        raise FileNotFoundError(f'DS9 inclusion region not found: {include}')
+    for path in exclusions:
+        if not path.is_file():
+            raise FileNotFoundError(f'DS9 exclusion region not found: {path}')
+    if output == include or output in exclusions:
+        raise ValueError('Effective DS9 output must not overwrite an input region')
+
+    include_text = include.read_text(encoding='utf-8', errors='replace').rstrip()
+    if default_frame is not None:
+        normalized_frame = str(default_frame).strip().lower()
+        valid_frames = {'physical', 'image', 'fk5', 'icrs', 'galactic', 'ecliptic', 'fk4'}
+        if normalized_frame not in valid_frames:
+            raise ValueError(f'Unsupported DS9 default frame: {default_frame}')
+        coordinate_lines = {
+            line.strip().lower().split(';', 1)[0].strip()
+            for line in include_text.splitlines()
+            if line.strip() and not line.lstrip().startswith('#')
+        }
+        if not coordinate_lines & valid_frames:
+            include_text = f'{normalized_frame}\n{include_text}'
+    include_shapes = [
+        line for line in include_text.splitlines() if _DS9_SHAPE_LINE.match(line)
+    ]
+    if not include_shapes:
+        raise ValueError(f'DS9 inclusion region contains no supported shapes: {include}')
+
+    blocks = [
+        '# Jinwu effective region: inclusion minus exclusion masks',
+        f'# inclusion: {include}',
+        include_text,
+    ]
+    exclusion_shape_count = 0
+    for path in exclusions:
+        normalized_lines = [f'# exclusion: {path}']
+        for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
+            match = _DS9_SHAPE_LINE.match(line)
+            if match is None:
+                normalized_lines.append(line)
+                continue
+            exclusion_shape_count += 1
+            normalized_lines.append(
+                f'{match.group("prefix")}-{match.group("body")}{match.group("tail")}'
+            )
+        blocks.append('\n'.join(normalized_lines).rstrip())
+    if exclusions and exclusion_shape_count == 0:
+        raise ValueError('DS9 exclusion region files contain no supported shapes')
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text('\n'.join(blocks) + '\n', encoding='utf-8')
+    return output
+
+
 def _format_xselect_time_bound(value: float | str, time_format: str) -> str:
     if time_format == 'ut':
         text = str(value).strip()
@@ -520,7 +602,10 @@ def extract_products_with_xselect(
         Inclusive XSELECT PHA/PI cutoff pair, emitted as
         ``filter pha_cutoff lower upper``.
     region:
-        One or more DS9 region files in physical or WCS coordinates.
+        One or more DS9 region files in physical or WCS coordinates. XSELECT
+        concatenates multiple files in the supplied order. Consequently an
+        inclusion file followed by a file containing ``-shape(...)`` entries
+        represents the inclusion region with those shapes excluded.
     lc_binsize:
         Requested light-curve bin size in seconds. If it is below an event-file
         ``TIMEDEL``, the effective value is raised to ``1.01 * TIMEDEL`` to

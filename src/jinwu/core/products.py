@@ -405,20 +405,49 @@ def plot_net_lightcurve(
     output_base: str | Path,
     *,
     title: str,
+    timezero: float | None = None,
+    timezero_obj: Any | None = None,
     formats: Sequence[str] = ("png", "svg"),
     dpi: int = 300,
 ) -> tuple[Path, ...]:
-    """Plot source, scaled background, and net count-rate curves."""
+    """Plot source, scaled background, and net count-rate curves.
+
+    ``timezero`` is a mission-time reference in seconds.  When supplied, the
+    x-axis is relative to that reference instead of displaying absolute MET.
+    ``timezero_obj`` may be the matching :class:`astropy.time.Time` object and
+    is used only to render a UTC axis label.  The numerical light-curve
+    products always retain their native mission-time values.
+    """
 
     import matplotlib.pyplot as plt
 
     fig, (top, bottom) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     mission_time = curve.time + curve.timezero
+    if timezero is None:
+        plot_time = mission_time
+        x_label = "Mission time [s]"
+    else:
+        reference = float(timezero)
+        if not np.isfinite(reference):
+            raise ValueError("timezero must be finite when supplied")
+        plot_time = mission_time - reference
+        utc = None
+        try:
+            utc_value = getattr(timezero_obj, "utc", timezero_obj)
+            isot = getattr(utc_value, "isot", None)
+            utc = str(isot) if isot is not None else None
+        except Exception:
+            utc = None
+        x_label = (
+            f"Time since {utc} (UTC) (s)"
+            if utc
+            else "Time since T0 (s)"
+        )
     top.errorbar(
-        mission_time, curve.source_rate, yerr=curve.source_error, fmt=".", label="source"
+        plot_time, curve.source_rate, yerr=curve.source_error, fmt=".", label="source"
     )
     top.errorbar(
-        mission_time, curve.alpha * curve.background_rate,
+        plot_time, curve.alpha * curve.background_rate,
         yerr=curve.alpha * curve.background_error, fmt=".", label="scaled background",
     )
     top.set_ylabel("Rate [count s$^{-1}$]")
@@ -426,9 +455,9 @@ def plot_net_lightcurve(
     top.grid(alpha=0.25)
     bottom.axhline(0.0, color="0.5", lw=1)
     bottom.errorbar(
-        mission_time, curve.net_rate, yerr=curve.net_error, fmt=".", color="black"
+        plot_time, curve.net_rate, yerr=curve.net_error, fmt=".", color="black"
     )
-    bottom.set_xlabel("Mission time [s]")
+    bottom.set_xlabel(x_label)
     bottom.set_ylabel("Net rate [count s$^{-1}$]")
     bottom.grid(alpha=0.25)
     fig.suptitle(title)
@@ -698,11 +727,35 @@ def save_xspec_session(
                 virtual_cwd = target.resolve()
                 line = f"cd {virtual_cwd}"
             normalized_lines.append(line)
+        settings = result.get("xspec_settings") or {}
+        error_command = settings.get("error_command")
+        if error_command:
+            normalized_lines.extend(
+                [
+                    "",
+                    "# Jinwu profile-error provenance",
+                    f"# {settings.get('profile_error_label', 'single-parameter profile interval')}",
+                    f"# error {error_command}",
+                ]
+            )
         xcm.write_text("\n".join(normalized_lines) + "\n", encoding="utf-8")
     else:
         xcm.write_text("# XSPEC Xset.save unavailable in this backend\n", encoding="utf-8")
     log = output / f"{label}_fit.log"
-    log.write_text(transcript.rstrip() + "\n", encoding="utf-8")
+    settings = result.get("xspec_settings") or {}
+    error_command = settings.get("error_command")
+    log_lines = []
+    if error_command:
+        log_lines.extend(
+            [
+                "[jinwu_profile_error]",
+                f"label: {settings.get('profile_error_label', 'single-parameter profile interval')}",
+                f"command: error {error_command}",
+                "",
+            ]
+        )
+    log_lines.append(transcript.rstrip())
+    log.write_text("\n".join(log_lines).rstrip() + "\n", encoding="utf-8")
     result_json = output / f"{label}_fit.json"
     serializable = {key: value for key, value in result.items() if key != "prepared"}
     _write_json(result_json, serializable)
@@ -739,6 +792,40 @@ def _profile_errors_available(fit: Mapping[str, Any]) -> bool:
         return False
     warnings = [str(item).lower() for item in fit.get("warnings") or ()]
     return not any("error calculation failed" in item for item in warnings)
+
+
+def _wechat_profile_error_text(fit: Mapping[str, Any]) -> str:
+    """Describe XSPEC ``error`` intervals without inventing their confidence."""
+
+    settings = fit.get("xspec_settings") or {}
+    if settings.get("calculate_errors") is False:
+        return "XSPEC `error` 未启用；以下仅为 best-fit，未报告 profile 误差。"
+    if settings.get("profile_errors_succeeded") is False:
+        return "XSPEC `error` 未成功；以下仅为 best-fit，未报告 profile 误差。"
+    delta = settings.get("error_delta_stat")
+    confidence = settings.get("profile_confidence")
+    sigma = settings.get("profile_sigma")
+    try:
+        delta_value = float(delta)
+    except (TypeError, ValueError):
+        return "参数误差来自 XSPEC `error`；历史结果未记录其置信水平。"
+    if sigma == 1.0 or np.isclose(delta_value, 1.0):
+        return (
+            "以下自由参数及未吸收流量误差均为 XSPEC `error` 单参数 profile "
+            "1σ（ΔC/ΔW=1.0，68.3%）。"
+        )
+    if confidence is not None:
+        try:
+            return (
+                "以下自由参数及未吸收流量误差均为 XSPEC `error` 单参数 profile "
+                f"{100.0 * float(confidence):.3g}%（ΔC/ΔW={delta_value:g}）。"
+            )
+        except (TypeError, ValueError):
+            pass
+    return (
+        "以下自由参数及未吸收流量误差均为 XSPEC `error` 单参数 profile "
+        f"（ΔC/ΔW={delta_value:g}；未映射为标准置信水平）。"
+    )
 
 
 def _compact_scientific_measurement(
@@ -1014,6 +1101,7 @@ def _render_wechat_fit_message(
         f"采用{interval_name}数据进行拟合；模型为 {expression}，"
         f"拟合能段为 {energy_text} keV（{model_status}）。"
     )
+    lines.append(_wechat_profile_error_text(fit))
 
     nh = payload.get("galactic_absorption") or {}
     family = str(fit.get("model_family") or "").lower()

@@ -47,7 +47,11 @@ from ...core.products import (
     save_flux_curve,
     save_net_lightcurve,
 )
-from ...core.xselect import XSelectRunResult, extract_products_with_xselect
+from ...core.xselect import (
+    XSelectRunResult,
+    build_effective_ds9_region,
+    extract_products_with_xselect,
+)
 
 __all__ = [
     "BackgroundScalingResult",
@@ -382,7 +386,7 @@ def _combined_region_mask(
     include = np.zeros(shape, dtype=float)
     exclude = np.zeros(shape, dtype=float)
     n_include = 0
-    for path in region_paths:
+    for path_index, path in enumerate(region_paths):
         text = path.read_text(encoding="utf-8", errors="replace")
         significant = [
             line.strip().lower()
@@ -402,7 +406,11 @@ def _combined_region_mask(
         for region in Regions.parse(text, format="ds9"):
             mask = _region_to_mask(region, wcs, shape, mode)
             is_include = bool(region.meta.get("include", True))
-            if is_include:
+            if path_index > 0:
+                # ``exclusion_regions`` are semantic masks: a positive
+                # polygon in an ARM file is still an area to remove.
+                exclude = np.maximum(exclude, mask)
+            elif is_include:
                 include = np.maximum(include, mask)
                 n_include += 1
             else:
@@ -548,6 +556,33 @@ def _write_background_region(
         for start, stop, inner, outer in sectors
     )
     path.write_text("\n".join(lines) + "\n", encoding="ascii")
+
+
+_DS9_REGION_SHAPE = re.compile(
+    r"^\s*(?:[a-z][a-z0-9_]*\s*;\s*)?(?P<sign>[+-]?)\s*"
+    r"(?P<shape>circle|annulus|polygon|ellipse|box|sector)\s*\(",
+    re.IGNORECASE,
+)
+
+
+def _validate_arm_region(path: str | Path) -> tuple[str, ...]:
+    """Require a WXT ARM mask to contain at least one DS9 shape."""
+
+    region_path = Path(path)
+    shape_lines: list[str] = []
+    for raw_line in region_path.read_text(
+        encoding="utf-8", errors="replace"
+    ).splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.lower().startswith("global"):
+            continue
+        match = _DS9_REGION_SHAPE.match(line)
+        if match is None:
+            continue
+        shape_lines.append(line)
+    if not shape_lines:
+        raise ValueError(f"WXT ARM region contains no DS9 shapes: {region_path}")
+    return tuple(shape_lines)
 
 
 def _event_roll(path: Path) -> float | None:
@@ -916,8 +951,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         PipelineStage("provisional_events", ("discover", "regions")),
         PipelineStage("exposure_arm_qc", ("discover", "regions", "provisional_events")),
         PipelineStage("final_events", ("discover", "regions", "exposure_arm_qc")),
-        PipelineStage("lightcurves", ("discover", "regions", "final_events", "exposure_arm_qc")),
         PipelineStage("duration", ("final_events", "exposure_arm_qc")),
+        PipelineStage("lightcurves", ("discover", "regions", "final_events", "exposure_arm_qc", "duration")),
         PipelineStage("t100_spectra", ("discover", "regions", "duration", "exposure_arm_qc")),
         PipelineStage("t90_spectra", ("discover", "regions", "duration", "exposure_arm_qc")),
         PipelineStage("ogip_finalize", ("discover", "final_events", "duration", "t100_spectra", "t90_spectra", "exposure_arm_qc")),
@@ -962,7 +997,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             "pipeline_spectrum": (),
             "provisional_events": (core / "xselect.py",),
             "final_events": (core / "xselect.py",),
-            "lightcurves": (core / "products.py", core / "xselect.py"),
+            "lightcurves": (core / "products.py", core / "time.py", core / "xselect.py"),
             "duration": (
                 core / "products.py",
                 core / "plot.py",
@@ -1193,21 +1228,42 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def _stage_regions(self, context) -> StageResult:
         files = self._files(context)
         source, background, source_origin, background_origin = self._copy_or_generate_regions(files)
+        arm_shapes: tuple[str, ...] = ()
+        effective_background = background
+        if files.arm_region is not None:
+            arm_shapes = _validate_arm_region(files.arm_region)
+            effective_background = build_effective_ds9_region(
+                background,
+                (files.arm_region,),
+                self.workspace / "regions" / "background_effective.reg",
+                default_frame="physical",
+            )
         region_manifest = _json_dump(
             self.workspace / "regions" / "regions.json",
             {
                 "source": str(source),
                 "background": str(background),
+                "background_effective": str(effective_background),
                 "arm": str(files.arm_region) if files.arm_region else None,
                 "source_origin": source_origin,
                 "background_origin": background_origin,
                 "source_sha256": _file_hash(source),
                 "background_sha256": _file_hash(background),
                 "arm_sha256": _file_hash(files.arm_region) if files.arm_region else None,
+                "background_effective_semantics": (
+                    "background_minus_arm" if files.arm_region else "background"
+                ),
+                "background_extraction_regions": [str(effective_background)],
+                "arm_exclusion_shape_count": len(arm_shapes),
             },
         )
         return StageResult(
-            outputs={"source_region": str(source), "background_region": str(background), "manifest": str(region_manifest)},
+            outputs={
+                "source_region": str(source),
+                "background_region": str(background),
+                "background_effective_region": str(effective_background),
+                "manifest": str(region_manifest),
+            },
             data={"source_origin": source_origin, "background_origin": background_origin},
         )
 
@@ -1215,11 +1271,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         outputs = context["regions"].outputs
         source = Path(outputs["source_region"])
         background = Path(outputs["background_region"])
-        files = self._files(context)
-        bkg_regions = [background]
-        if files.arm_region is not None:
-            bkg_regions.append(files.arm_region)
-        return source, background, bkg_regions
+        effective_background = Path(outputs["background_effective_region"])
+        return source, background, [effective_background]
 
     def _stage_provisional_events(self, context) -> StageResult:
         files = self._files(context)
@@ -1250,7 +1303,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         background = measure_region_exposure(
             files.exposure_map,
             background_region,
-            exclusion_regions=background_regions[1:],
+            exclusion_regions=(files.arm_region,) if files.arm_region else (),
             mask_mode=mode,
         )
         alpha = source.exposure_sum / background.exposure_sum
@@ -1314,6 +1367,27 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         files = self._files(context)
         source_region, _, background_regions = self._region_paths(context)
         alpha = float(context["exposure_arm_qc"].data["alpha"])
+        duration = context["duration"].data
+        t0 = duration.get("t0") or {}
+        t0_met = t0.get("mission_time_s")
+        try:
+            timezero = float(t0_met)
+        except (TypeError, ValueError):
+            timezero = math.nan
+        if not np.isfinite(timezero):
+            raise RuntimeError("Duration stage did not provide a finite T0 mission time for light curves")
+        time_axis = dict(duration.get("time_axis") or {})
+        time_anchor = None
+        utc = t0.get("utc")
+        if utc is not None:
+            try:
+                time_anchor = Time(str(utc), scale="utc")
+            except Exception:
+                time_axis["relative_seconds_only"] = True
+                time_axis["warning"] = (
+                    "Duration UTC anchor could not be reconstructed; "
+                    "light curves use relative T0 seconds without a UTC label."
+                )
         outputs: dict[str, str] = {}
         bands_data: dict[str, Any] = {}
         for band_name, band in self.config.extraction.bands.items():
@@ -1338,6 +1412,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 plots = plot_net_lightcurve(
                     net, base.with_name(base.name + "_plot"),
                     title=f"{self.input.target_id} WXT {band_name} count light curve",
+                    timezero=timezero,
+                    timezero_obj=time_anchor,
                     formats=self.config.plotting.formats,
                     dpi=self.config.plotting.dpi,
                 )
@@ -1353,6 +1429,12 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "pi_range": list(band.pi_range) if band.pi_range else None,
                 "alpha": alpha,
                 "net_ecsv": str(saved["net_ecsv"]),
+                "time_axis": {
+                    **time_axis,
+                    "t0_met": timezero,
+                    "t0_utc": utc,
+                    "anchor_source": t0.get("source"),
+                },
             }
         manifest = _json_dump(self.workspace / "lightcurves" / "lightcurves.json", bands_data)
         outputs["manifest"] = str(manifest)
@@ -1707,6 +1789,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             galactic_nh_1e22=galactic_nh_1e22,
             redshift=self.input.redshift,
             calculate_errors=self.config.fitting.calculate_errors,
+            error_delta_stat=self.config.fitting.error_delta_stat,
             srcname=self.input.target_id,
             instname=f"WXT_{label}",
             plot_formats=(
@@ -1803,9 +1886,20 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             )
             for key, value in comparisons.items()
         }
+        failure_logs: dict[str, dict[str, str]] = {}
+        for label, value in comparisons.items():
+            for candidate_key in getattr(value, "failures", {}):
+                path = self.workspace / "fit" / label / "models" / candidate_key / "fit_failure.log"
+                if path.is_file():
+                    failure_logs.setdefault(label, {})[candidate_key] = str(path)
         _json_dump(
             summary_path,
-            {"enabled": True, "fits": compact, "model_comparisons": comparison_payload},
+            {
+                "enabled": True,
+                "fits": compact,
+                "model_comparisons": comparison_payload,
+                "failure_logs": failure_logs,
+            },
         )
         outputs = {"summary": str(summary_path)}
         for key, value in compact.items():
@@ -1838,13 +1932,20 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 candidate_dir = self.workspace / "fit" / label / "models" / candidate_key
                 failure_json = candidate_dir / "fit_failure.json"
                 failure_summary = candidate_dir / "summary_zh.txt"
+                failure_log = candidate_dir / "fit_failure.log"
                 if failure_json.is_file():
                     outputs[f"{label}_{candidate_key}_failure_json"] = str(failure_json)
                 if failure_summary.is_file():
                     outputs[f"{label}_{candidate_key}_summary_zh"] = str(failure_summary)
+                if failure_log.is_file():
+                    outputs[f"{label}_{candidate_key}_xspec_log"] = str(failure_log)
         return StageResult(
             outputs=outputs,
-            data={"fits": compact, "model_comparisons": comparison_payload},
+            data={
+                "fits": compact,
+                "model_comparisons": comparison_payload,
+                "failure_logs": failure_logs,
+            },
         )
 
     def _stage_fluxcurve(self, context) -> StageResult:
@@ -2026,7 +2127,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         wechat_dir = report_dir / "wechat"
         wechat_dir.mkdir(parents=True, exist_ok=True)
         wechat_paths: dict[str, str] = {}
-        aggregate_blocks: list[str] = []
+        candidate_blocks: list[str] = []
+        adopted_blocks: list[str] = []
         comparisons = summary_payload.get("model_comparisons") or {}
         for message_key, message in wechat_messages.items():
             label, candidate_key = message_key.split("__", 1)
@@ -2045,11 +2147,18 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             message_path = wechat_dir / f"{safe_key}_zh.txt"
             message_path.write_text(message + "\n", encoding="utf-8")
             wechat_paths[message_key] = str(message_path)
-            aggregate_blocks.append(
-                f"【{interval_name} | {candidate_key} | {status}】\n{message}"
-            )
+            block = f"【{interval_name} | {candidate_key} | {status}】\n{message}"
+            if label != "event" and candidate_key == selected:
+                adopted_blocks.append(block)
+            else:
+                candidate_blocks.append(block)
 
-        summary_text = "\n\n".join(aggregate_blocks)
+        summary_sections: list[str] = []
+        if candidate_blocks:
+            summary_sections.append("【候选模型对比】\n\n" + "\n\n".join(candidate_blocks))
+        if adopted_blocks:
+            summary_sections.append("【自动采用模型】\n\n" + "\n\n".join(adopted_blocks))
+        summary_text = "\n\n".join(summary_sections)
         summary_txt = self.workspace / "report" / "summary_zh.txt"
         summary_txt.write_text(summary_text + "\n", encoding="utf-8")
         summary_payload["outputs"]["summary_detail_zh"] = str(detail_txt)
