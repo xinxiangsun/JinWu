@@ -12,11 +12,13 @@ pip install jinwu
 
 金乌（JinWu）是中国古代神话中的太阳神鸟，象征着光明、能量与希望。传说中，金乌为三足乌，栖于扶桑，驾驭太阳穿行于天际，赋予万物生机。以“金乌”为名，寓意本项目致力于高能瞬变天体（如伽马暴、超新星等）的联合光变曲线与光谱物理建模与推断，探索宇宙中最明亮、最剧烈的能量释放过程。
 
-本项目旨在为高能天体物理领域的研究者，提供统一、灵活且易于扩展的分析工具，支持多种物理模型、数据拟合与推断方法，促进科学交流与创新。
+本项目旨在为高能天体物理领域的研究者，提供统一、灵活且易于扩展的分析工具，支持多种物理模型、数据拟合与推断方法，促进科学交流与创新。尤其是关于EP WXT, FXT的数据处理和产品pipeline.
 
 JinWu, the Golden Crow, is a legendary solar bird in ancient Chinese mythology, symbolizing light, energy, and hope. According to legend, JinWu is a three-legged bird dwelling in Fusang, driving the sun across the sky and bringing vitality to all things. Naming this project "JinWu" reflects our dedication to joint inference and physical modeling of high-energy transients (such as gamma-ray bursts and supernovae), aiming to explore the brightest and most energetic phenomena in the universe.
 
 This project provides a unified, flexible, and extensible toolkit for researchers and enthusiasts in high-energy astrophysics, supporting various physical models, data fitting, and inference methods, and fostering scientific communication and innovation.
+
+Especially, this repo devoting on EP/WXT&FXT data products process.
 
 ### 源码安装
 
@@ -35,24 +37,7 @@ pip install .
 - astropy
 - emcee/pymc
 - astro-gdt
-
-### Fermi GBM Response Generator
-
-> git clone [https://github.com/xinxiangsun/responsum.git](https://github.com/xinxiangsun/responsum.git)
-
-> pip install ./responsum
-
-> git clone [https://github.com/xinxiangsun/gbmgeometry.git](https://github.com/xinxiangsun/gbmgeometry.git)
-
-> pip install ./gbmgeometry
->
-> git clone [https://github.com/xinxiangsun/gbm_drm_gen.git](https://github.com/xinxiangsun/gbm_drm_gen.git)
-
-> pip install ./gbm_drm_gen
-
-> git clone https://github.com/xinxiangsun/hea.git
-
-> pip install ./hea
+- gbm_drm_gen
 
 ## License / 许可证
 
