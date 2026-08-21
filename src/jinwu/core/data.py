@@ -1514,6 +1514,8 @@ class timescale:
         binsize: Optional[float] = None,
         background: Optional[EventLike] = None,
         alpha: Optional[float] = None,
+        forpaper: bool = False,
+        for_paper: Optional[bool] = None,
         **txx_kwargs: Any,
     ):
         """绘制时标诊断图；若无 result 则内部先 compute。
@@ -1521,8 +1523,15 @@ class timescale:
         参数
         - binsize: 直方图分箱宽度（秒）。等价于传入 `evt_binsize` 给 `compute/ops.txx`。
           这样可以在不显式调用 `compute` 的情况下直接 `plot(..., binsize=...)`。
+        - forpaper / for_paper: 使用去除 counts 面板、放大字体和图例的双面板
+          论文版式。``for_paper`` 是兼容别名。
         """
         from .plot import plot_event_txx
+
+        if for_paper is not None:
+            if forpaper and bool(for_paper) is not bool(forpaper):
+                raise ValueError('forpaper and for_paper specify conflicting plot modes')
+            forpaper = bool(for_paper)
 
         run_kwargs = dict(txx_kwargs)
         if 'timezero' in run_kwargs:
@@ -1554,6 +1563,7 @@ class timescale:
             figsize=figsize,
             out=out,
             timezero=self.timezero,
+            forpaper=forpaper,
         )
         return fig, axes, result_eff
 

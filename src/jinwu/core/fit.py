@@ -2458,13 +2458,12 @@ def _prepared_error_parameters(
 ) -> str:
     parameter_indices = []
     prefix = "1." if float(delta_stat) == 1.0 else f"{float(delta_stat):g}"
-    if (
-        intrinsic_nh_mode == "free"
-        and "ztbabs" in model_name.lower()
-        and hasattr(model, "zTBabs")
-    ):
-        if hasattr(model.zTBabs, "nH"):
-            parameter_indices.append(str(_model_parameter_index(model, model.zTBabs.nH)))
+    if intrinsic_nh_mode == "free" and "ztbabs" in model_name.lower():
+        for _, component in _prepared_ztbabs_components(model):
+            if hasattr(component, "nH"):
+                parameter_indices.append(
+                    str(_model_parameter_index(model, component.nH))
+                )
     for group_model in models or [model]:
         if hasattr(group_model, "cflux") and hasattr(group_model.cflux, "lg10Flux"):
             parameter_indices.append(
@@ -2533,6 +2532,18 @@ def _set_prepared_parameter_bounds(parameter, value: float, lower: float, upper:
         parameter.values = f"{value},,{lower},{lower},{upper},{upper}"
 
 
+def _prepared_ztbabs_components(model) -> list[tuple[str, Any]]:
+    """Return every zTBabs component, including XSPEC's suffixed duplicates."""
+    names = [
+        str(name)
+        for name in (getattr(model, "componentNames", None) or ())
+        if str(name).lower().startswith("ztbabs")
+    ]
+    if not names and hasattr(model, "zTBabs"):
+        names = ["zTBabs"]
+    return [(name, getattr(model, name)) for name in names]
+
+
 def _configure_prepared_model(
     model,
     *,
@@ -2540,6 +2551,7 @@ def _configure_prepared_model(
     emin: float,
     emax: float,
     redshift: float,
+    redshift_absorbers: Sequence[float] | None = None,
     galactic_nh_1e22: float | None,
     freeze_galactic_nh: bool,
     intrinsic_nh_mode: str = "free",
@@ -2553,15 +2565,29 @@ def _configure_prepared_model(
             model.TBabs.nH = float(galactic_nh_1e22)
             model.TBabs.nH.frozen = bool(freeze_galactic_nh)
 
-    if "ztbabs" in model_name.lower() and hasattr(model, "zTBabs"):
-        if hasattr(model.zTBabs, "nH"):
-            initial_nh = 0.0 if intrinsic_nh_mode == "zero" else 0.5
-            model.zTBabs.nH = initial_nh
-            _set_prepared_parameter_bounds(model.zTBabs.nH, initial_nh, 0.0, 100.0)
-            model.zTBabs.nH.frozen = intrinsic_nh_mode == "zero"
-        if hasattr(model.zTBabs, "Redshift"):
-            model.zTBabs.Redshift = redshift
-            model.zTBabs.Redshift.frozen = True
+    if "ztbabs" in model_name.lower():
+        absorbers = _prepared_ztbabs_components(model)
+        absorber_redshifts = (
+            tuple(float(value) for value in redshift_absorbers)
+            if redshift_absorbers is not None
+            else (float(redshift),)
+        )
+        if len(absorber_redshifts) != len(absorbers):
+            raise ValueError(
+                "redshift_absorbers must provide exactly one redshift for each "
+                f"zTBabs component; got {len(absorber_redshifts)} for {len(absorbers)}"
+            )
+        if any(not np.isfinite(value) or value < 0 for value in absorber_redshifts):
+            raise ValueError("redshift_absorbers must be finite and non-negative")
+        for (_, absorber), absorber_redshift in zip(absorbers, absorber_redshifts):
+            if hasattr(absorber, "nH"):
+                initial_nh = 0.0 if intrinsic_nh_mode == "zero" else 0.5
+                absorber.nH = initial_nh
+                _set_prepared_parameter_bounds(absorber.nH, initial_nh, 0.0, 100.0)
+                absorber.nH.frozen = intrinsic_nh_mode == "zero"
+            if hasattr(absorber, "Redshift"):
+                absorber.Redshift = absorber_redshift
+                absorber.Redshift.frozen = True
 
     if hasattr(model, "cflux"):
         if hasattr(model.cflux, "Emin"):
@@ -2736,9 +2762,13 @@ def _link_default_prepared_model_groups(models, model_name: str) -> None:
         return
     reference = models[0]
     for model in models[1:]:
-        if hasattr(reference, "zTBabs") and hasattr(model, "zTBabs"):
-            if hasattr(reference.zTBabs, "nH") and hasattr(model.zTBabs, "nH"):
-                _link_parameter(model.zTBabs.nH, reference.zTBabs.nH)
+        reference_absorbers = _prepared_ztbabs_components(reference)
+        absorbers = _prepared_ztbabs_components(model)
+        if len(reference_absorbers) != len(absorbers):
+            raise RuntimeError("Prepared XSPEC model groups have different zTBabs counts")
+        for (_, reference_absorber), (_, absorber) in zip(reference_absorbers, absorbers):
+            if hasattr(reference_absorber, "nH") and hasattr(absorber, "nH"):
+                _link_parameter(absorber.nH, reference_absorber.nH)
         if hasattr(reference, "powerlaw") and hasattr(model, "powerlaw"):
             if hasattr(reference.powerlaw, "PhoIndex") and hasattr(model.powerlaw, "PhoIndex"):
                 _link_parameter(model.powerlaw.PhoIndex, reference.powerlaw.PhoIndex)
@@ -2909,6 +2939,7 @@ def fit_prepared(
     energy_ranges: Mapping[str, tuple[float, float]] | None = None,
     model_name: str = "tbabs*ztbabs*cflux*powerlaw",
     redshift: float = 0.0,
+    redshift_absorbers: Sequence[float] | None = None,
     stat_method: str = "cstat",
     abundance: str = "wilm",
     cross_section: str = "vern",
@@ -3007,6 +3038,7 @@ def fit_prepared(
             emin=group["energy_range"]["emin"],
             emax=group["energy_range"]["emax"],
             redshift=redshift,
+            redshift_absorbers=redshift_absorbers,
             galactic_nh_1e22=galactic_nh_1e22,
             freeze_galactic_nh=freeze_galactic_nh,
             intrinsic_nh_mode=intrinsic_nh_mode,
@@ -3141,6 +3173,9 @@ def fit_prepared(
         "galactic_nh_1e22": galactic_nh_1e22,
         "freeze_galactic_nh": freeze_galactic_nh,
         "intrinsic_nh_mode": intrinsic_nh_mode,
+        "redshift_absorbers": (
+            list(redshift_absorbers) if redshift_absorbers is not None else [redshift]
+        ),
         **error_metadata,
         "calculate_errors": calculate_errors,
         "error_command": command if calculate_errors else None,

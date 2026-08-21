@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
-from typing import Any, ClassVar, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
 __all__ = [
     "XSPEC_COSMO_PLANCK18",
@@ -19,6 +19,7 @@ __all__ = [
     "FluxCurveConfig",
     "ReportConfig",
     "GalacticAbsorptionConfig",
+    "UpperLimitConfig",
     "ExecutionConfig",
     "InstrumentConfig",
     "register_instrument",
@@ -27,6 +28,7 @@ __all__ = [
     "WXT",
     "BAT",
     "GBM",
+    "GECAM",
     "UVOT",
 ]
 
@@ -175,6 +177,124 @@ class GalacticAbsorptionConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class UpperLimitConfig:
+    """Instrument-selected policy for response-aware upper limits.
+
+    The strategy is deliberately part of the instrument configuration rather
+    than a free argument to the calculator.  This prevents, for example, a
+    coded-mask product from being interpreted as a simple aperture ON/OFF
+    measurement.
+    """
+
+    strategy: Literal[
+        "spatial_onoff",
+        "modeled_count_spectrum",
+        "coded_mask_spectrum",
+        "photometric",
+        "unsupported",
+    ] = "unsupported"
+    background_likelihood: Literal[
+        "poisson_onoff",
+        "gaussian_model",
+        "known_background",
+        "photometric",
+    ] = "known_background"
+    response_folding: Literal["rmf_arf", "rsp", "count_to_flux"] = "count_to_flux"
+    combine: Literal["single", "joint_detectors", "joint_modules"] = "single"
+    result_modes: tuple[str, ...] = ()
+    default_sigma: float = 3.0
+    detection_power: float = 0.90
+    calibration: Literal["bootstrap", "asymptotic"] = "bootstrap"
+    null_trials: int = 200_000
+    signal_trials: int = 20_000
+    fractional_background_systematic: float | None = None
+    enabled: bool = False
+    unavailable_reason: str | None = "No upper-limit strategy is configured."
+
+    def __post_init__(self) -> None:
+        allowed_strategies = {
+            "spatial_onoff",
+            "modeled_count_spectrum",
+            "coded_mask_spectrum",
+            "photometric",
+            "unsupported",
+        }
+        if self.strategy not in allowed_strategies:
+            raise ValueError(f"Unknown upper-limit strategy: {self.strategy}")
+        if self.calibration not in {"bootstrap", "asymptotic"}:
+            raise ValueError(f"Unknown upper-limit calibration: {self.calibration}")
+        allowed_modes = {"observed_upper_bound", "detection_sensitivity"}
+        unknown_modes = set(self.result_modes) - allowed_modes
+        if unknown_modes:
+            raise ValueError(f"Unknown upper-limit result modes: {sorted(unknown_modes)}")
+        if len(set(self.result_modes)) != len(self.result_modes):
+            raise ValueError("upper-limit result_modes must not contain duplicates")
+
+        sigma = float(self.default_sigma)
+        power = float(self.detection_power)
+        if not math.isfinite(sigma) or sigma <= 0:
+            raise ValueError("upper-limit default_sigma must be finite and positive")
+        if not math.isfinite(power) or not 0.0 < power < 1.0:
+            raise ValueError("upper-limit detection_power must be between 0 and 1")
+        if int(self.null_trials) <= 0 or int(self.signal_trials) <= 0:
+            raise ValueError("upper-limit Monte Carlo trial counts must be positive")
+        object.__setattr__(self, "default_sigma", sigma)
+        object.__setattr__(self, "detection_power", power)
+        object.__setattr__(self, "null_trials", int(self.null_trials))
+        object.__setattr__(self, "signal_trials", int(self.signal_trials))
+
+        systematic = self.fractional_background_systematic
+        if systematic is not None:
+            systematic = float(systematic)
+            if not math.isfinite(systematic) or systematic < 0:
+                raise ValueError(
+                    "fractional_background_systematic must be finite and non-negative"
+                )
+            object.__setattr__(self, "fractional_background_systematic", systematic)
+
+        if self.strategy == "unsupported":
+            if self.enabled:
+                raise ValueError("unsupported upper-limit strategy cannot be enabled")
+            if self.result_modes:
+                raise ValueError("unsupported upper-limit strategy cannot define result modes")
+            if not self.unavailable_reason:
+                raise ValueError("unsupported upper-limit strategy requires unavailable_reason")
+            return
+
+        if not self.enabled:
+            raise ValueError("a configured upper-limit strategy must be enabled")
+        if "observed_upper_bound" not in self.result_modes:
+            raise ValueError("enabled upper-limit strategies must provide observed_upper_bound")
+
+        valid_combinations = {
+            "spatial_onoff": ({"poisson_onoff"}, {"rmf_arf"}, {"single", "joint_modules"}),
+            "modeled_count_spectrum": (
+                {"gaussian_model", "known_background"},
+                {"rsp"},
+                {"single", "joint_detectors"},
+            ),
+            "coded_mask_spectrum": (
+                {"gaussian_model", "known_background"},
+                {"rsp"},
+                {"single"},
+            ),
+            "photometric": ({"photometric"}, {"count_to_flux"}, {"single"}),
+        }
+        likelihoods, responses, combinations = valid_combinations[self.strategy]
+        if self.background_likelihood not in likelihoods:
+            raise ValueError(
+                f"{self.strategy} is incompatible with background likelihood "
+                f"{self.background_likelihood}"
+            )
+        if self.response_folding not in responses:
+            raise ValueError(
+                f"{self.strategy} is incompatible with response folding {self.response_folding}"
+            )
+        if self.combine not in combinations:
+            raise ValueError(f"{self.strategy} is incompatible with combine={self.combine}")
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionConfig:
     """Pipeline execution, persistence, and external-tool defaults."""
 
@@ -241,6 +361,7 @@ class InstrumentConfig:
     galactic_absorption: GalacticAbsorptionConfig = field(
         default_factory=GalacticAbsorptionConfig
     )
+    upper_limit: UpperLimitConfig = field(default_factory=UpperLimitConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
 
     aliases: ClassVar[tuple[str, ...]] = ()
@@ -282,6 +403,15 @@ class FXT(InstrumentConfig):
             "background_type": "spatial",
             "stat_method": "wstat",
             "response_type": "rmf",
+            "upper_limit": UpperLimitConfig(
+                strategy="spatial_onoff",
+                background_likelihood="poisson_onoff",
+                response_folding="rmf_arf",
+                combine="joint_modules",
+                result_modes=("observed_upper_bound", "detection_sensitivity"),
+                enabled=True,
+                unavailable_reason=None,
+            ),
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
@@ -306,6 +436,15 @@ class WXT(InstrumentConfig):
             "stat_method": "cstat",
             "response_type": "rmf",
             "pipeline": "ep.wxt.pointing",
+            "upper_limit": UpperLimitConfig(
+                strategy="spatial_onoff",
+                background_likelihood="poisson_onoff",
+                response_folding="rmf_arf",
+                combine="single",
+                result_modes=("observed_upper_bound", "detection_sensitivity"),
+                enabled=True,
+                unavailable_reason=None,
+            ),
             "extraction": ExtractionConfig(
                 lightcurve_binsize_s=0.5,
                 image_binsize=16,
@@ -373,6 +512,15 @@ class BAT(InstrumentConfig):
             "background_type": "detector_shadow",
             "stat_method": "pgstat",
             "response_type": "rsp",
+            "upper_limit": UpperLimitConfig(
+                strategy="coded_mask_spectrum",
+                background_likelihood="gaussian_model",
+                response_folding="rsp",
+                combine="single",
+                result_modes=("observed_upper_bound",),
+                enabled=True,
+                unavailable_reason=None,
+            ),
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
@@ -408,10 +556,67 @@ class GBM(InstrumentConfig):
             "background_type": "temporal",
             "stat_method": "pgstat",
             "response_type": "rsp",
+            "upper_limit": UpperLimitConfig(
+                strategy="modeled_count_spectrum",
+                background_likelihood="gaussian_model",
+                response_folding="rsp",
+                combine="joint_detectors",
+                result_modes=("observed_upper_bound", "detection_sensitivity"),
+                enabled=True,
+                unavailable_reason=None,
+            ),
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
         self.detector = detector
+
+
+@register_instrument
+class GECAM(InstrumentConfig):
+    """GECAM detector config with an explicit calibrated analysis band."""
+
+    aliases = ("GECAM_A", "GECAM_B")
+
+    def __init__(
+        self,
+        *,
+        detector: str | None = None,
+        energy_range_keV: tuple[float, float] | None = None,
+        **kwargs: Any,
+    ):
+        if detector is None or energy_range_keV is None:
+            raise ValueError(
+                "GECAM requires explicit detector and calibrated energy_range_keV; "
+                "no scientifically reliable defaults are inferred"
+            )
+        detector_key = str(detector).strip().upper()
+        if not detector_key:
+            raise ValueError("GECAM detector must not be empty")
+        emin, emax = (float(value) for value in energy_range_keV)
+        if not (math.isfinite(emin) and math.isfinite(emax) and 0 < emin < emax):
+            raise ValueError("GECAM energy_range_keV must be finite, positive and increasing")
+        defaults: dict[str, Any] = {
+            "name": f"GECAM_{detector_key}",
+            "mission": "GECAM",
+            "energy_range_keV": (emin, emax),
+            "group_min_counts": 25,
+            "band": "Gamma",
+            "background_type": "temporal",
+            "stat_method": "pgstat",
+            "response_type": "rsp",
+            "upper_limit": UpperLimitConfig(
+                strategy="modeled_count_spectrum",
+                background_likelihood="gaussian_model",
+                response_folding="rsp",
+                combine="joint_detectors",
+                result_modes=("observed_upper_bound", "detection_sensitivity"),
+                enabled=True,
+                unavailable_reason=None,
+            ),
+        }
+        defaults.update(kwargs)
+        super().__init__(**defaults)
+        self.detector = detector_key
 
 
 @register_instrument
@@ -441,6 +646,15 @@ class UVOT(InstrumentConfig):
             "band": "UV/Optical/IR",
             "background_type": "spatial",
             "filtername": filter_key,
+            "upper_limit": UpperLimitConfig(
+                strategy="unsupported",
+                enabled=False,
+                result_modes=(),
+                unavailable_reason=(
+                    "UVOT requires a photometric upper-limit backend; the high-energy "
+                    "count-spectrum engine is not applicable."
+                ),
+            ),
         }
         defaults.update(kwargs)
         super().__init__(**defaults)

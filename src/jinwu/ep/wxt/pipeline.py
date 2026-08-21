@@ -115,6 +115,7 @@ class ExposureMeasure:
     nan_fraction: float
     requested_area_pixels: float | None = None
     in_map_fraction: float = 1.0
+    skipped_degenerate_exclusions: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,11 +125,38 @@ class BackgroundScalingResult:
     background: ExposureMeasure
     background_before_arm: ExposureMeasure
     arm_excluded_exposure: float
-    exposure_product: str
-    exposure_path: str
-    exposure_sha256: str
-    fallback_warning: str | None = None
+    source_exposure_product: str
+    source_exposure_path: str
+    source_exposure_sha256: str
+    background_exposure_product: str
+    background_exposure_path: str
+    background_exposure_sha256: str
+    background_fallback_warning: str | None = None
     method: str = "exposure_map_ratio"
+
+    @property
+    def exposure_product(self) -> str:
+        """Compatibility view of the source/background exposure products."""
+        return (
+            "exp"
+            if self.background_exposure_product == "exp"
+            else f"{self.source_exposure_product}/{self.background_exposure_product}"
+        )
+
+    @property
+    def exposure_path(self) -> str:
+        """Legacy single-map path, mapped to the background scaling product."""
+        return self.background_exposure_path
+
+    @property
+    def exposure_sha256(self) -> str:
+        """Legacy single-map checksum, mapped to the background product."""
+        return self.background_exposure_sha256
+
+    @property
+    def fallback_warning(self) -> str | None:
+        """Legacy alias for the background exposure fallback warning."""
+        return self.background_fallback_warning
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,6 +394,7 @@ class _CombinedMaskGeometry:
     mask: np.ndarray
     requested_area_pixels: float
     in_map_area_pixels: float
+    skipped_degenerate_exclusions: int = 0
 
 
 def _pixel_region(region, wcs: WCS):
@@ -442,6 +471,26 @@ def _region_stamp(region, wcs: WCS, mode: str) -> _MaskStamp:
     return _stamp_from_mask(_region_mask_object(pixel_region, mode))
 
 
+def _is_zero_area_polygon(region, wcs: WCS) -> bool:
+    """Return whether polygon vertices are collinear in map pixels."""
+    pixel_region = _pixel_region(region, wcs)
+    vertices = getattr(pixel_region, "vertices", None)
+    if vertices is None:
+        return False
+    x = np.asarray(vertices.x, dtype=float)
+    y = np.asarray(vertices.y, dtype=float)
+    if (
+        x.size < 3
+        or y.size != x.size
+        or not np.all(np.isfinite(x))
+        or not np.all(np.isfinite(y))
+    ):
+        return True
+    points = np.column_stack((x, y))
+    scale = max(float(np.ptp(x)), float(np.ptp(y)), 1.0)
+    return np.linalg.matrix_rank(points - points[0], tol=1e-12 * scale) < 2
+
+
 def _combined_region_geometry(
     region_paths: Sequence[Path],
     wcs: WCS,
@@ -459,6 +508,7 @@ def _combined_region_geometry(
 
     stamped_regions: list[tuple[_MaskStamp, bool]] = []
     n_include = 0
+    skipped_degenerate_exclusions = 0
     for path_index, path in enumerate(region_paths):
         text = path.read_text(encoding="utf-8", errors="replace")
         significant = [
@@ -478,7 +528,25 @@ def _combined_region_geometry(
                 text = re.sub(r"(?im)^\s*physical\s*$", "image", text)
         for region in Regions.parse(text, format="ds9"):
             is_include = path_index == 0 and bool(region.meta.get("include", True))
-            stamped_regions.append((_region_stamp(region, wcs, mode), is_include))
+            if _is_zero_area_polygon(region, wcs):
+                if is_include:
+                    raise ValueError(
+                        f"DS9 inclusion polygon has zero geometric area: {path}"
+                    )
+                skipped_degenerate_exclusions += 1
+                continue
+            try:
+                stamp = _region_stamp(region, wcs, mode)
+            except ZeroDivisionError as exc:
+                if not _is_zero_area_polygon(region, wcs):
+                    raise
+                if is_include:
+                    raise ValueError(
+                        f"DS9 inclusion polygon has zero geometric area: {path}"
+                    ) from exc
+                skipped_degenerate_exclusions += 1
+                continue
+            stamped_regions.append((stamp, is_include))
             n_include += int(is_include)
     if n_include == 0:
         raise ValueError("Effective extraction region contains no inclusion shape")
@@ -519,6 +587,7 @@ def _combined_region_geometry(
         mask=image_mask,
         requested_area_pixels=requested_area,
         in_map_area_pixels=float(image_mask.sum()),
+        skipped_degenerate_exclusions=skipped_degenerate_exclusions,
     )
 
 
@@ -596,6 +665,7 @@ def _measure_mask(
     mask: np.ndarray,
     *,
     requested_area_pixels: float | None = None,
+    skipped_degenerate_exclusions: int = 0,
 ) -> ExposureMeasure:
     area = float(mask.sum())
     if not np.isfinite(area) or area <= 0:
@@ -609,8 +679,10 @@ def _measure_mask(
     if exposure_sum <= 0:
         raise ValueError("Region has no positive exposure")
     requested_area = float(requested_area_pixels if requested_area_pixels is not None else area)
-    if requested_area < area:
+    area_tolerance = 1e-9 * max(1.0, requested_area, area)
+    if requested_area + area_tolerance < area:
         raise ValueError("Requested region area cannot be smaller than its in-map area")
+    requested_area = max(requested_area, area)
     return ExposureMeasure(
         exposure_sum=exposure_sum,
         geometric_area_pixels=area,
@@ -620,6 +692,7 @@ def _measure_mask(
         nan_fraction=nan_area / area,
         requested_area_pixels=requested_area,
         in_map_fraction=area / requested_area,
+        skipped_degenerate_exclusions=int(skipped_degenerate_exclusions),
     )
 
 
@@ -645,6 +718,7 @@ def measure_region_exposure(
         exposure,
         geometry.mask,
         requested_area_pixels=geometry.requested_area_pixels,
+        skipped_degenerate_exclusions=geometry.skipped_degenerate_exclusions,
     )
 
 
@@ -796,16 +870,25 @@ def _infer_footprint_edge_pa_deg(path: Path) -> float:
     return float(center.position_angle(direction).to_value(u.deg) % 360.0)
 
 
-def _alpha_exposure_product(
+def _alpha_exposure_products(
     files: WXTObservationFiles,
-) -> tuple[Path, str, str | None]:
-    """Return the WXT exposure map used for ON/OFF background scaling.
+) -> tuple[Path, Path, str, str | None]:
+    """Return source/background maps used for WXT ON/OFF scaling.
 
-    ``.expcorr`` contains the ARM mask.  The source region intentionally does
-    not exclude ARM, while the effective background region already does, so
-    both exposure integrals must use the unmasked ``.exp`` product.
+    The source aperture is integrated on the unmasked ``.exp`` product.
+    Background uses ``.expcorr`` when available because it carries the WXT
+    spatial correction.  The caller may fall back to ``.exp`` when the
+    corrected map has no usable background support.
     """
-    return files.exposure_map, "exp", None
+    if files.exposure_correction is not None:
+        return files.exposure_map, files.exposure_correction, "expcorr", None
+    return (
+        files.exposure_map,
+        files.exposure_map,
+        "exp",
+        "WXT .expcorr is unavailable; background exposure integration fell back "
+        "to the ARM-excluded region on .exp.",
+    )
 
 
 def _cross4lobes_orientation(
@@ -833,21 +916,25 @@ _DS9_REGION_SHAPE = re.compile(
 
 
 def _validate_arm_region(path: str | Path) -> tuple[str, ...]:
-    """Require a WXT ARM mask to contain at least one DS9 shape."""
+    """Return WXT ARM shapes, accepting a genuinely empty no-mask product."""
 
     region_path = Path(path)
     shape_lines: list[str] = []
+    substantive_lines: list[str] = []
     for raw_line in region_path.read_text(
         encoding="utf-8", errors="replace"
     ).splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or line.lower().startswith("global"):
             continue
+        if line.lower() in {"physical", "image", "fk5", "icrs", "j2000"}:
+            continue
+        substantive_lines.append(line)
         match = _DS9_REGION_SHAPE.match(line)
         if match is None:
             continue
         shape_lines.append(line)
-    if not shape_lines:
+    if not shape_lines and substantive_lines:
         raise ValueError(f"WXT ARM region contains no DS9 shapes: {region_path}")
     return tuple(shape_lines)
 
@@ -1305,6 +1392,20 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
 
     def _files(self, context: Mapping[str, StageResult]) -> WXTObservationFiles:
         data = context["discover"].data
+        expected_root = self.input.resolved_root()
+        discovered_root = data.get("discovery_root")
+        if discovered_root is None:
+            raise RuntimeError(
+                "WXT discover metadata does not record its input root; rerun with "
+                "resume=False to rebuild stale pipeline manifests"
+            )
+        resolved_discovered_root = Path(discovered_root).expanduser().resolve()
+        if resolved_discovered_root != expected_root:
+            raise RuntimeError(
+                "WXT discover result belongs to a different input directory: "
+                f"cached={resolved_discovered_root}, current={expected_root}. "
+                "Rerun with resume=False."
+            )
         path_fields = {
             "cleaned_event", "exposure_map", "exposure_correction", "image", "arm_region",
             "rmf", "arf", "gti", "source_region", "background_region", "source_catalog",
@@ -1313,6 +1414,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         payload = {
             key: (Path(value) if key in path_fields and value is not None else value)
             for key, value in data.items()
+            if key in WXTObservationFiles.__dataclass_fields__
         }
         return WXTObservationFiles(**payload)
 
@@ -1380,6 +1482,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             key: (str(value) if isinstance(value, Path) else value)
             for key, value in asdict(files).items()
         }
+        data["discovery_root"] = str(self.input.resolved_root())
         return StageResult(outputs=outputs, data=data)
 
     def _stage_galactic_absorption(self, context) -> StageResult:
@@ -1523,14 +1626,19 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         )
         arm_shapes: tuple[str, ...] = ()
         effective_background = background
+        arm_mask_status = "unavailable"
         if files.arm_region is not None:
             arm_shapes = _validate_arm_region(files.arm_region)
-            effective_background = build_effective_ds9_region(
-                background,
-                (files.arm_region,),
-                self.workspace / "regions" / "background_effective.reg",
-                default_frame="physical",
-            )
+            if arm_shapes:
+                effective_background = build_effective_ds9_region(
+                    background,
+                    (files.arm_region,),
+                    self.workspace / "regions" / "background_effective.reg",
+                    default_frame="physical",
+                )
+                arm_mask_status = "applied"
+            else:
+                arm_mask_status = "empty_no_exclusion"
         region_manifest = _json_dump(
             self.workspace / "regions" / "regions.json",
             {
@@ -1538,6 +1646,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "background": str(background),
                 "background_effective": str(effective_background),
                 "arm": str(files.arm_region) if files.arm_region else None,
+                "arm_mask_status": arm_mask_status,
                 "source_origin": source_origin,
                 "background_origin": background_origin,
                 **background_metadata,
@@ -1546,7 +1655,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "background_effective_sha256": _file_hash(effective_background),
                 "arm_sha256": _file_hash(files.arm_region) if files.arm_region else None,
                 "background_effective_semantics": (
-                    "background_minus_arm" if files.arm_region else "background"
+                    "background_minus_arm" if arm_shapes else "background"
                 ),
                 "background_extraction_regions": [str(effective_background)],
                 "arm_exclusion_shape_count": len(arm_shapes),
@@ -1597,14 +1706,52 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         files = self._files(context)
         source_region, background_region, background_regions = self._region_paths(context)
         mode = self.config.background_scaling.mask_mode
-        alpha_map, alpha_product, fallback_warning = _alpha_exposure_product(files)
-        source = measure_region_exposure(alpha_map, source_region, mask_mode=mode)
-        before = measure_region_exposure(alpha_map, background_region, mask_mode=mode)
-        background = measure_region_exposure(
-            alpha_map,
-            background_regions[0],
-            mask_mode=mode,
+        source_map, background_map, background_product, fallback_warning = (
+            _alpha_exposure_products(files)
         )
+        try:
+            source = measure_region_exposure(source_map, source_region, mask_mode=mode)
+        except ValueError as exc:
+            raise ValueError(
+                "Source region has no usable support on the WXT .exp exposure map; "
+                "this is not an .expcorr background-mask failure. Verify the target "
+                "coordinates, input product directory, and cached discover result, "
+                "then rerun with resume=False. "
+                f"source_region={source_region}, exposure_map={source_map}, "
+                f"input_root={self.input.resolved_root()}; cause: {exc}"
+            ) from exc
+
+        try:
+            before = measure_region_exposure(
+                background_map,
+                background_region,
+                mask_mode=mode,
+            )
+            background = measure_region_exposure(
+                background_map,
+                background_regions[0],
+                mask_mode=mode,
+            )
+        except ValueError as exc:
+            if background_map == files.exposure_map:
+                raise
+            fallback_warning = (
+                f"WXT .expcorr could not support the selected background region "
+                f"({exc}); background exposure integration fell back to the "
+                "ARM-excluded region on .exp."
+            )
+            background_map = files.exposure_map
+            background_product = "exp"
+            before = measure_region_exposure(
+                background_map,
+                background_region,
+                mask_mode=mode,
+            )
+            background = measure_region_exposure(
+                background_map,
+                background_regions[0],
+                mask_mode=mode,
+            )
         alpha = source.exposure_sum / background.exposure_sum
         if not np.isfinite(alpha) or alpha <= 0:
             raise ValueError(f"Invalid WXT exposure-map alpha: {alpha}")
@@ -1614,12 +1761,45 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             background=background,
             background_before_arm=before,
             arm_excluded_exposure=max(before.exposure_sum - background.exposure_sum, 0.0),
-            exposure_product=alpha_product,
-            exposure_path=str(alpha_map),
-            exposure_sha256=_file_hash(alpha_map),
-            fallback_warning=fallback_warning,
+            source_exposure_product="exp",
+            source_exposure_path=str(source_map),
+            source_exposure_sha256=_file_hash(source_map),
+            background_exposure_product=background_product,
+            background_exposure_path=str(background_map),
+            background_exposure_sha256=_file_hash(background_map),
+            background_fallback_warning=fallback_warning,
         )
-        qc = _json_dump(self.workspace / "regions" / "exposure_qc.json", asdict(scaling))
+        data = asdict(scaling)
+        # Compatibility aliases for consumers of the earlier single-map QC schema.
+        data.update(
+            {
+                "exposure_product": (
+                    "exp" if background_product == "exp" else "exp/expcorr"
+                ),
+                "exposure_path": str(background_map),
+                "exposure_sha256": _file_hash(background_map),
+                "fallback_warning": fallback_warning,
+            }
+        )
+        data["exposure_coverage_warning"] = (
+            min(source.coverage_fraction, background.coverage_fraction) < 1.0
+        )
+        data["boundary_clipping_warning"] = (
+            min(source.in_map_fraction, background.in_map_fraction) < 1.0
+        )
+        data["skipped_degenerate_exclusions"] = (
+            background.skipped_degenerate_exclusions
+        )
+        data["region_geometry_warning"] = (
+            "Ignored "
+            f"{background.skipped_degenerate_exclusions} zero-area background "
+            "exclusion polygon(s); they have no geometric or exposure contribution."
+            if background.skipped_degenerate_exclusions
+            else None
+        )
+        if fallback_warning is not None:
+            data["warning"] = fallback_warning
+        qc = _json_dump(self.workspace / "regions" / "exposure_qc.json", data)
         needs_review = (
             self.config.regions.require_review
             and not self.input.auto_approve_regions
@@ -1627,15 +1807,6 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         )
         if self.input.auto_approve_regions and not self.approval_path.exists():
             self.approve_regions(note="auto-approved by WXTPointingInput")
-        data = asdict(scaling)
-        data["exposure_coverage_warning"] = (
-            min(source.coverage_fraction, background.coverage_fraction) < 1.0
-        )
-        data["boundary_clipping_warning"] = (
-            min(source.in_map_fraction, background.in_map_fraction) < 1.0
-        )
-        if fallback_warning is not None:
-            data["warning"] = fallback_warning
         if needs_review:
             return StageResult(
                 status=PipelineStatus.NEEDS_REVIEW,

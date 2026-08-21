@@ -607,6 +607,19 @@ class TimeAstrSat(TimeFromEpoch):
     epoch_scale = 'utc'
     epoch_format = 'iso'
 
+class TimeSVOM(TimeFromEpoch):
+    """
+    SVOM 任务 MET: 自 2017-01-01 00:00:00 UTC 起的秒数。
+
+    SVOM MET: seconds since 2017-01-01 00:00:00 UTC.
+    """
+    name = 'svom'
+    unit = 1.0 / erfa.DAYSEC  # seconds to days
+    epoch_val = '2017-01-01 00:00:00'
+    epoch_val2 = None
+    epoch_scale = 'utc'
+    epoch_format = 'iso'
+
 
 _MISSION_TIME_FORMATS = {
     'EP': 'ep',
@@ -626,6 +639,7 @@ _MISSION_TIME_FORMATS = {
     'NEWTON': 'newton',
     'XRISM': 'xrism',
     'ASTROSAT': 'astrosat',
+    ‘SVOM’: 'svom',
 }
 
 

@@ -752,6 +752,8 @@ def plot_event_txx(
     min_t100_bins: int | None = None,
     focus_t100: bool = False,
     t100_context_fraction: float = 0.25,
+    forpaper: bool = False,
+    for_paper: Optional[bool] = None,
 ) -> tuple[Figure, tuple[Axes, Axes]]:
     """可视化事件 Txx 结果：Source/Background + Bayesian Blocks 风格图。
 
@@ -767,7 +769,17 @@ def plot_event_txx(
     - focus_t100: 是否将图的横轴聚焦到 T100 及两侧少量上下文。默认显示
       全部分析时段。
     - t100_context_fraction: T100 两侧显示的上下文比例。
+    - forpaper: 使用双面板论文版式。移除原始 counts 面板，保留净计数率和
+      Bayesian-block 面板，并放大标题、坐标轴和图例字体。默认 ``False``
+      保持三面板诊断图和既有返回顺序 ``(counts_axis, rate_axis)``；论文
+      版返回 ``(rate_axis, block_axis)``。
+    - for_paper: ``forpaper`` 的兼容别名；两者指定为冲突值时抛出错误。
     """
+
+    if for_paper is not None:
+        if forpaper and bool(for_paper) is not bool(forpaper):
+            raise ValueError("forpaper and for_paper specify conflicting plot modes")
+        forpaper = bool(for_paper)
 
     evt: Optional[Any] = None
     if hasattr(src, "kind") and getattr(src, "kind") == "evt":
@@ -1161,78 +1173,106 @@ def plot_event_txx(
     x_t90_start = _safe_float_any(t90_start - tz_plot_abs)
     x_t90_stop = _safe_float_any(t90_stop - tz_plot_abs)
 
-    fig, (ax_top, ax_mid, ax_blocks) = plt.subplots(
-        3,
-        1,
-        figsize=figsize,
-        sharex=True,
-        constrained_layout=True,
-        gridspec_kw={"height_ratios": [2.25, 2.1, 0.72]},
-    )
+    if forpaper:
+        # Keep the default physical plotting range and products unchanged; this
+        # is only a publication-oriented layout of the same diagnostic data.
+        paper_figsize = (11.0, 7.0) if figsize == (10.5, 8.2) else figsize
+        fig, (ax_mid, ax_blocks) = plt.subplots(
+            2,
+            1,
+            figsize=paper_figsize,
+            sharex=True,
+            constrained_layout=True,
+            gridspec_kw={"height_ratios": [3.0, 0.9]},
+        )
+        ax_top: Optional[Axes] = None
+        title_fontsize = 24
+        label_fontsize = 24
+        tick_fontsize = 18
+        rate_legend_fontsize = 18
+        block_legend_fontsize = 21
+        block_text_fontsize = 18
+    else:
+        fig, (ax_top, ax_mid, ax_blocks) = plt.subplots(
+            3,
+            1,
+            figsize=figsize,
+            sharex=True,
+            constrained_layout=True,
+            gridspec_kw={"height_ratios": [2.25, 2.1, 0.72]},
+        )
+        title_fontsize = None
+        label_fontsize = None
+        tick_fontsize = None
+        rate_legend_fontsize = 9
+        block_legend_fontsize = 8
+        block_text_fontsize = 7
 
     err_src_color = "#2f6ea6"
     err_bkg_color = "#6f6f6f"
     err_net_color = "#d95f5f"
 
-    # 上面板：原始 Source vs Background（柱状 + 误差）
-    ax_top.bar(x_lc_center, src_hist_lc.astype(float), width=lc_width * 0.82, alpha=0.72, label="Source counts (real events)", color="steelblue")
-    ax_top.bar(x_lc_center, bkg_counts_lc, width=lc_width * 0.82, alpha=0.50, label=bkg_label_top, color="gray")
-    ax_top.errorbar(
-        x_lc_center,
-        src_hist_lc.astype(float),
-        yerr=src_err_counts_lc,
-        fmt="none",
-        ecolor=err_src_color,
-        elinewidth=1.0,
-        capsize=1.5,
-        alpha=0.75,
-    )
-    ax_top.errorbar(
-        x_lc_center,
-        bkg_counts_lc,
-        yerr=bkg_err_counts_lc,
-        fmt="none",
-        ecolor=err_bkg_color,
-        elinewidth=1.0,
-        capsize=1.5,
-        alpha=0.72,
-    )
-    ax_top.set_ylabel("Counts")
-    if title is not None:
-        top_title = str(title)
-    else:
-        top_title = f"{srcname} Duration Diagnostic" if srcname is not None else "Duration Diagnostic"
-    ax_top.set_title(top_title)
-    ax_top.legend(loc="upper right")
-    ax_top.grid(alpha=0.3)
+    # 上面板：原始 Source vs Background（柱状 + 误差）。论文版式有意移除。
+    if ax_top is not None:
+        ax_top.bar(x_lc_center, src_hist_lc.astype(float), width=lc_width * 0.82, alpha=0.72, label="Source counts (real events)", color="steelblue")
+        ax_top.bar(x_lc_center, bkg_counts_lc, width=lc_width * 0.82, alpha=0.50, label=bkg_label_top, color="gray")
+        ax_top.errorbar(
+            x_lc_center,
+            src_hist_lc.astype(float),
+            yerr=src_err_counts_lc,
+            fmt="none",
+            ecolor=err_src_color,
+            elinewidth=1.0,
+            capsize=1.5,
+            alpha=0.75,
+        )
+        ax_top.errorbar(
+            x_lc_center,
+            bkg_counts_lc,
+            yerr=bkg_err_counts_lc,
+            fmt="none",
+            ecolor=err_bkg_color,
+            elinewidth=1.0,
+            capsize=1.5,
+            alpha=0.72,
+        )
+        ax_top.set_ylabel("Counts")
+        if title is not None:
+            top_title = str(title)
+        else:
+            top_title = f"{srcname} Duration Diagnostic" if srcname is not None else "Duration Diagnostic"
+        ax_top.set_title(top_title)
+        ax_top.legend(loc="upper right")
+        ax_top.grid(alpha=0.3)
 
-    if np.isfinite(bs_lc) and bs_lc > 0.0:
-        binsize_text = f"Bin size: {bs_lc:.3f} s"
-    else:
-        binsize_text = "Bin size: adaptive"
+        if np.isfinite(bs_lc) and bs_lc > 0.0:
+            binsize_text = f"Bin size: {bs_lc:.3f} s"
+        else:
+            binsize_text = "Bin size: adaptive"
 
-    info_lines = [
-        f"Source: {srcname}",
-        f"Burst window: [{x_t100_start:.3f}, {x_t100_stop:.3f}] s",
-        binsize_text,
-    ]
-    if np.isfinite(t90_val):
-        info_lines.append(f"T90: {t90_text}")
-    ax_top.text(
-        0.01,
-        0.98,
-        "\n".join(info_lines),
-        transform=ax_top.transAxes,
-        va="top",
-        ha="left",
-        fontsize=9,
-        bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.9),
-    )
+        info_lines = [
+            f"Source: {srcname}",
+            f"Burst window: [{x_t100_start:.3f}, {x_t100_stop:.3f}] s",
+            binsize_text,
+        ]
+        if np.isfinite(t90_val):
+            info_lines.append(f"T90: {t90_text}")
+        ax_top.text(
+            0.01,
+            0.98,
+            "\n".join(info_lines),
+            transform=ax_top.transAxes,
+            va="top",
+            ha="left",
+            fontsize=14,
+            bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.9),
+        )
 
     # 中间面板：原始 step 光变 + 误差 + 分块/SNR + T0/T100/T90
     if src_rate_lc.size > 0:
-        ax_mid.step(x_lc_edges[:-1], src_rate_lc, where="post", color="steelblue", linewidth=1.1, label="Source rate")
-        ax_mid.hlines(src_rate_lc[-1], x_lc_edges[-2], x_lc_edges[-1], colors="steelblue", linewidth=1.1)
+        rate_linewidth = 1.6 if forpaper else 1.1
+        ax_mid.step(x_lc_edges[:-1], src_rate_lc, where="post", color="steelblue", linewidth=rate_linewidth, label="Source rate")
+        ax_mid.hlines(src_rate_lc[-1], x_lc_edges[-2], x_lc_edges[-1], colors="steelblue", linewidth=rate_linewidth)
         ax_mid.fill_between(x_lc_edges[:-1], 0.0, src_rate_lc, step="post", alpha=0.28, color="steelblue")
     ax_mid.errorbar(
         x_lc_center,
@@ -1240,8 +1280,8 @@ def plot_event_txx(
         yerr=src_err_rate_lc,
         fmt="none",
         ecolor=err_src_color,
-        elinewidth=0.95,
-        capsize=1.5,
+        elinewidth=1.2 if forpaper else 0.95,
+        capsize=2.5 if forpaper else 1.5,
         alpha=0.76,
     )
     ax_mid.errorbar(
@@ -1250,8 +1290,8 @@ def plot_event_txx(
         yerr=net_err_rate_lc,
         fmt="none",
         ecolor=err_net_color,
-        elinewidth=0.95,
-        capsize=1.5,
+        elinewidth=1.2 if forpaper else 0.95,
+        capsize=2.5 if forpaper else 1.5,
         alpha=0.74,
     )
 
@@ -1264,20 +1304,27 @@ def plot_event_txx(
             ax_mid.axvspan(float(x_bb_edges[i]), float(x_bb_edges[i + 1]), alpha=0.25, color="yellow", label="_nolegend_")
 
     if np.isfinite(x_t100_start):
-        ax_mid.axvline(x_t100_start, color="blue", linestyle="--", linewidth=2.0, label=f"T100 start: {x_t100_start:.1f}s")
+        t100_start_label = "T100 start" if forpaper else f"T100 start: {x_t100_start:.1f}s"
+        ax_mid.axvline(x_t100_start, color="blue", linestyle="--", linewidth=2.0, label=t100_start_label)
     if np.isfinite(x_t100_stop):
-        ax_mid.axvline(x_t100_stop, color="blue", linestyle="--", linewidth=2.0, label=f"T100 end: {x_t100_stop:.1f}s")
+        t100_stop_label = "T100 end" if forpaper else f"T100 end: {x_t100_stop:.1f}s"
+        ax_mid.axvline(x_t100_stop, color="blue", linestyle="--", linewidth=2.0, label=t100_stop_label)
     if np.isfinite(x_t90_start) and np.isfinite(x_t90_stop) and (x_t90_stop > x_t90_start):
-        if np.isfinite(t90_val):
+        if forpaper:
+            lab_t90 = "T90 interval"
+        elif np.isfinite(t90_val):
             lab_t90 = f"T90 interval: {t90_text}"
         else:
             lab_t90 = "T90 interval"
         ax_mid.axvspan(x_t90_start, x_t90_stop, alpha=0.20, color="orange", label=lab_t90)
 
-    title_bottom = "Light Curve with Bayesian Blocks and Duration"
-    ax_mid.set_ylabel("Rate (counts/s)")
-    ax_mid.set_title(title_bottom)
+    title_bottom = "" if forpaper else "Light Curve with Bayesian Blocks and Duration"
+    ax_mid.set_ylabel("Rate (counts/s)", fontsize=label_fontsize)
+    if title_bottom:
+        ax_mid.set_title(title_bottom, fontsize=title_fontsize)
     ax_mid.grid(True, alpha=0.3)
+    if tick_fontsize is not None:
+        ax_mid.tick_params(axis="both", labelsize=tick_fontsize)
 
     h_b, l_b = ax_mid.get_legend_handles_labels()
     if h_b:
@@ -1291,7 +1338,13 @@ def plot_event_txx(
             h_show.append(h)
             l_show.append(l)
         if h_show:
-            ax_mid.legend(h_show, l_show, loc="upper right", fontsize=9)
+            ax_mid.legend(
+                h_show,
+                l_show,
+                loc="upper right",
+                fontsize=rate_legend_fontsize,
+                framealpha=0.55 if forpaper else None,
+            )
 
     # 下面板：贝叶斯分块区间色带（独立子图）
     sig_label_added = False
@@ -1337,7 +1390,7 @@ def plot_event_txx(
             txt,
             ha="center",
             va="center",
-            fontsize=7,
+            fontsize=block_text_fontsize,
             color=("#7a2e00" if is_sig else "#16324a"),
             rotation=rotate_txt,
             alpha=0.95,
@@ -1358,24 +1411,33 @@ def plot_event_txx(
 
     ax_blocks.set_ylim(0.0, 1.0)
     ax_blocks.set_yticks([])
-    ax_blocks.set_ylabel("BB")
-    ax_blocks.set_title("Bayesian Block Significance (Li-Ma)")
+    # ax_blocks.set_ylabel("Bayesian Blocks", fontsize=label_fontsize)
+    if not forpaper:
+        ax_blocks.set_title("Bayesian Block Significance (Li-Ma)", fontsize=title_fontsize)
     ax_blocks.grid(axis="x", alpha=0.25, linestyle="--")
-    ax_blocks.set_xlabel(x_label)
+    ax_blocks.set_xlabel(x_label, fontsize=label_fontsize)
+    if tick_fontsize is not None:
+        ax_blocks.tick_params(axis="x", labelsize=tick_fontsize)
 
-    h_blk, l_blk = ax_blocks.get_legend_handles_labels()
-    if h_blk:
-        seen_blk = set()
-        h_show_blk = []
-        l_show_blk = []
-        for h, l in zip(h_blk, l_blk):
-            if l == "_nolegend_" or l in seen_blk:
-                continue
-            seen_blk.add(l)
-            h_show_blk.append(h)
-            l_show_blk.append(l)
-        if h_show_blk:
-            ax_blocks.legend(h_show_blk, l_show_blk, loc="upper right", fontsize=8)
+    if not forpaper:
+        h_blk, l_blk = ax_blocks.get_legend_handles_labels()
+        if h_blk:
+            seen_blk = set()
+            h_show_blk = []
+            l_show_blk = []
+            for h, l in zip(h_blk, l_blk):
+                if l == "_nolegend_" or l in seen_blk:
+                    continue
+                seen_blk.add(l)
+                h_show_blk.append(h)
+                l_show_blk.append(l)
+            if h_show_blk:
+                ax_blocks.legend(
+                    h_show_blk,
+                    l_show_blk,
+                    loc="upper right",
+                    fontsize=block_legend_fontsize,
+                )
 
     if focus_t100 and x_lc_edges.size >= 2:
         x_lo = float(x_lc_edges[0])
@@ -1386,6 +1448,8 @@ def plot_event_txx(
     if out is not None:
         fig.savefig(str(out), dpi=150, bbox_inches="tight")
 
+    if ax_top is None:
+        return fig, (ax_mid, ax_blocks)
     return fig, (ax_top, ax_mid)
 
 

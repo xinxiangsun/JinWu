@@ -1266,24 +1266,28 @@ def scan(path: str | Path, instrument: str | None = None) -> Catalog:
     English
     -------
     ``scan`` is the public entry point. It first tries ``path`` itself as one
-    supported data directory. If that does not match, it scans direct child
-    directories and collects each successful manifest in a :class:`Catalog`.
-    A single data directory therefore returns a catalog with one manifest.
+    supported data directory. If that does not match, it searches child
+    directories up to two levels below ``path`` and collects each successful
+    manifest in a :class:`Catalog`. A single data directory therefore returns
+    a catalog with one manifest.
 
-    ``scan`` intentionally scans only the root directory or its direct children;
-    instrument scanners own the deeper directory traversal inside a recognized
-    layout. Pass ``instrument`` to restrict matching to one scanner family.
+    Once a directory is recognized, ``scan`` does not inspect its children;
+    instrument scanners own the deeper traversal inside that layout. The
+    bounded outer search supports collections such as
+    ``target/obsid_detector/products`` without recursively walking arbitrary
+    directory trees. Pass ``instrument`` to restrict matching to one scanner
+    family.
 
     中文
     ----
     ``scan`` 是统一扫描入口。它会先尝试把 ``path`` 本身当作一个受支持的
-    数据目录处理；若根目录不能直接匹配，则扫描其直接子目录，并将每个成功的
-    manifest 汇总为 :class:`Catalog`。输入单个数据目录时，返回的 catalog 只含
-    一个 manifest。
+    数据目录处理；若根目录不能直接匹配，则搜索 ``path`` 以下最多两层子目录，
+    并将每个成功的 manifest 汇总为 :class:`Catalog`。输入单个数据目录时，
+    返回的 catalog 只含一个 manifest。
 
-    ``scan`` 只负责根目录和直接子目录这一层；某个目录一旦被识别，目录内部的
-    深层遍历由对应仪器扫描器负责。传入 ``instrument`` 可将扫描限制到指定
-    仪器扫描器。
+    某个目录一旦被识别，``scan`` 不再检查其子目录，目录内部的深层遍历由对应
+    仪器扫描器负责。这个有界搜索可兼容 ``目标/观测号_探测器/产品`` 目录布局，
+    但不会无界遍历任意目录树。传入 ``instrument`` 可将扫描限制到指定仪器扫描器。
     """
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
@@ -1294,11 +1298,22 @@ def scan(path: str | Path, instrument: str | None = None) -> Catalog:
     except ValueError as exc:
         catalog = Catalog(root=root, warnings=[str(exc)])
 
-    for child in sorted(child for child in root.iterdir() if child.is_dir()):
+    pending = [
+        (child, 1)
+        for child in sorted(child for child in root.iterdir() if child.is_dir())
+    ]
+    while pending:
+        child, depth = pending.pop(0)
         try:
             catalog.manifests.append(_scan_one(child, instrument=instrument))
         except ValueError:
-            continue
+            if depth < 2:
+                pending.extend(
+                    (grandchild, depth + 1)
+                    for grandchild in sorted(
+                        grandchild for grandchild in child.iterdir() if grandchild.is_dir()
+                    )
+                )
     if not catalog.manifests:
         raise ValueError(f"No supported EP data directories found under {root}")
     return catalog
