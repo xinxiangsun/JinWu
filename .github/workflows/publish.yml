@@ -64,7 +64,11 @@ jobs:
       - name: Collect all wheels
         run: |
           mkdir -p dist
-          find artifacts -name '*.whl' -o -name '*.tar.gz' | xargs cp -t dist/
+          # abi3 wheels built by different Python versions share the same
+          # filename; copy one-by-one with -f so duplicates overwrite instead
+          # of making cp fail with "will not overwrite just-created"
+          find artifacts \( -name '*.whl' -o -name '*.tar.gz' \) -type f -print0 \
+            | xargs -0 -I{} cp -f "{}" dist/
           echo "=== All packages ==="
           ls -lh dist/
 
