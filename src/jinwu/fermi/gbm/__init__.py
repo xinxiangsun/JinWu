@@ -13,5 +13,29 @@ Example:
 from __future__ import annotations
 
 from .GBMObservation import GBMObservation
+from .pipeline import (
+    GBMBackgroundSummary,
+    GBMCoverageResult,
+    GBMDataManifest,
+    GBMDetectorSelection,
+    GBMFlareInterval,
+    GBMSpectralProducts,
+    check_gbm_coverage,
+    extract_gbm_spectral_products,
+    fetch_gbm_continuous_products,
+    select_gbm_detectors,
+)
 
-__all__ = ['GBMObservation']
+__all__ = [
+    'GBMObservation',
+    'GBMBackgroundSummary',
+    'GBMCoverageResult',
+    'GBMDataManifest',
+    'GBMDetectorSelection',
+    'GBMFlareInterval',
+    'GBMSpectralProducts',
+    'check_gbm_coverage',
+    'extract_gbm_spectral_products',
+    'fetch_gbm_continuous_products',
+    'select_gbm_detectors',
+]

@@ -44,7 +44,7 @@ __all__ = [
     # Core Time entry point
     'Time',
     # Mission time formats
-    'TimeFermi', 'TimeEP', 'TimeLEIA', 'TimeGECAM', 'TimeHXMT', 'TimeSwift',
+    'TimeFermi', 'TimeEP', 'TimeLEIA', 'TimeGECAM', 'TimeHXMT', 'TimeSwift', 'TimeSVOM',
     'TimeGrid', 'TimeMAXI', 'TimeLIGO', 'TimeSuzaku', 'TimeNewton', 'TimeXRISM','TimeAstroSat',
     # Swift helpers
     'swift_leapseconds_utc', 'swift_leapseconds_met', 'swift_utcf_at_utc',
@@ -639,7 +639,7 @@ _MISSION_TIME_FORMATS = {
     'NEWTON': 'newton',
     'XRISM': 'xrism',
     'ASTROSAT': 'astrosat',
-    ‘SVOM’: 'svom',
+    'SVOM': 'svom',
 }
 
 

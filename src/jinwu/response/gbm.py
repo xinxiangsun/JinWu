@@ -1,151 +1,221 @@
-'''
-Date: 2025-02-25 16:17:52
-LastEditors: Xinxiang Sun sunxinxiang24@mails.ucas.ac.cn
-LastEditTime: 2025-04-27 15:35:29
-FilePath: /research/autohea/autohea/response/gbm.py
-'''
-from gdt.missions.fermi.gbm.detectors import GbmDetectors
-import os
+"""Safe helpers for generating Fermi/GBM continuous-data responses.
+
+The official ``SA_GBM_RSP_Gen.pl`` utility is an external dependency.  This
+module deliberately constructs an argument vector instead of a shell command,
+so source names and paths never become shell syntax.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import shutil
 import subprocess
+from typing import Iterable, Sequence
+
+__all__ = [
+    "GBMResponseCommand",
+    "GBMResponseRun",
+    "build_gbm_response_command",
+    "generate_gbm_response",
+    "contgbmrsp",
+]
+
+_DETECTOR_NUMBERS = {
+    **{f"n{index}": index for index in range(10)},
+    "na": 10,
+    "nb": 11,
+    "b0": 12,
+    "b1": 13,
+}
+
+
+def _normalise_detector(detector: str | int) -> tuple[str, int]:
+    if isinstance(detector, int):
+        if detector not in range(14):
+            raise ValueError("GBM detector number must be in [0, 13]")
+        name = next(name for name, number in _DETECTOR_NUMBERS.items() if number == detector)
+        return name, detector
+    name = str(detector).strip().lower()
+    if name.startswith("nai_"):
+        name = f"n{int(name.split('_', 1)[1]) - 1}"
+    elif name.startswith("bgo_"):
+        name = f"b{int(name.split('_', 1)[1]) - 1}"
+    if name not in _DETECTOR_NUMBERS:
+        choices = ", ".join(_DETECTOR_NUMBERS)
+        raise ValueError(f"Unknown GBM detector {detector!r}; expected one of {choices}")
+    return name, _DETECTOR_NUMBERS[name]
+
+
+@dataclass(frozen=True, slots=True)
+class GBMResponseCommand:
+    """Validated command for the official GBM response generator."""
+
+    arguments: tuple[str, ...]
+    workdir: Path
+    detector_names: tuple[str, ...]
+    start_met: float
+    stop_met: float
+
+
+@dataclass(frozen=True, slots=True)
+class GBMResponseRun:
+    """Result of one response-generator invocation."""
+
+    command: GBMResponseCommand
+    returncode: int
+    stdout: str
+    stderr: str
+    response_paths: tuple[Path, ...]
+
+
+def build_gbm_response_command(
+    *,
+    ra_deg: float,
+    dec_deg: float,
+    start_met: float,
+    stop_met: float,
+    detectors: Iterable[str | int],
+    workdir: str | Path,
+    executable: str = "SA_GBM_RSP_Gen.pl",
+    data_type: str = "cspec",
+) -> GBMResponseCommand:
+    """Build a non-shell command for an arbitrary-source GBM response.
+
+    ``data_type`` is intentionally limited to CSPEC/CTIME, the two modes
+    supported by the official response generator.  ``start_met`` and
+    ``stop_met`` are Fermi MET seconds and generate an RSP2 when appropriate.
+    """
+    if data_type.lower() not in {"cspec", "ctime"}:
+        raise ValueError("data_type must be 'cspec' or 'ctime'")
+    ra = float(ra_deg)
+    dec = float(dec_deg)
+    start = float(start_met)
+    stop = float(stop_met)
+    if not 0.0 <= ra < 360.0:
+        raise ValueError("ra_deg must be in [0, 360)")
+    if not -90.0 <= dec <= 90.0:
+        raise ValueError("dec_deg must be in [-90, 90]")
+    if not start < stop:
+        raise ValueError("stop_met must be larger than start_met")
+    normalised = tuple(_normalise_detector(detector) for detector in detectors)
+    if not normalised:
+        raise ValueError("at least one GBM detector is required")
+    if len({number for _, number in normalised}) != len(normalised):
+        raise ValueError("GBM detectors must be unique")
+    directory = Path(workdir).expanduser().resolve()
+    if not directory.is_dir():
+        raise FileNotFoundError(f"GBM response working directory does not exist: {directory}")
+    arguments = [
+        str(executable),
+        f"-C{data_type.lower()}",
+        *[f"-d{number}" for _, number in normalised],
+        f"-R{ra:.10g}",
+        f"-D{dec:.10g}",
+        f"-S{start:.9f}",
+        f"-E{stop:.9f}",
+        str(directory),
+    ]
+    return GBMResponseCommand(
+        arguments=tuple(arguments),
+        workdir=directory,
+        detector_names=tuple(name for name, _ in normalised),
+        start_met=start,
+        stop_met=stop,
+    )
+
+
+def generate_gbm_response(
+    *,
+    ra_deg: float,
+    dec_deg: float,
+    start_met: float,
+    stop_met: float,
+    detectors: Iterable[str | int],
+    workdir: str | Path,
+    executable: str = "SA_GBM_RSP_Gen.pl",
+    data_type: str = "cspec",
+    timeout_s: float | None = 600.0,
+) -> GBMResponseRun:
+    """Run the official GBM response generator without invoking a shell."""
+    command = build_gbm_response_command(
+        ra_deg=ra_deg,
+        dec_deg=dec_deg,
+        start_met=start_met,
+        stop_met=stop_met,
+        detectors=detectors,
+        workdir=workdir,
+        executable=executable,
+        data_type=data_type,
+    )
+    executable_path = shutil.which(command.arguments[0])
+    if executable_path is None:
+        raise FileNotFoundError(
+            f"GBM response generator not found: {command.arguments[0]!r}. "
+            "Install gbmrsp and put SA_GBM_RSP_Gen.pl on PATH."
+        )
+    before = {path.resolve() for path in command.workdir.glob("*.rsp*")}
+    completed = subprocess.run(
+        (executable_path, *command.arguments[1:]),
+        cwd=command.workdir,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout_s,
+    )
+    after = {path.resolve() for path in command.workdir.glob("*.rsp*")}
+    result = GBMResponseRun(
+        command=command,
+        returncode=int(completed.returncode),
+        stdout=completed.stdout,
+        stderr=completed.stderr,
+        response_paths=tuple(sorted(after - before)),
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "GBM response generator failed "
+            f"(exit {result.returncode}): {result.stderr.strip() or result.stdout.strip()}"
+        )
+    if not result.response_paths:
+        raise RuntimeError("GBM response generator succeeded but created no new .rsp/.rsp2 file")
+    return result
+
 
 class contgbmrsp:
+    """Backward-compatible wrapper around :func:`generate_gbm_response`.
+
+    New code should use the functions above.  The historical constructor and
+    method names are retained because :class:`GBMObservation` exposes them.
     """
-    用来生成连续观测的 GBM 响应文件，针对非触发情形。
-    需要通过网页安装的 GBM 响应生成的 Perl 程序，并且所有的数据应该满足特定的文件目录格式。
-                    赤经，单位是度，天文坐标系下的坐标。
-                     赤纬，单位是度，天文坐标系下的坐标。
-                            开始时间, Fermi MET 时间，以秒为单位。
-                          结束时间, Fermi MET 时间，以秒为单位。
-                              探测器代号列表。
-            生成用于执行 GBM 响应生成的 Perl 脚本的命令字符串。
-            执行生成的命令字符串，并打印输出或错误信息。
-                     获取赤经。
-                      获取赤纬。
-                             获取开始时间(Fermi MET)。
-                           获取结束时间(Fermi MET)。
-                              获取从探测器代号派生的探测器编号。
-                               获取探测器代号。
-                    设置赤经。
-                     设置赤纬。
-                              设置探测器代号。
-                        设置开始时间(Fermi MET)。
-                      设置结束时间(Fermi MET)。
-    """
-    """
-    A class to generate GBM response files for continuous observations in non-triggered scenarios.
-    This class requires a Perl script (`SA_GBM_RSP_GEN.pl`) generated via the GBM response webpage, 
-    and all data should adhere to a specific directory structure.
-    Attributes:
-        ra (float): Right Ascension in degrees (astronomical coordinate system).
-        dec (float): Declination in degrees (astronomical coordinate system).
-        start_time (float): Start time in Fermi MET (seconds).
-        end_time (float): End time in Fermi MET (seconds).
-        detector (list[int]): List of detector indices.
-    Methods:
-        commandpl() -> str:
-            Generates the command string to execute the Perl script for GBM response generation.
-        gbmrsppl() -> None:
-            Executes the generated command string and prints the output or error.
-    Properties:
-        _ra (float): Getter for the Right Ascension.
-        _dec (float): Getter for the Declination.
-        _start_time (float): Getter for the start time in Fermi MET.
-        _end_time (float): Getter for the end time in Fermi MET.
-        _det_num (list[int]): Getter for the detector numbers derived from the detector indices.
-        _detector (list[int]): Getter for the detector indices.
-    Setters:
-        ra (float): Setter for the Right Ascension.
-        dec (float): Setter for the Declination.
-        detector (list[int]): Setter for the detector indices.
-        tstart (float): Setter for the start time in Fermi MET.
-        tend (float): Setter for the end time in Fermi MET.
-        """
-    
+
     def __init__(self, ra, dec, start_time, end_time, detector):
-        #ra 赤经
-        # 赤纬 dec
-        # 开始时间，用Fermi met，start_time
-        # 结束时间， 用Fermi met，end_time
-        # 探头
-        self._ra = ra  # 初始化赤经
-        self._dec = dec  # 初始化赤纬
-        self._start_time = start_time  # 初始化开始时间fermi met
-        self._end_time = end_time  # 初始化结束时间fermi met
-        self._detector = detector  # 初始化探测器代号列表 
-        # self._srcname = srcname #实际上这个地方是源的类型，但是实际上对于非触发类型的数据，我prefer直接使用他们的源名当作类型
-        
-    def commandpl(self):
-        det_str = " ".join(f"-d{d}" for d in self._det_num)  # 生成 "-d0 -d5 -d9" 格式
-        commands = (
-            f"SA_GBM_RSP_GEN.pl -Ccspec {det_str} "
-            f"-R{self._ra} -D{self._dec} "
-            f"-S{self._start_time} -E{self._end_time} ."
+        self.ra = float(ra)
+        self.dec = float(dec)
+        self.start_time = float(start_time)
+        self.end_time = float(end_time)
+        self.detector = tuple(detector)
+
+    @property
+    def _det_num(self) -> list[int]:
+        return [_normalise_detector(item)[1] for item in self.detector]
+
+    def commandpl(self) -> str:
+        command = build_gbm_response_command(
+            ra_deg=self.ra,
+            dec_deg=self.dec,
+            start_met=self.start_time,
+            stop_met=self.end_time,
+            detectors=self.detector,
+            workdir=Path.cwd(),
         )
-        return commands
-    
+        return " ".join(command.arguments)
 
-    def gbmrsppl(self): 
-        command = self.commandpl()
-        print(f"Executing: {command}")
-        try:
-            result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-            print("Output:", result.stdout)
-            print("Error:", result.stderr)
-        except subprocess.CalledProcessError as e:
-            print("Command failed:", e)
-
-    @property
-    def _ra(self):
-        return self._ra
-    
-    @property
-    def _dec(self):
-        return self._dec
-    
-    @property
-    def _start_time(self):
-        return self._start_time
-    
-    @property
-    def _end_time(self):
-        return self._end_time
-    
-    @property
-    def _det_num(self):
-        detector_list = [GbmDetectors[i] for i in self._detector]
-        self._detnum = [d.number for d in detector_list]
-        return self._det_num
-    
-    # @property
-    # def _srcname(self):
-    #     return self._srcname
-    
-    @_ra.setter
-    def ra(self, newra):
-        self._ra = newra
-    
-    @_dec.setter
-    def dec(self, newdec):
-        self._dec = newdec
-    
-    @property
-    def _detector(self):
-        return self._detector
-
-    @_detector.setter
-    def detector(self,newdet):
-        self._detector = newdet
-
-
-    @_start_time.setter
-    def tstart(self, newtstart):
-        self._start_time = newtstart
-
-    @_end_time.setter
-    def tend(self, newtend):
-        self._end_time = newtend
-
-    # @_srcname.setter
-    # def srcname(self, newsrcname):
-    #     self._srcname = newsrcname
-
+    def gbmrsppl(self) -> GBMResponseRun:
+        return generate_gbm_response(
+            ra_deg=self.ra,
+            dec_deg=self.dec,
+            start_met=self.start_time,
+            stop_met=self.end_time,
+            detectors=self.detector,
+            workdir=Path.cwd(),
+        )

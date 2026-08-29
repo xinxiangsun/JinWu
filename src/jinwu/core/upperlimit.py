@@ -49,12 +49,14 @@ __all__ = [
     "CallablePhotonModelPredictor",
     "UpperLimitObservation",
     "ObservedUpperBound",
+    "ProfileAmplitudeResult",
     "DetectionSensitivity",
     "DetectionSensitivityAdapter",
     "ResponseAwareUpperLimitResult",
     "UpperLimitStrategy",
     "register_upper_limit_strategy",
     "estimate_upper_limit",
+    "profile_source_amplitude",
 ]
 
 
@@ -415,6 +417,27 @@ class ObservedUpperBound:
     fit_statistic: float
     null_statistic: float
     status: str = "ready"
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileAmplitudeResult:
+    """Constrained source-amplitude profile fit for detection classification.
+
+    The amplitude is constrained to be non-negative, so ``significance_sigma``
+    is a one-sided asymptotic ``sqrt(DeltaStat)`` diagnostic.  It is not an
+    ON/OFF Li--Ma significance and callers must retain background/response
+    validation before calling a result a detection.
+    """
+
+    amplitude_mle: float
+    amplitude_unit: str
+    null_statistic: float
+    fit_statistic: float
+    significance_sigma: float
+    interval: tuple[float, float]
+    energy_band_keV: tuple[float, float]
+    instrument: str
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -913,6 +936,76 @@ def estimate_upper_limit(
     if output_dir is not None:
         result.write(output_dir, plots=plots)
     return result
+
+
+def profile_source_amplitude(
+    observations: UpperLimitObservation | Sequence[UpperLimitObservation],
+    *,
+    model: CountTemplateModel | str | Any,
+    instrument_config: InstrumentConfig,
+    interval: tuple[float, float],
+    energy_band: tuple[float, float] | None = None,
+) -> ProfileAmplitudeResult:
+    """Fit a non-negative response-folded source amplitude.
+
+    This is the detection-side counterpart to :func:`estimate_upper_limit`.
+    It deliberately reuses the same instrument policy, response template and
+    Gaussian-model background likelihood, so a pipeline cannot accidentally
+    classify an event with one statistical contract and limit it with another.
+    """
+    policy = instrument_config.upper_limit
+    if not policy.enabled or policy.strategy == "unsupported":
+        reason = policy.unavailable_reason or "Profile likelihood is disabled."
+        raise NotImplementedError(f"{instrument_config.name}: {reason}")
+    strategy = _UPPER_LIMIT_STRATEGIES.get(policy.strategy)
+    if strategy is None:
+        raise NotImplementedError(f"No upper-limit engine for strategy {policy.strategy!r}")
+    if policy.background_likelihood not in strategy.supported_likelihoods:
+        raise ValueError(
+            f"Strategy {policy.strategy} does not support "
+            f"{policy.background_likelihood}"
+        )
+    _validate_instrument_policy(instrument_config, policy)
+    interval_checked = _validate_interval(interval)
+    band_checked = _validate_energy_band(
+        instrument_config.energy_range_keV if energy_band is None else energy_band
+    )
+    raw_observations = (
+        [observations]
+        if isinstance(observations, UpperLimitObservation)
+        else list(observations)
+    )
+    if not raw_observations:
+        raise ValueError("At least one profile observation is required")
+    names = [str(item.name) for item in raw_observations]
+    if any(not name.strip() for name in names) or len(set(names)) != len(names):
+        raise ValueError("Profile observation names must be non-empty and unique")
+    _validate_combination_count(policy, len(raw_observations))
+    warnings_list: list[str] = []
+    prepared = [
+        _prepare_observation(
+            observation,
+            model=model,
+            interval=interval_checked,
+            energy_band=band_checked,
+            policy=policy,
+            warnings_list=warnings_list,
+        )
+        for observation in raw_observations
+    ]
+    state = _ProfileLikelihood(prepared, policy.background_likelihood).fit()
+    model_info = _model_information(model)
+    return ProfileAmplitudeResult(
+        amplitude_mle=state.amplitude_mle,
+        amplitude_unit=str(model_info["amplitude_unit"]),
+        null_statistic=state.null_statistic,
+        fit_statistic=state.fit_statistic,
+        significance_sigma=math.sqrt(max(0.0, state.null_statistic)),
+        interval=interval_checked,
+        energy_band_keV=band_checked,
+        instrument=instrument_config.name,
+        warnings=tuple(warnings_list),
+    )
 
 
 def _prepare_observation(

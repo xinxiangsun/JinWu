@@ -13,7 +13,13 @@ Example:
 
 from __future__ import annotations
 
-from .gbm import contgbmrsp
+from .gbm import (
+    GBMResponseCommand,
+    GBMResponseRun,
+    build_gbm_response_command,
+    contgbmrsp,
+    generate_gbm_response,
+)
 
 try:
     from . import basic
@@ -21,7 +27,10 @@ except ImportError:
     pass
 
 __all__ = [
+    'GBMResponseCommand',
+    'GBMResponseRun',
+    'build_gbm_response_command',
     'contgbmrsp',
+    'generate_gbm_response',
     'basic',
 ]
-

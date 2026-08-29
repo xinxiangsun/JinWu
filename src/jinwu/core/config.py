@@ -540,6 +540,14 @@ class GBM(InstrumentConfig):
         "NAI_6": (8.0, 1000.0),
         "BGO_1": (200.0, 40000.0),
         "BGO_2": (200.0, 40000.0),
+        # Native GBM archive identifiers.  Keep the historical NAI_*/BGO_*
+        # aliases above for backward compatibility, but allow every physical
+        # detector to be represented by its FITS/GDT name.
+        **{f"N{index}": (8.0, 900.0) for index in range(10)},
+        "NA": (8.0, 900.0),
+        "NB": (8.0, 900.0),
+        "B0": (200.0, 40000.0),
+        "B1": (200.0, 40000.0),
     }
 
     def __init__(self, detector: str = "NAI_1", **kwargs: Any):
