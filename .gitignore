@@ -6,8 +6,8 @@ __pycache__/
 *.egg
 
 # === Rust (jinwurs) ===
-src/jinwurs/target/
-src/jinwurs/Cargo.lock
+packages/jinwurs/target/
+packages/jinwurs/Cargo.lock
 
 # === Build & Distribution ===
 build/
@@ -56,8 +56,8 @@ Icon?
 *.log
 
 # === Rust (jinwurs) ===
-src/jinwurs/target/
-src/jinwurs/Cargo.lock
+packages/jinwurs/target/
+packages/jinwurs/Cargo.lock
 
 # === AI Coding Agents ===
 .codex/

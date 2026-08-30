@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jinwu-fermi"
+version = "0.2.0"
+description = "Fermi/GBM instrument support for the jinwu analysis toolkit."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Xinxiang Sun", email = "sunxx@nao.cas.cn" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "jinwu>=0.2,<0.3",
+    "astro-gdt>=2.2",
+    "astro-gdt-fermi>=2.2",
+    "requests>=2.25",
+]
+keywords = ["astrophysics", "transient", "fermi", "gbm", "jinwu"]
+
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Development Status :: 3 - Alpha"
+]
+
+[project.urls]
+Homepage = "https://github.com/xinxiangsun/jinwu"
+Repository = "https://github.com/xinxiangsun/jinwu"
+Documentation = "https://jinwu.readthedocs.io"
+
+[project.entry-points."jinwu.instruments"]
+fermi = "jinwu.fermi"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jinwu.fermi*"]

@@ -1,9 +1,21 @@
 # 安装方式 / Installation
 
+金乌现已拆分为一个核心包和多个仪器包，它们共享 `jinwu` 导入命名空间：
+
+| 发行包 | 导入路径 | 内容 |
+|---|---|---|
+| `jinwu` | `jinwu.core`、`jinwu.lightcurve` 等 | 核心分析层（OGIP I/O、时间、拟合、背景、绘图） |
+| `jinwu-ep` | `jinwu.ep` | Einstein Probe (WXT) |
+| `jinwu-swift` | `jinwu.swift` | Swift/BAT |
+| `jinwu-fermi` | `jinwu.fermi` | Fermi/GBM |
+
 ### 通过 PyPI 安装
 
 ```bash
-pip install jinwu
+pip install jinwu              # 仅核心
+pip install "jinwu[ep]"        # 核心 + EP 支持
+pip install "jinwu[swift]"     # 核心 + Swift 支持
+pip install "jinwu[fermi]"     # 核心 + Fermi/GBM 支持
 ```
 
 # JinWu：Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling
@@ -25,19 +37,33 @@ Especially, this repo devoting on EP/WXT&FXT data products process.
 ```bash
 git clone https://github.com/Charon0922/jinwu.git
 cd jinwu
-pip install .
+pip install -e packages/jinwu            # 核心（可编辑安装）
+pip install -e packages/jinwu-ep         # 按需安装仪器包
 ```
 
 ### 必要依赖 / Required Dependencies
 
-本包依赖以下 Python 库，请确保已安装：
+核心依赖随 `pip install jinwu` 自动安装：
 
 - numpy
 - scipy
 - astropy
-- emcee/pymc
-- astro-gdt
-- gbm_drm_gen
+- matplotlib
+- pillow
+
+谱拟合需要 HEASOFT 的 XSPEC（PyXspec）运行环境，不随 pip 安装。
+
+### 可选依赖 / Optional Extras
+
+```bash
+pip install "jinwu[ep]"          # Einstein Probe 仪器包 (jinwu-ep)
+pip install "jinwu[swift]"       # Swift 仪器包 (jinwu-swift, 含 swiftbat/batanalysis)
+pip install "jinwu[fermi]"       # Fermi 仪器包 (jinwu-fermi, 含 astro-gdt)
+pip install "jinwu[crossmatch]"  # 星表交叉证认 (astroquery/plotly/ipyaladin/regions)
+pip install "jinwu[cluster]"     # 聚类分析 (pandas/seaborn/scikit-learn)
+pip install "jinwu[rust]"        # Rust 加速重采样 (jinwurs)
+pip install "jinwu[docs]"        # 文档构建
+```
 
 ## License / 许可证
 

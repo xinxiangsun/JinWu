@@ -30,7 +30,7 @@ JinWu provides a unified interface for reading standard OGIP FITS files:
 
 .. code-block:: python
 
-   import jinwu as jw
+   import jinwu.core as jw
 
    # Read a PHA spectrum file
    pha = jw.read_pha("source.pha")
@@ -68,7 +68,7 @@ Working with Energy Bands
 Computing Net Data
 ------------------
 
-The :func:`jinwu.netdata` function computes net (background-subtracted)
+The :func:`jinwu.core.netdata` function computes net (background-subtracted)
 count rates and errors with proper uncertainty propagation:
 
 .. code-block:: python

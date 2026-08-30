@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jinwu"
+version = "0.2.0"
+description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Xinxiang Sun", email = "sunxx@nao.cas.cn" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.9",
+    "astropy>=7.1.0",
+    "matplotlib>=3.7",
+    "pillow>=9.0",
+]
+keywords = ["astrophysics", "transient", "lightcurve", "spectral", "modeling", "jinwu"]
+
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Development Status :: 3 - Alpha"
+]
+
+[project.urls]
+Homepage = "https://github.com/xinxiangsun/jinwu"
+Repository = "https://github.com/xinxiangsun/jinwu"
+Documentation = "https://jinwu.readthedocs.io"
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=7",
+    "pydata-sphinx-theme>=0.15",
+    "sphinx-automodapi>=0.17",
+    "myst-parser>=3",
+]
+rust = ["jinwurs"]
+ep = ["jinwu-ep>=0.2,<0.3"]
+swift = ["jinwu-swift>=0.2,<0.3"]
+fermi = ["jinwu-fermi>=0.2,<0.3"]
+gbm = ["jinwu-fermi>=0.2,<0.3"]
+crossmatch = [
+    "pandas",
+    "astroquery",
+    "plotly",
+    "ipyaladin>=0.1",
+    "regions>=0.5",
+    "requests>=2.25",
+]
+cluster = [
+    "pandas",
+    "seaborn",
+    "scikit-learn",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jinwu*"]
