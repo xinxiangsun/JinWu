@@ -1,6 +1,4 @@
 
-import sys
-import subprocess
 from typing import Optional, Union, cast, List
 
 import matplotlib.pyplot as plt
@@ -277,8 +275,7 @@ class ClusterAnalyzer:
         X = cast(np.ndarray, self.scaled_data)
         n = min(3, X.shape[1])
         if n < 3:
-            print('特征少于 3 个，跳过 3D 可视化。')
-            return
+            raise ValueError("3D 可视化需要至少 3 个特征；请改用 visualize_clusters()。")
         pca = PCA(n_components=3)
         scores = pca.fit_transform(X)
 
