@@ -322,7 +322,7 @@ class Attitude:
 
     # ==================== Plotting ====================
     
-    def plot(self, T0=None, ax=None, show=True):
+    def plot(self, T0=None, ax=None, show=False):
         """
         Plot RA/Dec/Roll vs time.
         绘制 RA/Dec/Roll 随时间的变化。
@@ -372,7 +372,7 @@ class Attitude:
         
         return ax
 
-    def plot_saa(self, T0=None, ax=None, show=True):
+    def plot_saa(self, T0=None, ax=None, show=False):
         """Plot SAA flag vs time."""
         if self.in_saa is None:
             print("No SAA data available.")

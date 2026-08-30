@@ -42,8 +42,6 @@ __all__ = [
     "ModelRegistry",
     "XspecChainParameter",
     "XspecChainResult",
-    "fit_spectrum",
-    "fit_spectrum_from_files",
     "fit",
     "fit_prepared",
     "fit_xray_models",
@@ -100,11 +98,7 @@ class FitResult:
         残差 (data - fitted_curve)
     model : Callable
         模型评估器，签名为 model(t, *params)，对 astropy 模型进行评估
-    mcmc_samples : np.ndarray | None
-        MCMC 采样结果 (n_samples, n_params)，仅在使用贝叶斯方法时可用
-    mcmc_logprob : np.ndarray | None
-        MCMC 对数概率，仅在使用贝叶斯方法时可用
-    
+
     English
     -------
     Container for lightcurve fit results including parameters, errors,
@@ -128,8 +122,6 @@ class FitResult:
     fitted_curve: Optional[np.ndarray] = None
     residuals: Optional[np.ndarray] = None
     model: Optional[Callable] = None
-    mcmc_samples: Optional[np.ndarray] = None
-    mcmc_logprob: Optional[np.ndarray] = None
     
     def summary(self) -> str:
         """返回拟合结果的文本摘要"""
@@ -183,6 +175,26 @@ class FitResult:
         if np.isscalar(time):
             return float(result[0]) if result.size > 0 else float(result)
         return result
+
+    def to_dict(self) -> dict:
+        """JSON 安全的字典形式，用于结果落盘或结构化上报。"""
+        def _optional_array(value: Optional[np.ndarray]) -> list | None:
+            return None if value is None else np.asarray(value).tolist()
+
+        return {
+            "model_name": self.model_name,
+            "success": self.success,
+            "message": self.message,
+            "param_names": list(self.param_names),
+            "params": np.asarray(self.params).tolist(),
+            "errors": _optional_array(self.errors),
+            "errors_lower": _optional_array(self.errors_lower),
+            "errors_upper": _optional_array(self.errors_upper),
+            "covariance": _optional_array(self.covariance),
+            "chisq": float(self.chisq),
+            "dof": int(self.dof),
+            "reduced_chisq": float(self.reduced_chisq),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -658,45 +670,31 @@ class LightcurveFitter:
         **kwargs,
     ) -> FitResult:
         """执行拟合
-        
+
         参数
         ----
         model : str | callable
             - 若为 str：从注册表获取模型（如 "powerlaw"）
-            - 若为 callable：直接使用自定义函数 model(t, *params)
+            - 若为 callable：astropy Fittable1DModel 子类
         p0 : array-like, optional
             初始参数猜测；若为 None 则尝试自动估计
         param_names : tuple[str, ...], optional
-            参数名称（仅用于自定义函数）
+            参数名称（仅用于自定义模型类）
         bounds : 2-tuple of array-like, optional
             参数边界 (lower, upper)
-        method : {"curve_fit", "least_squares", "lmfit"}
-            拟合方法
         sigma : array, optional
-            覆盖数据误差（默认使用 self.error）
+            覆盖数据误差（默认使用 self.error）；内部会复制，不会修改原数组
         absolute_sigma : bool
             是否将 sigma 视为绝对误差（影响协方差缩放）
-        bayesian : bool
-            是否使用贝叶斯 MCMC 方法（需要 emcee）
-        mcmc_nwalkers : int
-            MCMC walker 数量（仅 bayesian=True 时）
-        mcmc_nsteps : int
-            MCMC 采样步数（仅 bayesian=True 时）
-        mcmc_burn : int
-            MCMC burn-in 步数（仅 bayesian=True 时）
-        mcmc_thin : int
-            MCMC 采样间隔（仅 bayesian=True 时）
-        use_lmfit : bool
-            是否使用 astropy.modeling 进行拟合（默认 True）
-        lmfit_method : str
+        fitter_method : {"lm", "trf"}
             'lm' - Levenberg-Marquardt (LMLSQFitter，默认)
             'trf' - Trust Region Reflective (TRFLSQFitter，可选)
         **kwargs : 传递给底层拟合函数的额外参数
-        
+
         返回
         ----
         FitResult : 拟合结果对象
-        
+
         注记
         ----
         - 全面使用 astropy.modeling 拟合；支持 LM（默认）与 TRF
@@ -724,9 +722,11 @@ class LightcurveFitter:
         # 准备误差
         if sigma is None:
             sigma = self.error if self.error is not None else np.ones_like(self.value)
-        # 防止 0 或 NaN 权重导致发散
+        # 防止 0 或 NaN 权重导致发散。
+        # 注意必须复制：np.asarray 对 ndarray 不拷贝，原地替换非法值
+        # 会污染调用者的 LightcurveData.error，导致二次拟合结果错误。
         if sigma is not None:
-            sigma = np.asarray(sigma, dtype=float)
+            sigma = np.array(sigma, dtype=float, copy=True)
             # 用数据的 10% 或极小值替换非法/非正误差
             bad = ~np.isfinite(sigma) | (sigma <= 0)
             if np.any(bad):
@@ -795,20 +795,26 @@ class LightcurveFitter:
             
             # 提取结果
             popt = np.array([getattr(fitted_model, name).value for name in pnames])
-            
-            # 计算误差（从协方差矩阵），并对固定参数补零以匹配参数总数
+
+            # 计算误差（从协方差矩阵）。astropy 只对自由参数给出协方差，
+            # 且顺序与模型参数定义顺序一致；必须按各参数的 fixed 标志
+            # 对位填入，固定参数在中间时不能假设自由参数都排在前面。
             if hasattr(fitter, 'fit_info') and 'param_cov' in fitter.fit_info:
                 pcov_raw = fitter.fit_info['param_cov']
                 if pcov_raw is not None:
                     errors_raw = np.sqrt(np.diag(pcov_raw))
-                    # 若存在固定参数（如 powerlaw.t0 固定），协方差矩阵维度会小于参数总数
-                    # 此时对误差与协方差进行零填充以匹配 pnames 长度
-                    if errors_raw.size < len(pnames):
+                    free_indices = [
+                        i for i, name in enumerate(pnames)
+                        if not getattr(fitted_model, name).fixed
+                    ]
+                    if errors_raw.size < len(pnames) and errors_raw.size == len(free_indices):
                         errors = np.zeros(len(pnames))
-                        # 将前面对应的自由参数误差填入（astropy 通常按可变参数顺序）
-                        errors[:errors_raw.size] = errors_raw
+                        for free_pos, param_index in enumerate(free_indices):
+                            errors[param_index] = errors_raw[free_pos]
                         pcov = np.zeros((len(pnames), len(pnames)))
-                        pcov[:errors_raw.size, :errors_raw.size] = pcov_raw
+                        for a, ia in enumerate(free_indices):
+                            for b, ib in enumerate(free_indices):
+                                pcov[ia, ib] = pcov_raw[a, b]
                     else:
                         errors = errors_raw
                         pcov = pcov_raw
@@ -1113,16 +1119,22 @@ class LightcurveFitter:
         ylabel : str
             纵轴标签（默认 Flux (erg/cm2/s)）
         **plot_kwargs : 传递给 errorbar 的参数
+
+        返回
+        ----
+        ``(fig, (ax1, ax2))``：figure 与主图/残差图坐标轴（无残差时 ax2 为 None）
         """
         try:
             import matplotlib.pyplot as plt
         except ImportError:
             raise ImportError("matplotlib is required for plotting")
-        
+        from jinwu.core.plotstyle import PALETTE, apply_style
+
+        apply_style()
         if model_func is None:
             # 使用结果内的评估器（astropy 统一）
             model_func = result.model
-        
+
         if ax is None:
             if show_residuals:
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True,
@@ -1132,6 +1144,7 @@ class LightcurveFitter:
                 ax2 = None
         else:
             ax1 = ax
+            fig = ax1.get_figure()
             ax2 = None
         
         # 数据点（对数坐标要求正数，做掩码以避免报错）
@@ -1152,6 +1165,7 @@ class LightcurveFitter:
             y_plot,
             yerr=yerr_plot,
             fmt='o',
+            color=PALETTE["data"],
             label='Data',
             alpha=0.7,
             **plot_kwargs,
@@ -1168,14 +1182,13 @@ class LightcurveFitter:
         else:
             t_fine = np.linspace(np.maximum(1e-12, t_arr.min()), t_arr.max(), n_samples)
         y_fine = result.evaluate(t_fine, model_func)
-        ax1.plot(t_fine, y_fine, '-', label=f'Fit: {result.model_name}', linewidth=2)
-        
+        ax1.plot(t_fine, y_fine, '-', color=PALETTE["model"], label=f'Fit: {result.model_name}', linewidth=2)
+
         # 坐标轴改为对数
         ax1.set_xscale('log')
         ax1.set_yscale('log')
         ax1.set_ylabel(ylabel)
         ax1.legend()
-        ax1.grid(alpha=0.3)
         title_core = f'{result.model_name} Fit (χ²/dof = {result.reduced_chisq:.2f})'
         title = f'{source_name} - {title_core}' if source_name else title_core
         ax1.set_title(title)
@@ -1699,24 +1712,24 @@ class LightcurveFitter:
                 result.residuals,
                 yerr=result.data_err,
                 fmt='o',
+                color=PALETTE["residual"],
                 alpha=0.6,
             )
-            ax2.axhline(0, color='k', linestyle='--', alpha=0.5)
+            ax2.axhline(0, color=PALETTE["reference"], linestyle='--', alpha=0.6)
             # 残差图：横轴用对数，纵轴保留线性以显示正负
             ax2.set_xscale('log')
             ax2.set_xlabel(xlabel)
             ax2.set_ylabel('Residuals')
-            ax2.grid(alpha=0.3)
         elif not show_residuals:
             ax1.set_xlabel(xlabel)
-        
+
         try:
             plt.tight_layout()
         except (ValueError, RuntimeError) as e:
             # tight_layout 可能在某些情况下失败（特别是智能标签放置后）
             # 静默忽略，布局可能略有偏差但不影响使用
             pass
-        return ax1, ax2
+        return fig, (ax1, ax2)
 
 
 # =============================================================================
@@ -1730,8 +1743,9 @@ def _require_xspec():
         return xspec
     except ImportError:
         raise ImportError(
-            "xspec module is required for spectral fitting. "
-            "Please install heasoftpy and set up XSPEC environment."
+            "xspec (PyXspec) module is required for spectral fitting. "
+            "Install HEASOFT with XSPEC and make sure its python/xspec "
+            "package is importable in this environment."
         )
 
 
@@ -1763,6 +1777,33 @@ class XspecChainResult:
     parallel_settings: dict
     warnings: list[str]
     status: str
+
+    def to_dict(self) -> dict:
+        """JSON 安全的字典形式，用于结果落盘或结构化上报。"""
+        def _parameter(parameter: XspecChainParameter) -> dict:
+            return {
+                "index": parameter.index,
+                "component": parameter.component,
+                "name": parameter.name,
+                "value": parameter.value,
+                "frozen": parameter.frozen,
+                "unit": parameter.unit,
+            }
+
+        return {
+            "chain_path": self.chain_path,
+            "status": self.status,
+            "stat_method": self.stat_method,
+            "fit_statistic": self.fit_statistic,
+            "fit_dof": self.fit_dof,
+            "source_counts": self.source_counts,
+            "background_counts": self.background_counts,
+            "free_parameters": [_parameter(item) for item in self.free_parameters],
+            "all_parameters": [_parameter(item) for item in self.all_parameters],
+            "chain_settings": dict(self.chain_settings),
+            "parallel_settings": dict(self.parallel_settings),
+            "warnings": list(self.warnings),
+        }
 
 
 def _default_xspec_parallel_processes(fraction: float = 0.75) -> int:
@@ -1994,11 +2035,111 @@ def run_xspec_chain(
     )
 
 
+#: XSPEC 九位误差状态串各位的含义（tclout error / Parameter.error[2]）。
+#: 每位 T 表示该异常发生，全 'F' 表示搜索本身未报异常。
+_XSPEC_ERROR_STATUS_FLAGS: tuple[str, ...] = (
+    "new minimum found",
+    "non-monotonicity detected",
+    "minimization may have run into problem",
+    "hit hard lower limit",
+    "hit hard upper limit",
+    "parameter was frozen",
+    "search failed in -ve direction",
+    "search failed in +ve direction",
+    "reduced chi-squared too high",
+)
+
+
+def _decode_xspec_error_status(status: str) -> list[str]:
+    """把 XSPEC 九位误差状态串解码为触发异常的原因列表。"""
+    reasons: list[str] = []
+    for index, flag in enumerate(_XSPEC_ERROR_STATUS_FLAGS):
+        if index < len(status) and status[index].upper() == "T":
+            reasons.append(flag)
+    return reasons
+
+
+def _classify_parameter_error(param, param_val: float, *, errors_computed: bool = True) -> tuple[dict[str, Any], str]:
+    """读取 PyXspec ``Parameter.error`` 三元组并按参数归类误差状态。
+
+    PyXspec 返回 ``(lower_bound, upper_bound, status_code_string)``。
+    实测（HEASOFT 6.36 / PyXspec）：误差从未计算时三元组为
+    ``(0.0, 0.0, 'FFFFFFFFF')``——状态串与成功时相同，因此必须同时
+    检查数值哨兵；旧版 PyXspec 的未计算哨兵为 ``(2v, 2v)``，同样检测。
+    ``errors_computed=False``（error 命令未执行或整体失败）时跳过读取，
+    直接标记 ``uncomputed``——命令级失败意味着任何逐参数数值都不可信。
+
+    返回 ``(写入参数字典的字段, 报告文本后缀)``。
+    """
+    if not errors_computed:
+        return {"error_status": "uncomputed"}, " (profile error not computed)"
+
+    status = ""
+    try:
+        raw = param.error
+        err_lo_raw = float(raw[0])
+        err_hi_raw = float(raw[1])
+        status = str(raw[2]) if len(raw) > 2 else ""
+    except Exception as exc:
+        return (
+            {"error_status": "unavailable", "error_reason": str(exc)},
+            " (error unavailable)",
+        )
+
+    base_fields = {"xspec_error_status": status}
+    reasons = _decode_xspec_error_status(status)
+
+    # 数值哨兵：从未跑过 error 命令时边界为 (0, 0)（新版）或 (2v, 2v)（旧版）。
+    uncomputed_sentinel = (
+        (err_lo_raw == 0.0 and err_hi_raw == 0.0)
+        or (
+            param_val != 0.0
+            and math.isclose(err_lo_raw, 2.0 * param_val, rel_tol=1e-12, abs_tol=0.0)
+            and math.isclose(err_hi_raw, 2.0 * param_val, rel_tol=1e-12, abs_tol=0.0)
+        )
+    )
+    if uncomputed_sentinel:
+        fields = dict(base_fields, error_status="uncomputed")
+        if reasons:
+            fields["error_reasons"] = reasons
+        return fields, " (profile error not computed)"
+
+    err_lo = abs(err_lo_raw - param_val)
+    err_hi = abs(err_hi_raw - param_val)
+    if not all(math.isfinite(value) and value >= 0.0 for value in (err_lo, err_hi)):
+        return (
+            dict(base_fields, error_status="failed", error_reasons=reasons or ["non-finite bounds"]),
+            " (profile error failed)",
+        )
+
+    if reasons:
+        # 触硬边界时数值仍可用（搜索停在硬限上），保留数值并标注。
+        if all(reason in ("hit hard lower limit", "hit hard upper limit", "new minimum found") for reason in reasons):
+            fields = dict(
+                base_fields,
+                error_status="boundary",
+                error_lo=err_lo,
+                error_hi=err_hi,
+                error_reasons=reasons,
+            )
+            return fields, f" (-{err_lo:.4g}, +{err_hi:.4g}) (profile interval at hard limit)"
+
+        fields = dict(base_fields, error_status="failed", error_reasons=reasons)
+        return fields, f" (profile error failed: {'; '.join(reasons)})"
+
+    return (
+        dict(base_fields, error_status="ok", error_lo=err_lo, error_hi=err_hi),
+        f" (-{err_lo:.4g}, +{err_hi:.4g}) (profile interval)",
+    )
+
+
 def _generate_xspec_result(
     model,
     spectrum,
     *,
     flux_range_keV: tuple[float, float] | None = None,
+    warnings_list: list[str] | None = None,
+    errors_computed: bool = True,
 ) -> dict:
     """
     根据XSPEC模型和光谱自动生成结果字典
@@ -2006,6 +2147,9 @@ def _generate_xspec_result(
     参数:
         model: XSPEC模型对象
         spectrum: XSPEC光谱对象
+        warnings_list: 组件级异常会追加到该列表（而非静默吞掉）
+        errors_computed: error 命令是否成功完成；False 时所有自由参数
+            标记为 ``uncomputed``，不读取任何误差数值
 
     返回:
         包含模型参数、flux、rate等信息的字典
@@ -2024,54 +2168,50 @@ def _generate_xspec_result(
     for comp_name in model.componentNames:
         try:
             comp = getattr(model, comp_name)
-
-            for param_name in comp.parameterNames:
-                param_key = f"{comp_name}.{param_name}"
-                if param_key in processed_params:
-                    continue
-                processed_params.add(param_key)
-
-                param = getattr(comp, param_name)
-                param_val = param.values[0]
-
-                param_dict = {
-                    'value': param_val,
-                    'frozen': bool(param.frozen),
-                    'index': _model_parameter_index(model, param),
-                    'link': str(getattr(param, "link", "") or ""),
-                }
-                lower = getattr(param, "min", None)
-                upper = getattr(param, "max", None)
-                parameter_values = getattr(param, "values", ())
-                if lower is None and len(parameter_values) >= 6:
-                    lower = parameter_values[2]
-                if upper is None and len(parameter_values) >= 6:
-                    upper = parameter_values[5]
-                if lower is not None:
-                    param_dict["min"] = float(lower)
-                if upper is not None:
-                    param_dict["max"] = float(upper)
-
-                if not param.frozen:
-                    try:
-                        array = np.array(param.error[:2]) - param_val
-                        err_lo = abs(array[0])
-                        err_hi = abs(array[1])
-                        param_dict['error_lo'] = err_lo
-                        param_dict['error_hi'] = err_hi
-                        lines.append(
-                            f"{comp_name}.{param_name}: {param_val:.4f} "
-                            f"(-{err_lo:.4f}, +{err_hi:.4f}) (profile interval)"
-                        )
-                    except Exception:
-                        lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (error calculation failed)")
-                else:
-                    lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (fixed)")
-
-                result['parameters'][param_key] = param_dict
-
-        except Exception as e:
+        except Exception as exc:
+            message = f"parameter extraction failed for component {comp_name}: {exc}"
+            if warnings_list is None:
+                warnings_list = []
+            warnings_list.append(message)
             continue
+
+        for param_name in comp.parameterNames:
+            param_key = f"{comp_name}.{param_name}"
+            if param_key in processed_params:
+                continue
+            processed_params.add(param_key)
+
+            param = getattr(comp, param_name)
+            param_val = param.values[0]
+
+            param_dict = {
+                'value': param_val,
+                'frozen': bool(param.frozen),
+                'index': _model_parameter_index(model, param),
+                'link': str(getattr(param, "link", "") or ""),
+            }
+            lower = getattr(param, "min", None)
+            upper = getattr(param, "max", None)
+            parameter_values = getattr(param, "values", ())
+            if lower is None and len(parameter_values) >= 6:
+                lower = parameter_values[2]
+            if upper is None and len(parameter_values) >= 6:
+                upper = parameter_values[5]
+            if lower is not None:
+                param_dict["min"] = float(lower)
+            if upper is not None:
+                param_dict["max"] = float(upper)
+
+            if not param.frozen:
+                error_fields, error_note = _classify_parameter_error(
+                    param, param_val, errors_computed=errors_computed
+                )
+                param_dict.update(error_fields)
+                lines.append(f"{comp_name}.{param_name}: {param_val:.4f}{error_note}")
+            else:
+                lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (fixed)")
+
+            result['parameters'][param_key] = param_dict
 
     try:
         if hasattr(model, 'cflux'):
@@ -2131,7 +2271,7 @@ def _generate_xspec_result(
     result['conversion'] = {
         'exposure_s': exposure,
         'erg_per_count': conv_factor,
-        'counts': photon_counts
+        'total_counts': photon_counts,
     }
 
     if exposure is not None:
@@ -2169,7 +2309,6 @@ def _generate_xspec_result(
 
 def _count_free_xspec_parameters(models: Sequence[Any]) -> int:
     """Count thawed, unlinked XSPEC parameters across data groups."""
-
     count = 0
     for model in models:
         for component_name in getattr(model, "componentNames", ()):
@@ -2184,260 +2323,6 @@ def _count_free_xspec_parameters(models: Sequence[Any]) -> int:
                     continue
                 count += 1
     return count
-
-
-def fit_spectrum(
-    phapath: str | Path,
-    rmfpath: str | Path,
-    outdir: str | Path,
-    *,
-    bkgpath: Optional[str | Path] = None,
-    arfpath: Optional[str | Path] = None,
-    group_min: int = 1,
-    emin: float = 0.5,
-    emax: float = 4.0,
-    model_name: str = "tbabs*ztbabs*cflux*powerlaw",
-    redshift: float = 0.0,
-    save_pha: bool = True,
-    clobber: bool = True,
-) -> dict:
-    """
-    执行XSPEC光谱拟合的自动化流程
-
-    参数:
-        phapath: 输入的PHA文件路径
-        rmfpath: RMF响应文件路径
-        outdir: 输出目录
-        bkgpath: 背景文件路径（可选）
-        arfpath: ARF有效面积文件路径（可选）
-        group_min: 最小计数分组数（默认1）
-        emin: 能量下限 keV（默认0.5）
-        emax: 能量上限 keV（默认4.0）
-        model_name: XSPEC模型名称（默认'tbabs*ztbabs*cflux*powerlaw'）
-        redshift: 源红移（默认0.0）
-        save_pha: 是否保存分组后的PHA文件
-        clobber: 是否覆盖已存在的文件
-
-    返回:
-        包含拟合结果的字典
-
-    示例:
-        >>> result = fit_spectrum(
-        ...     phapath="source.pha",
-        ...     rmfpath="response.rmf",
-        ...     outdir="output",
-        ...     group_min=1,
-        ...     emin=0.5,
-        ...     emax=4.0,
-        ...     model_name="tbabs*ztbabs*cflux*powerlaw",
-        ...     redshift=0.1
-        ... )
-    """
-    import xspec
-    from jinwu.ftools.grppha import grppha as jinwu_grppha
-
-    phapath = Path(phapath)
-    outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    grouped_pha = outdir / f"grouped_g{group_min}.pha"
-
-    jinwu_grppha(
-        input_pha=str(phapath),
-        outfile=str(grouped_pha) if save_pha else None,
-        min_counts=group_min,
-        overwrite=clobber,
-    )
-
-    xspec.AllData.clear()
-    xspec.AllModels.clear()
-    xspec.Xset.abund = "wilm"
-    xspec.Fit.query = "yes"
-    xspec.Fit.statMethod = "cstat"
-
-    s1 = xspec.Spectrum(str(grouped_pha))
-
-    if bkgpath is not None:
-        s1.background = str(bkgpath)
-    if arfpath is not None:
-        s1.arf = str(arfpath)
-    s1.response = str(rmfpath)
-
-    xspec.AllData.ignore("bad")
-    s1.ignore(f"**-{emin} {emax}-**")
-
-    m = xspec.Model(model_name)
-
-    m.TBabs.nH = 1.0
-    m.TBabs.nH.frozen = True
-
-    if "ztbabs" in model_name.lower():
-        m.zTBabs.nH = 0.5
-        m.zTBabs.nH.min = 0.0
-        m.zTBabs.nH.max = 100.0
-        if redshift > 0:
-            m.zTBabs.Redshift = redshift
-            m.zTBabs.Redshift.frozen = True
-
-    if hasattr(m, "cflux"):
-        m.cflux.Emin = emin
-        m.cflux.Emax = emax
-        if hasattr(m.cflux, "lg10Flux"):
-            m.cflux.lg10Flux = -10.0
-            m.cflux.lg10Flux.min = -20.0
-            m.cflux.lg10Flux.max = 10.0
-
-    if hasattr(m, "powerlaw"):
-        m.powerlaw.PhoIndex = 2.0
-        m.powerlaw.PhoIndex.min = 0.0
-        m.powerlaw.PhoIndex.max = 9.0
-
-    if hasattr(m, "zpowerlw"):
-        m.zpowerlw.PhoIndex = 2.0
-        m.zpowerlw.PhoIndex.min = 0.0
-        m.zpowerlw.PhoIndex.max = 9.0
-        if redshift > 0:
-            m.zpowerlw.Redshift = redshift
-            m.zpowerlw.Redshift.frozen = True
-
-    xspec.Fit.perform()
-
-    param_str = ""
-    if "ztbabs" in model_name.lower() and hasattr(m, "zTBabs") and hasattr(m, "cflux"):
-        param_str += f"1. {m.zTBabs.nH.index} "
-    if hasattr(m, "cflux") and hasattr(m.cflux, "lg10Flux"):
-        param_str += f"1. {m.cflux.lg10Flux.index} "
-    if hasattr(m, "powerlaw"):
-        param_str += f"1. {m.powerlaw.PhoIndex.index}"
-    elif hasattr(m, "zpowerlw"):
-        param_str += f"1. {m.zpowerlw.PhoIndex.index}"
-
-    if param_str.strip():
-        xspec.Fit.error(param_str.strip())
-
-    results = _generate_xspec_result(m, s1)
-
-    results["group_min"] = group_min
-    results["energy_range"] = {"emin": emin, "emax": emax}
-    results["input_files"] = {
-        "pha": str(phapath),
-        "grouped_pha": str(grouped_pha),
-        "rmf": str(rmfpath),
-        "bkg": str(bkgpath) if bkgpath else None,
-        "arf": str(arfpath) if arfpath else None,
-    }
-
-    return results
-
-
-def fit_spectrum_from_files(
-    phafile: str | Path,
-    rmfobj: Any,
-    outdir: str | Path,
-    *,
-    bkgfile: Optional[str | Path] = None,
-    arffile: Optional[str | Path] = None,
-    group_min: int = 1,
-    emin: float = 0.5,
-    emax: float = 4.0,
-    model_name: str = "tbabs*ztbabs*cflux*powerlaw",
-    redshift: float = 0.0,
-    save_pha: bool = True,
-    clobber: bool = True,
-    srcname: Optional[str] = None,
-    instname: Optional[str] = None,
-    nhgal_kw: Optional[dict] = None,
-    plottype: str = "ldata_eeufspec_delchi",
-    plot_backend: str = "matplotlib",
-    plot_outdir: Optional[str | Path] = None,
-    plot_format: str = "png",
-    plot_density: int = 300,
-) -> dict:
-    """
-    从文件路径执行完整的XSPEC光谱拟合，包括绘图
-
-    这是一个高级封装，组合了光谱分组、XSPEC拟合和结果绘图
-
-    参数:
-        phafile: 输入的PHA文件路径
-        rmfobj: RMF对象（Path字符串或RMFData对象）
-        outdir: 输出目录
-        bkgfile: 背景文件路径（可选）
-        arffile: ARF有效面积文件路径（可选）
-        group_min: 最小计数分组数（默认1）
-        emin: 能量下限 keV（默认0.5）
-        emax: 能量上限 keV（默认4.0）
-        model_name: XSPEC模型名称
-        redshift: 源红移（默认0.0）
-        save_pha: 是否保存分组后的PHA文件
-        clobber: 是否覆盖已存在的文件
-        srcname: 源名称（用于绘图标题）
-        instname: 仪器名称（用于绘图标题）
-        nhgal_kw: nhgal函数的关键字参数（可选）
-        plottype: 兼容参数；当前拟合图固定为 ldata + eeufspec + delchi 三联图
-        plot_backend: 绘图后端，'matplotlib'或'xspec'
-        plot_outdir: 绘图输出目录（默认与outdir相同）
-        plot_format: 绘图输出格式
-        plot_density: 绘图分辨率
-
-    返回:
-        包含拟合结果和图表路径的字典
-
-    示例:
-        >>> result = fit_spectrum_from_files(
-        ...     phafile="source.pha",
-        ...     rmfobj="response.rmf",
-        ...     outdir="output",
-        ...     srcname="MySource",
-        ...     instname="WXT"
-        ... )
-    """
-    import xspec
-    from jinwu.core.plot import plotfit
-
-    rmfpath = str(rmfobj) if isinstance(rmfobj, (str, Path)) else None
-
-    results = fit_spectrum(
-        phapath=phafile,
-        rmfpath=rmfpath,
-        outdir=outdir,
-        bkgpath=bkgfile,
-        arfpath=arffile,
-        group_min=group_min,
-        emin=emin,
-        emax=emax,
-        model_name=model_name,
-        redshift=redshift,
-        save_pha=save_pha,
-        clobber=clobber,
-    )
-
-    if srcname is None:
-        srcname = Path(phafile).stem
-    if instname is None:
-        instname = "INST"
-
-    plotdir = plot_outdir if plot_outdir is not None else outdir
-
-    try:
-        figurefit, _ = plotfit(
-            srcname=srcname,
-            instname=instname,
-            group_min=group_min,
-            modelname=model_name,
-            redshift=redshift,
-            plottype=plottype,
-            outputdir=plotdir,
-            backend=plot_backend,
-            output_format=plot_format,
-            density=plot_density,
-        )
-        results["plot_fit"] = str(figurefit) if figurefit else None
-    except Exception as e:
-        results["plot_fit"] = None
-        results["plot_fit_error"] = str(e)
-
-    return results
 
 
 def _model_parameter_index(model, parameter) -> int:
@@ -2663,7 +2548,7 @@ def _configure_prepared_model(
 def _prepared_input_dict(prepared) -> dict[str, str | int | None]:
     return {
         "instrument": prepared.instrument,
-        "obsid": prepared.obsid,
+        "obsid": prepared.obsid or "unknown",
         "module": prepared.module,
         "detector": prepared.detector,
         "source_id": prepared.source_id,
@@ -2839,6 +2724,12 @@ def _load_prepared_xspec_spectrum(
 
 
 def _capture_xspec_log(xspec, path: Path, action, warnings_list: list[str]) -> str:
+    """执行 XSPEC 动作并捕获其日志文本。
+
+    成功路径：读完日志后删除临时文件。
+    失败路径：保留临时文件（供 ``_write_xray_failure_log`` 收集转录），
+    由调用方决定如何消费后清理。
+    """
     opener = getattr(getattr(xspec, "Xset", None), "openLog", None)
     closer = getattr(getattr(xspec, "Xset", None), "closeLog", None)
     if not callable(opener) or not callable(closer):
@@ -2853,6 +2744,7 @@ def _capture_xspec_log(xspec, path: Path, action, warnings_list: list[str]) -> s
             closer()
         except Exception as exc:
             warnings_list.append(f"Could not close XSPEC log {path.name}: {exc}")
+
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError as exc:
@@ -2954,7 +2846,7 @@ def fit_prepared(
     plot_backend: str = "matplotlib",
     plot_format: str = "png",
     plot_formats: Sequence[str] | None = None,
-    plot_density: int = 300,
+    plot_dpi: int = 300,
     plot_required: bool = False,
 ) -> dict:
     """Fit one prepared spectrum or multiple prepared spectra with XSPEC."""
@@ -3060,11 +2952,12 @@ def fit_prepared(
     )
     error_text = ""
     profile_errors_succeeded = False
+    error_log_path = output / "fit_prepared.xspec_error.tmp.log"
     if calculate_errors and command:
         try:
             error_text = _capture_xspec_log(
                 xspec,
-                output / "fit_prepared.xspec_error.tmp.log",
+                error_log_path,
                 lambda: xspec.Fit.error(command),
                 warnings_list,
             )
@@ -3074,16 +2967,21 @@ def fit_prepared(
                     warnings_list.append(f"XSPEC profile error: {line.strip()}")
         except Exception as exc:
             warnings_list.append(f"XSPEC error calculation failed: {exc}")
+            # error 命令失败但拟合本身成功：把转录并入报告后清理临时日志
+            try:
+                transcript = error_log_path.read_text(encoding="utf-8", errors="ignore")
+                error_text = transcript or str(exc)
+                error_log_path.unlink()
+            except OSError:
+                error_text = str(exc)
 
     results = _generate_xspec_result(
         model,
         xspec_spectra[0],
         flux_range_keV=fit_ranges[first_key],
+        warnings_list=warnings_list,
+        errors_computed=profile_errors_succeeded,
     )
-    if not profile_errors_succeeded:
-        for parameter in (results.get("parameters") or {}).values():
-            parameter.pop("error_lo", None)
-            parameter.pop("error_hi", None)
     prepared_inputs = [_prepared_input_dict(spectrum) for spectrum in prepared_spectra]
     if srcname is None:
         first = prepared_spectra[0]
@@ -3109,11 +3007,9 @@ def fit_prepared(
                 group["energy_range"]["emin"],
                 group["energy_range"]["emax"],
             ),
+            warnings_list=warnings_list,
+            errors_computed=profile_errors_succeeded,
         )
-        if not profile_errors_succeeded:
-            for parameter in (group_result.get("parameters") or {}).values():
-                parameter.pop("error_lo", None)
-                parameter.pop("error_hi", None)
         cflux = {}
         if hasattr(group_model, "cflux"):
             for name in ("Emin", "Emax", "lg10Flux"):
@@ -3162,9 +3058,13 @@ def fit_prepared(
     ]
     results["per_group"] = per_group
     results["input_files"] = prepared_inputs
-    results["prepared"] = prepared
     results["report_txt"] = str(report)
     results["warnings"] = warnings_list
+    results["error_parameters"] = (
+        [int(token) for token in str(command).split()[1:] if token.isdigit()]
+        if (calculate_errors and command)
+        else []
+    )
     results["group_min"] = prepared_spectra[0].group_min
     results["xspec_settings"] = {
         "abundance": abundance,
@@ -3209,7 +3109,7 @@ def fit_prepared(
                 outputdir=output,
                 backend=plot_backend,
                 output_format=requested_format,
-                density=plot_density,
+                density=plot_dpi,
             )
             if figure_path is not None:
                 plot_paths.append(str(figure_path))
@@ -3543,14 +3443,13 @@ def _write_xray_candidate_summary(
         settings = result.get("xspec_settings") or {}
         if not settings.get("calculate_errors", True):
             lines.append("XSPEC error 未启用，以下仅报告 best-fit 参数。")
-        elif settings.get("profile_errors_succeeded"):
+        else:
             lines.append(
                 "XSPEC error："
                 + str(settings.get("profile_error_label") or "single-parameter profile interval")
                 + f"；delta statistic={settings.get('error_delta_stat', 'N/A')}。"
+                + ("" if settings.get("profile_errors_succeeded", True) else "（error 命令整体执行失败，以下误差不可用）")
             )
-        elif settings.get("profile_errors_succeeded") is False:
-            lines.append("XSPEC error 未成功，以下仅报告 best-fit 参数。")
         lines.append(
             f"统计量：{result.get('effective_statistic', 'unknown')}="
             f"{metrics.statistic:.6g}/{metrics.dof}；k={metrics.free_parameters}；"
@@ -3566,10 +3465,14 @@ def _write_xray_candidate_summary(
             else:
                 error_lo = parameter.get("error_lo")
                 error_hi = parameter.get("error_hi")
-                if settings.get("profile_errors_succeeded") and error_lo is not None and error_hi is not None:
+                if error_lo is not None and error_hi is not None:
                     lines.append(f"  {name}={value} (-{error_lo}/+{error_hi})")
                 else:
-                    lines.append(f"  {name}={value}")
+                    status = parameter.get("error_status")
+                    if status and status not in ("ok",):
+                        lines.append(f"  {name}={value}（误差不可用：{status}）")
+                    else:
+                        lines.append(f"  {name}={value}")
         flux_parameter = _parameter_by_name(
             result.get("parameters") or {}, "cflux.lg10Flux"
         )
@@ -3766,13 +3669,8 @@ def fit_xray_models(
         }
         result_json = (result.get("fit_products") or {}).get("result_json")
         if result_json:
-            serializable = {
-                item_key: item_value
-                for item_key, item_value in result.items()
-                if item_key != "prepared"
-            }
             Path(result_json).write_text(
-                json.dumps(serializable, ensure_ascii=False, indent=2, default=str) + "\n",
+                json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n",
                 encoding="utf-8",
             )
         _write_xray_candidate_summary(

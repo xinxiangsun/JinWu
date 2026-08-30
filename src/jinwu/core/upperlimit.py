@@ -1879,24 +1879,24 @@ def _write_diagnostic_plots(
 ) -> dict[str, str]:
     import matplotlib.pyplot as plt
 
+    from .plotstyle import PALETTE, apply_style, save_figure
+
+    apply_style()
     artifacts: dict[str, str] = {}
     amplitudes = np.asarray(result.likelihood_scan.get("amplitude", []), dtype=float)
     delta_stat = np.asarray(result.likelihood_scan.get("delta_stat", []), dtype=float)
     if amplitudes.size:
         fig, ax = plt.subplots(figsize=(7.0, 5.0))
-        ax.plot(amplitudes, delta_stat, color="black", lw=1.8)
+        ax.plot(amplitudes, delta_stat, color=PALETTE["data"], lw=1.8)
         if result.observed_upper_bound is not None:
             bound = result.observed_upper_bound
-            ax.axhline(bound.level.delta_stat, color="tab:red", ls="--", label=bound.level.label)
-            ax.axvline(bound.amplitude_upper, color="tab:red", ls=":")
+            ax.axhline(bound.level.delta_stat, color=PALETTE["reference"], ls="--", label=bound.level.label)
+            ax.axvline(bound.amplitude_upper, color=PALETTE["reference"], ls=":")
         ax.set_xlabel("Model amplitude")
         ax.set_ylabel("Profile delta statistic")
-        ax.grid(alpha=0.25)
         ax.legend(frameon=False)
         fig.tight_layout()
-        for suffix in ("png", "svg"):
-            path = outdir / f"upper_limit_likelihood.{suffix}"
-            fig.savefig(path, dpi=300 if suffix == "png" else None)
+        for suffix, path in save_figure(fig, outdir / "upper_limit_likelihood", formats=("png", "svg")).items():
             artifacts[f"likelihood_{suffix}"] = str(path)
         plt.close(fig)
 
@@ -1907,23 +1907,20 @@ def _write_diagnostic_plots(
     if tested.size:
         order = np.argsort(tested)
         fig, ax = plt.subplots(figsize=(7.0, 5.0))
-        ax.plot(tested[order], powers[order], "o-", color="tab:blue")
+        ax.plot(tested[order], powers[order], "o-", color=PALETTE["data"])
         if result.detection_sensitivity is not None:
             ax.axhline(
                 result.detection_sensitivity.target_power,
-                color="tab:red",
+                color=PALETTE["reference"],
                 ls="--",
                 label="target detection power",
             )
         ax.set_xlabel("Injected model amplitude")
         ax.set_ylabel("Detection probability")
         ax.set_ylim(0.0, 1.02)
-        ax.grid(alpha=0.25)
         ax.legend(frameon=False)
         fig.tight_layout()
-        for suffix in ("png", "svg"):
-            path = outdir / f"upper_limit_sensitivity.{suffix}"
-            fig.savefig(path, dpi=300 if suffix == "png" else None)
+        for suffix, path in save_figure(fig, outdir / "upper_limit_sensitivity", formats=("png", "svg")).items():
             artifacts[f"sensitivity_{suffix}"] = str(path)
         plt.close(fig)
     return artifacts

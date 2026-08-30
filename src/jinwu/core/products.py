@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
+from enum import Enum
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -38,42 +40,79 @@ __all__ = [
     "save_xspec_session",
     "render_observation_summary",
     "render_wechat_fit_messages",
+    "jsonable",
+    "write_json",
+    "sha256_file",
+    "safe_filename_token",
 ]
 
 
 def _sha256(path: Path) -> str:
+    return sha256_file(path)
+
+
+def sha256_file(path: str | Path) -> str:
+    """文件的 SHA256 摘要（分块读取；全库唯一的文件哈希实现）。"""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with Path(path).open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def _jsonable(value: Any) -> Any:
+def safe_filename_token(value: Any) -> str:
+    """把任意值转成可安全入文件名的 token（不改显示标签）。"""
+    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
+    token = re.sub(r"_+", "_", token).strip("._-")
+    return token or "unnamed"
+
+
+def jsonable(value: Any) -> Any:
+    """递归转为 JSON 安全结构（dataclass/Path/Enum/set/ndarray/NaN→None）。
+
+    这是全库唯一的序列化规范化实现：core.pipeline 与各 instrument
+    pipeline 的落盘 payload 都应经由它（或 :func:`write_json`）。
+    """
     if is_dataclass(value):
-        return _jsonable(asdict(value))
+        return jsonable(asdict(value))
     if isinstance(value, Path):
         return str(value)
+    if isinstance(value, Enum):
+        return value.value
     if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (tuple, list)):
-        return [_jsonable(item) for item in value]
+        return {str(key): jsonable(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return [jsonable(item) for item in value]
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return jsonable(value.tolist())
     if isinstance(value, np.generic):
-        return value.item()
+        return jsonable(value.item())
+    if hasattr(value, "tolist"):
+        return jsonable(value.tolist())
     if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
 
 
-def _write_json(path: Path, payload: Any) -> Path:
+def _jsonable(value: Any) -> Any:
+    return jsonable(value)
+
+
+def write_json(path: str | Path, payload: Any) -> Path:
+    """原子写入 JSON（tmp + replace），统一缩进与键排序。"""
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(_jsonable(payload), indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(jsonable(payload), indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+    temporary.replace(path)
     return path
+
+
+def _write_json(path: Path, payload: Any) -> Path:
+    return write_json(path, payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,6 +460,9 @@ def plot_net_lightcurve(
 
     import matplotlib.pyplot as plt
 
+    from .plotstyle import PALETTE, apply_style, save_figure
+
+    apply_style()
     fig, (top, bottom) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     mission_time = curve.time + curve.timezero
     if timezero is None:
@@ -444,32 +486,27 @@ def plot_net_lightcurve(
             else "Time since T0 (s)"
         )
     top.errorbar(
-        plot_time, curve.source_rate, yerr=curve.source_error, fmt=".", label="source"
+        plot_time, curve.source_rate, yerr=curve.source_error, fmt=".",
+        color=PALETTE["data"], label="source",
     )
     top.errorbar(
         plot_time, curve.alpha * curve.background_rate,
-        yerr=curve.alpha * curve.background_error, fmt=".", label="scaled background",
+        yerr=curve.alpha * curve.background_error, fmt=".",
+        color=PALETTE["background"], label="scaled background",
     )
     top.set_ylabel("Rate [count s$^{-1}$]")
     top.legend()
-    top.grid(alpha=0.25)
     bottom.axhline(0.0, color="0.5", lw=1)
     bottom.errorbar(
-        plot_time, curve.net_rate, yerr=curve.net_error, fmt=".", color="black"
+        plot_time, curve.net_rate, yerr=curve.net_error, fmt=".",
+        color=PALETTE["model"],
     )
     bottom.set_xlabel(x_label)
     bottom.set_ylabel("Net rate [count s$^{-1}$]")
-    bottom.grid(alpha=0.25)
     fig.suptitle(title)
-    base = Path(output_base)
-    paths = []
-    for extension in formats:
-        path = base.with_suffix(f".{extension}")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        paths.append(path)
+    outputs = save_figure(fig, output_base, formats=formats, dpi=dpi)
     plt.close(fig)
-    return tuple(paths)
+    return tuple(outputs[extension] for extension in formats)
 
 
 def _parameter(parameters: Mapping[str, Any], suffix: str) -> Mapping[str, Any] | None:
@@ -660,33 +697,36 @@ def save_flux_curve(
     if not formats:
         return outputs
 
+    from .plotstyle import PALETTE, apply_style, save_figure
+
+    apply_style()
     fig, (science_ax, quicklook_ax) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
     science = result.science_points or result.aggregate_points
     if science:
         x = np.asarray([point.time for point in science])
         y = np.asarray([point.flux for point in science])
-        lo = np.asarray([point.error_low or np.nan for point in science])
-        hi = np.asarray([point.error_high or np.nan for point in science])
-        science_ax.errorbar(x, y, xerr=[point.time_error for point in science], yerr=(lo, hi), fmt="o")
+        lo = np.asarray([np.nan if point.error_low is None else point.error_low for point in science])
+        hi = np.asarray([np.nan if point.error_high is None else point.error_high for point in science])
+        science_ax.errorbar(
+            x, y, xerr=[point.time_error for point in science], yerr=(lo, hi),
+            fmt="o", color=PALETTE["data"], markersize=3.5,
+        )
         science_ax.set_yscale("log")
     science_ax.set_ylabel("Unabsorbed flux\n[erg cm$^{-2}$ s$^{-1}$]")
-    science_ax.grid(alpha=0.25)
     quick = result.quicklook_points
     if quick:
         quicklook_ax.errorbar(
             [point.time for point in quick], [point.flux for point in quick],
             xerr=[point.time_error for point in quick],
-            yerr=[point.error_high for point in quick], fmt=".", color="0.25",
+            yerr=[point.error_high for point in quick], fmt=".",
+            color=PALETTE["background"],
         )
         quicklook_ax.axhline(0.0, color="0.5", lw=1)
     quicklook_ax.set_ylabel("Fixed-shape quicklook flux")
     quicklook_ax.set_xlabel("Mission time [s]")
-    quicklook_ax.grid(alpha=0.25)
     fig.suptitle(title)
-    for extension in formats:
-        path = base.with_suffix(f".{extension}")
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        outputs[f"plot_{extension}"] = path
+    plot_outputs = save_figure(fig, base, formats=formats, dpi=dpi)
+    outputs.update({f"plot_{extension}": path for extension, path in plot_outputs.items()})
     plt.close(fig)
     return outputs
 
@@ -757,8 +797,7 @@ def save_xspec_session(
     log_lines.append(transcript.rstrip())
     log.write_text("\n".join(log_lines).rstrip() + "\n", encoding="utf-8")
     result_json = output / f"{label}_fit.json"
-    serializable = {key: value for key, value in result.items() if key != "prepared"}
-    _write_json(result_json, serializable)
+    _write_json(result_json, result)
     return FitProductSet(
         result_json=result_json,
         report_txt=Path(report_txt),

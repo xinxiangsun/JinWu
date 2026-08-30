@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
 import inspect
@@ -17,6 +17,7 @@ import tempfile
 from typing import Any, ClassVar, Generic, Iterator, Mapping, TypeVar
 
 from .config import InstrumentConfig
+from .products import jsonable as _jsonable
 
 __all__ = [
     "InstrumentPipeline",
@@ -108,7 +109,13 @@ def pipeline(config: InstrumentConfig, input_data: PipelineInput, **kwargs):
     key = config.pipeline.strip().lower()
     if key not in _PIPELINES:
         if key == "ep.wxt.pointing":
-            __import__("jinwu.ep.wxt.pipeline")
+            try:
+                __import__("jinwu.ep.wxt.pipeline")
+            except ImportError as exc:  # pragma: no cover - depends on optional runtime env
+                raise ImportError(
+                    "The 'ep.wxt.pointing' pipeline requires the EP instrument "
+                    "package; install it with `pip install jinwu-ep`"
+                ) from exc
     try:
         cls = _PIPELINES[key]
     except KeyError as exc:
@@ -117,35 +124,15 @@ def pipeline(config: InstrumentConfig, input_data: PipelineInput, **kwargs):
     return cls(input_data, config=config, **kwargs)
 
 
-def _jsonable(value: Any) -> Any:
-    if is_dataclass(value):
-        return _jsonable(asdict(value))
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, Enum):
-        return value.value
-    if isinstance(value, Mapping):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (tuple, list, set)):
-        return [_jsonable(item) for item in value]
-    if hasattr(value, "tolist"):
-        return _jsonable(value.tolist())
-    if isinstance(value, float) and not (value == value and abs(value) != float("inf")):
-        return None
-    return value
-
-
 def _fingerprint(value: Any) -> str:
     encoded = json.dumps(_jsonable(value), sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
 def _file_fingerprint(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    from .products import sha256_file
+
+    return sha256_file(path)
 
 
 def _output_fingerprints(outputs: Mapping[str, str]) -> dict[str, str]:

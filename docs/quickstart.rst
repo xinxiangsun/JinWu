@@ -82,9 +82,43 @@ count rates and errors with proper uncertainty propagation:
    snr = net / net_err
    print(f"S/N = {snr:.1f}")
 
+EP/WXT Pointing Pipeline
+------------------------
+
+For an EP-WXT pointing observation, the end-to-end pipeline goes from raw
+L2/L3 data to lightcurves, duration, spectral fits, flux curve and a Chinese
+quicklook report:
+
+.. code-block:: python
+
+   from jinwu.core.config import instrument
+   from jinwu.ep.wxt import WXTPointingInput, WXTPointingPipeline
+
+   inp = WXTPointingInput(
+       target_id="EP260809a",
+       root="/data/06800001692_32",        # 官方 L2/L3 数据目录
+       source_id="s1",
+       ra_deg=..., dec_deg=...,
+       obsid="06800001692",
+       auto_approve_regions=True,          # 跳过人工区域审批
+   )
+   pipeline = WXTPointingPipeline(inp, config=instrument("WXT"))
+   result = pipeline.run(resume=False)     # 断点续跑用 resume=True
+
+   result.summary_text()                   # 中文快报文本
+   result.display()                        # Jupyter 内嵌展示产物图
+   print(result.workspace)                 # 所有产物都在这个工作区目录
+
+Spectral fitting is configurable through the instrument config
+(``FitConfig``: candidate models, ``comparison_intervals``, error
+``error_delta_stat`` and so on); every fit result records per-parameter
+profile-error status (``error_status``) instead of blindly trusting XSPEC
+error output.
+
 Next Steps
 ----------
 
 * See :doc:`api` for the complete API reference.
+* See :doc:`usage/spectral` and :doc:`usage/lightcurve` for fitting details.
 * Check the `GitHub repository <https://github.com/xinxiangsun/jinwu>`_
   for examples and issue tracking.

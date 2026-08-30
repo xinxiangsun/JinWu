@@ -93,10 +93,3 @@ Swift
 .. automodapi:: jinwu.swift
    :no-inheritance-diagram:
    :include-all-objects:
-
-Application Layer
------------------
-
-.. automodapi:: jinwu.application
-   :no-inheritance-diagram:
-   :include-all-objects:

@@ -1,19 +1,20 @@
 """
-autohea.core
-============
+jinwu.core
+==========
 
-Core utilities for OGIP FITS IO and helpers.
+Core utilities for OGIP FITS IO, fitting, plotting and pipeline helpers.
 
 This package layer exposes:
-- Submodules such as `file`, `heasoft`, `plot`, `time`.
-- Numpy-first OGIP readers in `core.file` for ARF/RMF/PHA/LC/EVT, returning
+- Submodules such as `fit`, `plot`, `time`, `ops`, `io`, `products`.
+- Numpy-first OGIP readers in `core.io` for ARF/RMF/PHA/LC/EVT, returning
   concrete dataclasses with `kind` and `path` fields.
 
 Typical usage
 -------------
-	from autohea.core import readfits, guess_ogip_kind
-	from autohea.core import read_arf, read_pha, OgipPhaReader
-	from autohea.core import band_from_arf_bins, ChannelBand
+	from jinwu.core import readfits, guess_ogip_kind
+	from jinwu.core import read_arf, read_pha, OgipPhaReader
+	from jinwu.core import band_from_arf_bins, ChannelBand
+	from jinwu.core import fit   # fit.fit_prepared / fit.fit_xray_models
 """
 from __future__ import annotations
 
@@ -48,9 +49,9 @@ if TYPE_CHECKING:
 
 # Package version
 try:
-	__version__ = version("autohea")
+	__version__ = version("jinwu")
 except PackageNotFoundError:  # pragma: no cover - during editable installs
-	__version__ = "0.0.13"
+	__version__ = "0.0.0"
 
 _MODULE_EXPORTS = {
 	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift',
@@ -83,9 +84,15 @@ _DATASET_EXPORTS = {
 	'LightcurveDataset', 'SpectrumDataset', 'JointDataset', 'netdata',
 }
 
+_TIME_EXPORTS = {
+	'Time', 'TimeDelta',
+}
+
 __all__ = [
 	# Submodules
 	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift',
+	# Time primitives
+	'Time', 'TimeDelta',
 	# Data containers
 	'EnergyBand', 'ChannelBand', 'RegionArea', 'RegionAreaSet', 'HduHeader', 'FitsHeaderDump', 'OgipMeta', 'ArfBase', 'RmfBase', 'PhaBase', 'ArfData', 'RmfData', 'PhaData', 'LightcurveDataBase', 'LightcurveData', 'EventDataBase', 'EventData', 'timescale',
 	# Dataset containers
@@ -141,6 +148,12 @@ def __getattr__(name: str):
 
 	if name in _DATASET_EXPORTS:
 		mod = import_module('.datasets', __name__)
+		value = getattr(mod, name)
+		globals()[name] = value
+		return value
+
+	if name in _TIME_EXPORTS:
+		mod = import_module('.time', __name__)
 		value = getattr(mod, name)
 		globals()[name] = value
 		return value

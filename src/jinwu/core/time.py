@@ -31,13 +31,15 @@ from astropy.time.core import ScaleValueError
 import erfa
 import numpy as np
 import re
+from pathlib import Path
 from astropy.io import fits
 from typing import Tuple, List, Dict, Optional, Union, cast
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.dates import DateFormatter
 import astropy.units as u
-from swiftbat.clockinfo import utcf
+
+from .plotstyle import PALETTE, SERIES_COLORS, apply_style
 
 
 __all__ = [
@@ -79,6 +81,13 @@ def _combine_swift_met_components(val1, val2):
 
 def _utcf_correction(met_seconds):
     """Evaluate the UTCF correction for Swift MET values."""
+    try:
+        from swiftbat.clockinfo import utcf
+    except ImportError as exc:  # swiftbat 是可选依赖（[swift] extra）
+        raise ImportError(
+            "Swift MET conversions require the optional 'swiftbat' package; "
+            "install it with: pip install 'jinwu[swift]'"
+        ) from exc
     met_array = _to_float_array(met_seconds)
     scalar_input = getattr(met_array, 'ndim', 0) == 0
     flat = np.atleast_1d(met_array).astype(np.float64, copy=False).ravel()
@@ -690,177 +699,6 @@ def time_from_mission_seconds(mission: str | None, seconds: float) -> Time | Non
 # 无需显式调用 register_class
 # ============================================================================
 
-# ============================================================================
-# 向后兼容：保留旧 API 作为便利函数（非推荐）
-# 这些函数直接实现了 MET <-> UTC 的常用转换，参考用户提供的实现。
-# ============================================================================
-
-
-# def hxmt_met_to_utc(met):
-
-#     dt = TimeDelta(met + 441763197.0, format='sec')
-#     ref_tt = Time('1998-01-01T00:00:00', format='isot', scale='tt')
-#     now_utc = (ref_tt + dt).value
-
-#     return now_utc
-
-
-# def hxmt_utc_to_met(utc, format='isot'):
-
-#     now_tt = Time(utc, scale='tt', format=format)
-#     met = now_tt.cxcsec - 441763197.0
-
-#     return met
-
-
-# def fermi_met_to_utc(met):
-
-#     dt = TimeDelta(met, format='sec')
-#     ref_utc = Time('2001-01-01T00:00:00.00', scale='utc', format='isot')
-#     now_utc = (ref_utc + dt).value
-
-#     return now_utc
-
-
-# def fermi_utc_to_met(utc, format='isot'):
-
-#     ref_utc = Time('2001-01-01T00:00:00.00', scale='utc', format='isot')
-#     now_utc = Time(utc, scale='utc', format=format)
-#     met = (now_utc - ref_utc).sec
-
-#     return met
-
-
-# def fermi_utc_goback(utc, poshist_file):
-    
-#     poshist = fits.open(poshist_file)[1].data
-#     nt = np.size(poshist)
-#     sc_time = poshist['SCLK_UTC']
-#     sc_quat = np.zeros((nt,4),float)
-#     sc_pos = np.zeros((nt,3),float)
-#     sc_coords = np.zeros((nt,2),float)
-#     try:
-#         sc_coords[:,0] = poshist['SC_LON']
-#         sc_coords[:,1] = poshist['SC_LAT']
-#     except Exception:
-#         msg = ''
-#         msg += '*** No geographical coordinates available '
-#         msg += 'for this file: %s' % poshist_file
-#         print(msg)
-
-#     sc_quat[:,0] = poshist['QSJ_1']
-#     sc_quat[:,1] = poshist['QSJ_2']
-#     sc_quat[:,2] = poshist['QSJ_3']
-#     sc_quat[:,3] = poshist['QSJ_4']
-#     sc_pos[:,0] = poshist['POS_X']
-#     sc_pos[:,1] = poshist['POS_Y']
-#     sc_pos[:,2] = poshist['POS_Z']
-    
-#     G = 6.67428e-11
-#     M = 5.9722e24
-#     r = (np.sum(sc_pos ** 2.0, 1)) ** (1 / 2.0)
-#     r_avg = np.average(r)
-#     r_cubed = (r_avg) ** 3.0
-#     factor = r_cubed / (G * M)
-#     period = 2.0 * np.pi * np.sqrt(factor)
-
-#     utc = Time(utc, scale='utc', format='isot')
-#     dt = TimeDelta(period * 30, format='sec')
-#     goback_utc = (utc - dt).value
-    
-#     return goback_utc
-
-
-# def gecam_met_to_utc(met):
-
-#     dt = TimeDelta(met, format='sec')
-#     ref_utc = Time('2019-01-01T00:00:00.00', format='isot', scale='tt')
-#     now_utc = (ref_utc + dt).value
-
-#     return now_utc
-
-
-# def gecam_utc_to_met(utc, format='isot'):
-
-#     now_utc = Time(utc, scale='tt', format=format)
-#     ref_utc = Time('2019-01-01T00:00:00.00', format='isot', scale='tt')
-#     met = (now_utc - ref_utc).sec
-    
-#     return met
-
-
-# def grid_met_to_utc(met):
-    
-#     now_utc = Time(met, scale='utc', format='unix').to_value('isot')
-    
-#     return now_utc
-
-
-# def grid_utc_to_met(isot, format='isot'):
-    
-#     now_utc = Time(isot, scale='utc', format=format)
-#     met = now_utc.to_value('unix')
-    
-#     return met
-
-
-# def ep_utc_to_met(utc, format='isot'):
-
-#     ref_utc = Time('2020-01-01T00:00:00.000', format='isot', scale='utc')
-#     now_utc = Time(utc, format=format, scale='utc')
-#     met = (now_utc - ref_utc).sec
-
-#     return met
-
-
-# def ep_met_to_utc(met):
-
-#     ref_utc = Time('2020-01-01T00:00:00.000', format='isot', scale='utc')
-#     dt = TimeDelta(met, format='sec')
-#     now_utc = (ref_utc + dt).value
-
-#     return now_utc
-
-
-# def leia_utc_to_met(utc, format='isot'):
-
-#     ref_utc = Time('2021-01-01T00:00:00.000', format='isot', scale='utc')
-#     now_utc = Time(utc, format=format, scale='utc')
-#     met = (now_utc - ref_utc).sec
-
-#     return met
-
-
-# def leia_met_to_utc(met):
-
-#     ref_utc = Time('2021-01-01T00:00:00.000', format='isot', scale='utc')
-#     dt = TimeDelta(met, format='sec')
-#     now_utc = (ref_utc + dt).value
-
-#     return now_utc
-
-
-# def swift_met_to_utc(met, utcf):
-
-#     dt = TimeDelta(met + utcf, format='sec')
-#     ref_tt = Time('2001-01-01T00:00:00.00', scale='tt', format='isot')
-#     now_utc = (ref_tt + dt).value
-
-#     return now_utc
-
-
-# def swift_utc_to_met(utc, utcf, format='isot'):
-
-#     ref_tt = Time('2001-01-01T00:00:00.00', scale='tt', format='isot')
-#     now_utc = Time(utc, scale='tt', format=format)
-#     met = (now_utc - ref_tt).sec - utcf
-
-#     return met
-
-
-# ============================================================================
-# 时间分析工具函数 | Time Analysis Utility Functions
-# ============================================================================
 
 def extract_time_interval(
     data_obj,
@@ -1270,26 +1108,23 @@ def plot_time_intervals(
     --------
     >>> from jinwu.core.time import Time, plot_time_intervals
     >>> intervals = [
-    ...     {'name': 'EP WXT', 'start': Time(100, format='ep'), 
-    ...      'end': Time(200, format='ep'), 'color': 'blue'},
-    ...     {'name': 'Swift BAT', 'start': Time(150, format='swift'), 
-    ...      'end': Time(250, format='swift'), 'color': 'red'}
+    ...     {'name': 'EP WXT', 'start': Time(100, format='ep'),
+    ...      'end': Time(200, format='ep')},
+    ...     {'name': 'Swift BAT', 'start': Time(150, format='swift'),
+    ...      'end': Time(250, format='swift')}
     ... ]
     >>> fig = plot_time_intervals(intervals, save_path='time_comparison.png')
     """
+    apply_style()
     # 创建图形
     n_axes = int(show_utc) + int(show_relative)
     if n_axes == 0:
         raise ValueError("At least one time axis must be shown")
-    
+
     fig, axes = plt.subplots(n_axes, 1, figsize=figsize, sharex=False)
     if n_axes == 1:
         axes = [axes]
-    
-    # 默认颜色循环
-    default_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
-                      '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
-    
+
     # 准备数据
     n_intervals = len(intervals)
     
@@ -1315,7 +1150,7 @@ def plot_time_intervals(
         ax = axes[ax_idx]
         
         for i, interval in enumerate(intervals):
-            color = interval.get('color', default_colors[i % len(default_colors)])
+            color = interval.get('color', SERIES_COLORS[i % len(SERIES_COLORS)])
             name = interval['name']
             start = interval['start']
             end = interval['end']
@@ -1375,7 +1210,7 @@ def plot_time_intervals(
         ax = axes[ax_idx]
         
         for i, interval in enumerate(intervals):
-            color = interval.get('color', default_colors[i % len(default_colors)])
+            color = interval.get('color', SERIES_COLORS[i % len(SERIES_COLORS)])
             name = interval['name']
             start = interval['start']
             end = interval['end']
@@ -1419,7 +1254,7 @@ def plot_time_intervals(
                 va='top',
                 ha='center',
                 fontsize=8,
-                color='gray'
+                color=PALETTE['muted']
             )
             ax.text(
                 end_rel,
@@ -1428,11 +1263,11 @@ def plot_time_intervals(
                 va='top',
                 ha='center',
                 fontsize=8,
-                color='gray'
+                color=PALETTE['muted']
             )
         
         # 标记参考时间（T=0）
-        ax.axvline(0, color='black', linestyle='--', linewidth=1.5, alpha=0.5, label='Reference Time T0')
+        ax.axvline(0, color=PALETTE['reference'], linestyle='--', linewidth=1.5, alpha=0.7, label='Reference Time T0')
         
         ax.set_yticks(range(n_intervals))
         ax.set_yticklabels([])
@@ -1443,9 +1278,12 @@ def plot_time_intervals(
         ax.legend(loc='upper right', fontsize=9)
     
     plt.tight_layout()
-    
+
     if save_path:
-        fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        from .plotstyle import save_figure
+
+        suffix = Path(str(save_path)).suffix.lstrip(".") or "png"
+        save_figure(fig, Path(str(save_path)).with_suffix(""), formats=(suffix,))
         print(f"✅ Time comparison plot saved: {save_path}")
-    
+
     return fig

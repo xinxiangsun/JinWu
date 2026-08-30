@@ -132,6 +132,8 @@ _SUBPACKAGES = {
     'ftools',
     'model',
     'physics',
+    # 依赖 [cluster] extra（pandas/seaborn/scikit-learn），lazy 导入
+    'cluster',
 }
 
 _CORE_EXPORTS = {
@@ -201,6 +203,7 @@ __all__ = [
     'ftools',
     'model',
     'physics',
+    'cluster',
     # Common utilities
     'Time',
     'TimeDelta',

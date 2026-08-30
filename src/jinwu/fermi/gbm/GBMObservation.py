@@ -12,7 +12,7 @@ from gdt.missions.fermi.gbm.detectors import GbmDetectors
 from gdt.missions.fermi.gbm.poshist import GbmPosHist
 from pathlib import Path
 import os
-from jinwu.response.gbm import contgbmrsp
+from .response import contgbmrsp
 from gdt.core.data_primitives import Gti
 from glob import glob
 import shutil
@@ -356,8 +356,9 @@ class GBMObservation:
         # Add time annotation
         eqplot.ax.set_title(f'{self._srcname} Sky Map @ {self.srctime.isot}', fontsize=12)
         
-        plt.savefig(self.datadir / f"{self._srcname}_skymap.png", dpi=300)
-        plt.show()
+        fig = plt.gcf()
+        fig.savefig(self.datadir / f"{self._srcname}_skymap.png", dpi=300)
+        return fig
 
     def earthmap(self, earthmap_start_offset: float = -1000, earthmap_stop_offset: float = 1000):
         """
@@ -423,9 +424,9 @@ class GBMObservation:
 
         # Save the Earth map as a PNG file in the specified directory.
         # 将地球地图保存为 PNG 文件到指定目录。
-        plt.savefig(self.datadir / f"{self._srcname}_earthmap.png", dpi=300)
-        plt.show()  # Display the Earth map.
-                    # 显示地球地图。
+        fig = plt.gcf()
+        fig.savefig(self.datadir / f"{self._srcname}_earthmap.png", dpi=300)
+        return fig  # Caller decides whether to show. / 由调用方决定是否显示。
 
 
     def generate_rsp(self):

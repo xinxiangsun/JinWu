@@ -145,131 +145,14 @@ def flux_err_from_log10(lgflux, log_err_low, log_err_high):
 
 
 def generate_xspec_result(model, spectrum) -> dict:
+    """根据 XSPEC 模型和光谱生成结构化结果字典。
+
+    统一委托给 :func:`jinwu.core.fit._generate_xspec_result`（含逐参数
+    误差状态），避免两份实现漂移。
     """
-    根据XSPEC模型和光谱自动生成结果字典
-    
-    参数:
-        model: XSPEC模型对象
-        spectrum: XSPEC光谱对象
-        
-    返回:
-        包含模型参数、flux、rate等信息的字典
-    """
-    _require_xspec()
-    import xspec
-    
-    lines = []
-    result = {}
-    result['model'] = model.expression
-    
-    result['parameters'] = {}
-    lines.append(f"Model: {model.expression}")
-    
-    processed_params = set()
-    
-    for comp_name in model.componentNames:
-        try:
-            comp = getattr(model, comp_name)
-            
-            for param_name in comp.parameterNames:
-                param_key = f"{comp_name}.{param_name}"
-                if param_key in processed_params:
-                    continue
-                processed_params.add(param_key)
-                
-                param = getattr(comp, param_name)
-                param_val = param.values[0]
-                
-                param_dict = {
-                    'value': param_val,
-                    'frozen': param.frozen
-                }
-                
-                if not param.frozen:
-                    err_lo, err_hi = get_asym_err(param)
-                    param_dict['error_lo'] = err_lo
-                    param_dict['error_hi'] = err_hi
-                    lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (-{err_lo:.4f}, +{err_hi:.4f})(1sigma error)")
-                else:
-                    lines.append(f"{comp_name}.{param_name}: {param_val:.4f} (fixed)")
-                
-                result['parameters'][param_key] = param_dict
-                    
-        except Exception as e:
-            raise RuntimeError(f"Error processing component {comp_name}: {e}")
-    
-    emin = model.cflux.Emin.values[0] if hasattr(model, 'cflux') else None
-    emax = model.cflux.Emax.values[0] if hasattr(model, 'cflux') else None
-    xspec.AllModels.calcFlux(f"{emin} {emax}")
-    flux_erg = float(spectrum.flux[0])
-    flux_photons = float(spectrum.flux[3])
-    
-    result['flux_abs'] = {
-        'erg_cm2_s': flux_erg,
-        'photons_cm2_s': flux_photons
-    }
-    
-    lines.append(f"Absorbed Flux ({emin:.1f}-{emax:.1f} keV): {flux_erg:.4e} erg/cm²/s")
-    lines.append(f"Absorbed Photon Flux ({emin:.1f}-{emax:.1f} keV): {flux_photons:.4e} photons/cm²/s")
-    
-    try:
-        rate = float(spectrum.rate[0])
-        rate_err = float(spectrum.rate[1]) if len(spectrum.rate) > 1 else None
-    except Exception as e:
-        raise RuntimeError(f"Error extracting rate: {e}")        
-    
-    result['rate'] = {
-        'value': rate,
-        'error': rate_err
-    }
-    
-    if rate is not None:
-        if rate_err is not None:
-            lines.append(f"Rate: {rate:.4f} ± {rate_err:.4f} cts/s")
-        else:
-            lines.append(f"Rate: {rate:.4f} cts/s")
-    
-    exposure = spectrum.exposure if hasattr(spectrum, 'exposure') else None
-    
-    if rate is not None and rate > 0 and flux_erg > 0:
-        conv_factor = 10**model.cflux.lg10Flux.values[0] / rate
-    else:
-        conv_factor = None
-    photon_counts = rate * exposure if rate is not None and exposure is not None else None
-    result['conversion'] = {
-        'exposure_s': exposure,
-        'erg_per_count': conv_factor,
-        'counts': photon_counts
-    }
-    
-    if exposure is not None:
-        lines.append(f"Exposure: {exposure:.1f} s")
-    
-    if conv_factor is not None:
-        lines.append(f"Conversion factor: {conv_factor:.4e} erg/cm²/s per cts/s")
-    if photon_counts is not None:
-        lines.append(f"Total counts: {photon_counts:.2f} counts")
-    
-    statistic = xspec.Fit.statistic
-    dof = xspec.Fit.dof
-    stat_method = xspec.Fit.statMethod
-    
-    statdof = statistic / dof
-    
-    lines.append(f"Stat/dof: {stat_method}={statistic:.2f}/{dof}={statdof:.2f}")
-    lines.append(f"Null hypothesis probability: {xspec.Fit.nullhyp:.4f}")
-    
-    result['statistics'] = {
-        'method': stat_method,
-        'value': statistic,
-        'dof': dof,
-        'reduced': statdof,
-        'null_hypothesis_probability': xspec.Fit.nullhyp
-    }
-    
-    result['text'] = "\n".join(lines)
-    
-    return result
+    from jinwu.core.fit import _generate_xspec_result
+
+    return _generate_xspec_result(model, spectrum)
 
 
 def _parse_nhtot_response(html, coord_str=""):

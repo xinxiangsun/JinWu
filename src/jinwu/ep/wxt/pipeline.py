@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-import hashlib
 import json
 import math
 import os
@@ -44,14 +43,23 @@ from ...core.products import (
     plot_net_lightcurve,
     render_observation_summary,
     render_wechat_fit_messages,
+    safe_filename_token,
     save_flux_curve,
     save_net_lightcurve,
+    sha256_file,
+    write_json,
 )
 from ...core.xselect import (
     XSelectRunResult,
     build_effective_ds9_region,
     extract_products_with_xselect,
 )
+
+# 落盘/哈希/文件名统一复用 core.products 的唯一实现
+# （支持 dataclass/Enum/np 类型、NaN→None、原子写入）。
+_json_dump = write_json
+_file_hash = sha256_file
+_safe_filename_token = safe_filename_token
 
 __all__ = [
     "BackgroundScalingResult",
@@ -218,9 +226,8 @@ class WXTPointingResult:
 
 
 def _safe_token(value: str) -> str:
-    token = "".join(char if char.isalnum() or char in "._-" else "_" for char in value)
-    token = "_".join(part for part in token.split("_") if part)
-    if not token:
+    token = _safe_filename_token(value)
+    if not token or token == "unnamed":
         raise ValueError("target_id must contain a filename-safe character")
     return token
 
@@ -330,6 +337,24 @@ def discover_wxt_files(input_data: WXTPointingInput) -> WXTObservationFiles:
     manifest = _choose_manifest(catalog, input_data)
     source_id = _resolve_source_id(manifest, input_data.source_id)
 
+    # 只有 slew（`*_sl_uf.evt`）事件产品、没有指向观测事件时，给出
+    # 明确的语义化报错，而不是下游 "missing required role: arf"。
+    event_names = [item.path.name.lower() for item in manifest.files]
+    has_pointing_event = any(
+        name.endswith(("po_cl.evt", "po_uf.evt")) for name in event_names
+    )
+    has_slew_event = any(name.endswith("sl_uf.evt") for name in event_names)
+    if has_slew_event and not has_pointing_event:
+        slew_names = ", ".join(
+            item.path.name for item in manifest.files
+            if item.path.name.lower().endswith("sl_uf.evt")
+        )
+        raise ValueError(
+            "WXT pointing pipeline does not support slew observations "
+            f"(found slew event product(s): {slew_names}); "
+            "provide a nominal-pointing (po_cl/po_uf) observation instead"
+        )
+
     bundle = next(
         (item for item in manifest.bundles if item.source_id == source_id and item.ready),
         None,
@@ -435,7 +460,12 @@ def _paint_stamp(canvas: np.ndarray, stamp: _MaskStamp, *, x0: int, y0: int) -> 
 
 
 def _annulus_stamp(pixel_region, mode: str) -> _MaskStamp:
-    from regions import CirclePixelRegion
+    try:
+        from regions import CirclePixelRegion
+    except ImportError as exc:  # pragma: no cover - depends on optional runtime env
+        raise ImportError(
+            "WXT region/exposure processing requires the 'regions' package"
+        ) from exc
 
     outer = _stamp_from_mask(
         _region_mask_object(
@@ -1178,37 +1208,6 @@ def merge_bayesian_blocks_for_spectra(
     return segments
 
 
-def _json_dump(path: Path, payload: Any) -> Path:
-    def clean(value):
-        if isinstance(value, Mapping):
-            return {str(key): clean(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple)):
-            return [clean(item) for item in value]
-        if hasattr(value, "tolist"):
-            return clean(value.tolist())
-        if isinstance(value, Path):
-            return str(value)
-        if isinstance(value, float) and not np.isfinite(value):
-            return None
-        return value
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(clean(payload), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
-    return path
-
-
-def _file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
 
 def _event_mjdref(path: Path) -> tuple[float, str] | None:
     with fits.open(path, memmap=False) as hdul:
@@ -1361,6 +1360,19 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     @property
     def approval_path(self) -> Path:
         return self.workspace / "regions" / "approved.json"
+
+    def _has_current_region_approval(self) -> bool:
+        """审批是否仍然对应当前 regions.json 内容（哈希校验）。"""
+        approval = self.approval_path
+        region_manifest = self.workspace / "regions" / "regions.json"
+        if not approval.is_file() or not region_manifest.is_file():
+            return False
+        try:
+            payload = json.loads(approval.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        recorded = payload.get("region_manifest_sha256")
+        return bool(recorded) and recorded == _file_hash(region_manifest)
 
     def approve_regions(self, *, note: str = "approved") -> Path:
         """Approve the current region proposal and allow downstream stages."""
@@ -1800,12 +1812,13 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         if fallback_warning is not None:
             data["warning"] = fallback_warning
         qc = _json_dump(self.workspace / "regions" / "exposure_qc.json", data)
+        has_approval = self._has_current_region_approval()
         needs_review = (
             self.config.regions.require_review
             and not self.input.auto_approve_regions
-            and not self.approval_path.is_file()
+            and not has_approval
         )
-        if self.input.auto_approve_regions and not self.approval_path.exists():
+        if self.input.auto_approve_regions and not has_approval:
             self.approve_regions(note="auto-approved by WXTPointingInput")
         if needs_review:
             return StageResult(
@@ -1815,7 +1828,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 message="Review source/background/ARM exposure diagnostics and call approve_regions()",
             )
         outputs = {"qc": str(qc)}
-        if self.approval_path.is_file():
+        if self._has_current_region_approval():
             outputs["approval"] = str(self.approval_path)
         return StageResult(outputs=outputs, data=data)
 
@@ -2219,13 +2232,25 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         from ...core.fit import fit_xray_models
         from ...core.spectrum_prep import prepare_spectra
 
-        source_file = DataFile(source, "source_pha", "jinwu_pipeline", "EP", "WXT", source_id=label)
-        background_file = DataFile(background, "background_pha", "jinwu_pipeline", "EP", "WXT", source_id=label)
-        arf_file = DataFile(arf, "arf", "jinwu_pipeline", "EP", "WXT", source_id=label)
-        rmf_file = DataFile(rmf, "rmf", "jinwu_pipeline", "EP", "WXT", source_id=label)
+        source_file = DataFile(
+            source, "source_pha", "jinwu_pipeline", "EP", "WXT",
+            obsid=self.input.obsid, source_id=label,
+        )
+        background_file = DataFile(
+            background, "background_pha", "jinwu_pipeline", "EP", "WXT",
+            obsid=self.input.obsid, source_id=label,
+        )
+        arf_file = DataFile(
+            arf, "arf", "jinwu_pipeline", "EP", "WXT",
+            obsid=self.input.obsid, source_id=label,
+        )
+        rmf_file = DataFile(
+            rmf, "rmf", "jinwu_pipeline", "EP", "WXT",
+            obsid=self.input.obsid, source_id=label,
+        )
         bundle = SpectrumBundle(
             source_file, background_file, arf_file, rmf_file,
-            None, None, detector="WXT", source_id=label,
+            None, self.input.obsid, detector="WXT", source_id=label,
         )
         fit_dir = self.workspace / "fit" / label
         catalog = Catalog(
@@ -2237,6 +2262,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                     instrument="WXT",
                     layout="jinwu_wxt_pipeline",
                     detector="WXT",
+                    obsid=self.input.obsid,
                     files=[source_file, background_file, arf_file, rmf_file],
                     bundles=[bundle],
                 )
@@ -2275,7 +2301,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             plot_formats=(
                 self.config.plotting.formats if self.config.plotting.enabled else ()
             ),
-            plot_density=self.config.plotting.dpi,
+            plot_dpi=self.config.plotting.dpi,
             plot_required=self.config.plotting.enabled and self.config.plotting.required,
         )
 
@@ -2287,50 +2313,91 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         galactic_nh = float(context["galactic_absorption"].data["tbabs_nh_1e22"])
         ogip = context["ogip_finalize"].outputs
         comparisons: dict[str, Any] = {}
+        failure_logs: dict[str, dict[str, str]] = {}
 
-        def run_comparison(label: str, source: Path, background: Path, rmf: Path, arf: Path):
-            result = self._fit_one(
-                label, source, background, rmf, arf,
-                galactic_nh_1e22=galactic_nh,
-            )
-            comparisons[label] = result
-            return result
+        # comparison_intervals 决定整段谱拟合哪些时段（bb 分段始终拟合）。
+        intervals = [
+            label
+            for label in self.config.fitting.comparison_intervals
+            if label in ("pipeline", "t100", "t90")
+        ]
+        interval_sources = {
+            "pipeline": lambda: (
+                Path(context["pipeline_spectrum"].outputs["source_pha"]),
+                Path(context["pipeline_spectrum"].outputs["background_pha"]),
+                Path(context["pipeline_spectrum"].outputs["rmf"]),
+                Path(context["pipeline_spectrum"].outputs["arf"]),
+            ),
+            "t100": lambda: (
+                Path(ogip["t100_source_pha"]),
+                Path(ogip["t100_background_pha"]),
+                Path(ogip["t100_rmf"]),
+                Path(ogip["t100_arf"]),
+            ),
+            "t90": lambda: (
+                Path(ogip["source_pha"]),
+                Path(ogip["background_pha"]),
+                Path(ogip["rmf"]),
+                Path(ogip["arf"]),
+            ),
+        }
 
-        pipeline_spectrum = context["pipeline_spectrum"].outputs
-        run_comparison(
-            "pipeline",
-            Path(pipeline_spectrum["source_pha"]),
-            Path(pipeline_spectrum["background_pha"]),
-            Path(pipeline_spectrum["rmf"]),
-            Path(pipeline_spectrum["arf"]),
-        )
-        run_comparison(
-            "t100",
-            Path(ogip["t100_source_pha"]),
-            Path(ogip["t100_background_pha"]),
-            Path(ogip["t100_rmf"]),
-            Path(ogip["t100_arf"]),
-        )
-        run_comparison(
-            "t90", Path(ogip["source_pha"]), Path(ogip["background_pha"]),
-            Path(ogip["rmf"]), Path(ogip["arf"]),
-        )
+        def run_comparison(label: str) -> None:
+            source, background, rmf, arf = interval_sources[label]()
+            try:
+                comparisons[label] = self._fit_one(
+                    label, source, background, rmf, arf,
+                    galactic_nh_1e22=galactic_nh,
+                )
+            except Exception as exc:
+                # 单时段失败不拖垮整个 fit 阶段；bb 段回退到配置候选集。
+                detail = f"{type(exc).__name__}: {exc}"
+                comparisons[label] = {"fit_error": detail}
+                failure_logs.setdefault(label, {})["interval"] = detail
+
+        for label in intervals:
+            run_comparison(label)
 
         def adopted_fit(value: Any) -> dict[str, Any]:
             return value.adopted_fit if hasattr(value, "adopted_fit") else value
 
-        t90_adopted = adopted_fit(comparisons["t90"])
-        adopted_key = t90_adopted.get("model_key")
+        # bb 段沿用采纳模型的 key；按 t90 → t100 → pipeline 回退取第一个
+        # 成功拟合的时段，全部失败时交给 fit_xray_models 的默认候选集。
+        adopted_key = None
+        for label in ("t90", "t100", "pipeline"):
+            candidate = comparisons.get(label)
+            if candidate is None or "fit_error" in candidate:
+                continue
+            adopted_key = adopted_fit(candidate).get("model_key")
+            if adopted_key:
+                break
         for item in context["bayesian_block_spectra"].data.get("segments", []):
             key = f"bb{int(item['index']):03d}"
-            comparisons[key] = self._fit_one(
-                key, Path(item["source_pha"]), Path(item["background_pha"]),
-                Path(item["rmf"]), Path(item["arf"]),
-                galactic_nh_1e22=galactic_nh,
-                candidate_keys=(adopted_key,) if adopted_key else None,
-            )
+            try:
+                comparisons[key] = self._fit_one(
+                    key, Path(item["source_pha"]), Path(item["background_pha"]),
+                    Path(item["rmf"]), Path(item["arf"]),
+                    galactic_nh_1e22=galactic_nh,
+                    candidate_keys=(adopted_key,) if adopted_key else None,
+                )
+            except Exception as exc:
+                detail = f"{type(exc).__name__}: {exc}"
+                comparisons[key] = {"fit_error": detail}
+                failure_logs.setdefault(key, {})["interval"] = detail
 
-        fit_results = {key: adopted_fit(value) for key, value in comparisons.items()}
+        # 把失败时段的磁盘日志登记进 failure_logs（若 _fit_one 已写出）。
+        for label in list(failure_logs):
+            for path in sorted((self.workspace / "fit" / label / "models").glob("*/fit_failure.log")):
+                failure_logs[label][path.parent.name] = str(path)
+
+        def _is_failed(value: Any) -> bool:
+            return isinstance(value, dict) and "fit_error" in value
+
+        fit_results = {
+            key: adopted_fit(value)
+            for key, value in comparisons.items()
+            if not _is_failed(value)
+        }
         compact = {
             key: {
                 "statistics": value.get("statistics"),
@@ -2354,24 +2421,28 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             }
             for key, value in fit_results.items()
         }
-        comparison_payload = {
-            key: (
-                value.to_dict()
-                if hasattr(value, "to_dict")
-                else {
-                    "adopted_key": compact[key].get("model_key"),
-                    "adopted_reason": "legacy single-model fit",
-                    "candidates": {compact[key].get("model_key") or "legacy": compact[key]},
+        comparison_payload: dict[str, Any] = {}
+        for key, value in comparisons.items():
+            if _is_failed(value):
+                comparison_payload[key] = {
+                    "adopted_key": None,
+                    "adopted_reason": value["fit_error"],
+                    "candidates": {},
                 }
-            )
-            for key, value in comparisons.items()
-        }
-        failure_logs: dict[str, dict[str, str]] = {}
+            elif hasattr(value, "to_dict"):
+                comparison_payload[key] = value.to_dict()
+            else:
+                comparison_payload[key] = {
+                    "adopted_key": compact.get(key, {}).get("model_key"),
+                    "adopted_reason": "legacy single-model fit",
+                    "candidates": {compact.get(key, {}).get("model_key") or "legacy": compact.get(key, {})},
+                }
         for label, value in comparisons.items():
-            for candidate_key in getattr(value, "failures", {}):
-                path = self.workspace / "fit" / label / "models" / candidate_key / "fit_failure.log"
-                if path.is_file():
-                    failure_logs.setdefault(label, {})[candidate_key] = str(path)
+            if hasattr(value, "failures"):
+                for candidate_key in value.failures:
+                    path = self.workspace / "fit" / label / "models" / candidate_key / "fit_failure.log"
+                    if path.is_file():
+                        failure_logs.setdefault(label, {})[candidate_key] = str(path)
         _json_dump(
             summary_path,
             {

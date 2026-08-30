@@ -696,7 +696,7 @@ class BATObservation:
     
     def skymap(self, projection: str = 'aitoff', show_fov: bool = True,
                show_sun_moon: bool = True, figsize: tuple = (14, 7),
-               save: bool = True, show: bool = True):
+               save: bool = True, show: bool = False):
         """Generate a sky map with source, BAT pointing, and optional FOV.
         生成包含源、BAT 指向和可选视场的天图。
         
@@ -782,10 +782,12 @@ class BATObservation:
         eqplot.ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
         eqplot.ax.set_title(f'{self._srcname} BAT Sky Map @ {self.srctime.isot}', fontsize=12)
         
+        fig = plt.gcf()
         if save:
-            plt.savefig(self.datadir / f"{self._srcname}_bat_skymap.png", dpi=300)
-        if show:
+            fig.savefig(self.datadir / f"{self._srcname}_bat_skymap.png", dpi=300)
+        if show:  # 仅在显式请求时阻塞显示
             plt.show()
+        return fig
 
     def _skymap_projection(self, projection, show_fov, show_sun_moon, 
                           figsize, save, show):
@@ -910,7 +912,7 @@ class BATObservation:
     # ==================== Earth Map ====================
     
     def earthmap(self, tstart_offset: float = -1000, tstop_offset: float = 1000,
-                 save: bool = True, show: bool = True):
+                 save: bool = True, show: bool = False):
         """Generate Earth trajectory map showing spacecraft orbit.
         生成显示航天器轨道的地球轨迹图。
         
@@ -974,10 +976,12 @@ class BATObservation:
             )
             earthplot.standard_title()
             
+            fig = plt.gcf()
             if save:
-                plt.savefig(self.datadir / f"{self._srcname}_bat_earthmap.png", dpi=300)
-            if show:
+                fig.savefig(self.datadir / f"{self._srcname}_bat_earthmap.png", dpi=300)
+            if show:  # 仅在显式请求时阻塞显示
                 plt.show()
+            return fig
                 
         except ImportError:
             warnings.warn("Earth map requires gdt-fermi package for plotting")
@@ -1011,10 +1015,12 @@ class BATObservation:
         ax.set_title(f'Swift Orbit @ {self.srctime.isot}')
         ax.grid(True, alpha=0.3)
         
+        fig = plt.gcf()
         if save:
-            plt.savefig(self.datadir / f"{self._srcname}_bat_earthmap_simple.png", dpi=300)
-        if show:
+            fig.savefig(self.datadir / f"{self._srcname}_bat_earthmap_simple.png", dpi=300)
+        if show:  # 仅在显式请求时阻塞显示
             plt.show()
+        return fig
 
     # ==================== Information Methods ====================
     

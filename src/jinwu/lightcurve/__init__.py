@@ -45,13 +45,3 @@ __all__ = [
     'LightcurveFaker',
 ]
 
-
-# Public API re-exports
-from .duration import LightcurveSNREvaluator, li_ma_snr
-from .trigger import TriggerDecider, BackgroundSimple
-
-__all__ = [
-		'LightcurveSNREvaluator', 'li_ma_snr',
-		'TriggerDecider', 'BackgroundSimple',
-]
-

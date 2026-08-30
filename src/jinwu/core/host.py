@@ -8,26 +8,28 @@ using multi-catalog cross-matching (NED, GLADE+, PanSTARRS, Gaia).
 from pathlib import Path
 from typing import Optional, Tuple, Dict, List
 import numpy as np
-import pandas as pd
 import warnings
 
-from astroquery.vizier import Vizier
-from astroquery.ipac.ned import Ned
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.table import Table
 
+try:
+    import pandas as pd
+    from astroquery.vizier import Vizier
+    from astroquery.ipac.ned import Ned
+    from ipyaladin import Aladin
+    from regions import CircleSkyRegion
+    import plotly.graph_objects as go
+    from PIL import Image
+    import requests
+except ImportError as exc:  # pragma: no cover - depends on optional runtime env
+    raise ImportError(
+        "jinwu.core.host requires the 'crossmatch' extra; "
+        "install it with `pip install jinwu[crossmatch]`"
+    ) from exc
 
-from ipyaladin import Aladin
-from regions import CircleSkyRegion
-
-
-import plotly.graph_objects as go
-from PIL import Image
 PLOTLY_AVAILABLE = True
-
-
-import requests
 REQUESTS_AVAILABLE = True
 ALADIN_AVAILABLE = True
 

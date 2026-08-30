@@ -3,7 +3,6 @@ import sys
 import subprocess
 from typing import Optional, Union, cast, List
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -14,39 +13,12 @@ from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - ensure 3D projection is available
 
-# 全局字体设置：优先使用可显示中文的字体，避免中文字符缺失警告
-matplotlib.rcParams['font.sans-serif'] = [
-    'WenQuanYi Zen Hei',  # Ubuntu/Debian 常见
-    'Noto Sans CJK SC',   # Google Noto 字体
-    'SimHei',             # 黑体
-    'Microsoft YaHei',    # 微软雅黑（Windows）
-    'DejaVu Sans'         # 兜底
-]
-matplotlib.rcParams['axes.unicode_minus'] = False
+try:
+    from ..core.plotstyle import apply_style
+except Exception:  # pragma: no cover - cluster 可脱离包内相对导入独立使用
+    def apply_style() -> None:
+        return None
 
-# 尝试在已安装字体中选择一个可用的中文字体，提升中文显示效果
-def _ensure_cjk_font():
-    try:
-        from matplotlib import font_manager
-        preferred = [
-            'WenQuanYi Zen Hei',
-            'Noto Sans CJK SC',
-            'Noto Sans CJK JP',
-            'Noto Sans CJK TC',
-            'Source Han Sans CN',
-            'SimHei',
-            'Microsoft YaHei'
-        ]
-        available = {f.name for f in font_manager.fontManager.ttflist}
-        for name in preferred:
-            if name in available:
-                matplotlib.rcParams['font.family'] = [name, 'sans-serif']
-                break
-    except Exception:
-        # 静默失败，不影响主流程
-        pass
-
-_ensure_cjk_font()
 
 class ClusterAnalyzer:
     """
@@ -76,6 +48,7 @@ class ClusterAnalyzer:
 
     def find_optimal_clusters(self, max_k: int = 10) -> int:
         """使用肘部法则和轮廓系数来寻找最佳的聚类数量 (k)。"""
+        apply_style()
         if self.scaled_data is None:
             self._preprocess_data()
 
@@ -113,7 +86,7 @@ class ClusterAnalyzer:
 
         plt.suptitle('寻找最佳聚类数量 (k) 的评估图', fontsize=16)
         plt.tight_layout(rect=(0.0, 0.03, 1.0, 0.95))
-        plt.show()
+        # 不再 plt.show()：figure 保留给调用方决定显示或保存
 
         best_k = k_values[int(np.argmax(sil_scores))]
         print(f"分析建议: 根据轮廓系数，最佳的 k 值可能是 {best_k} (得分最高)。")
@@ -136,8 +109,9 @@ class ClusterAnalyzer:
         print("聚类完成，已将聚类标签添加到原始数据中。")
         return result
 
-    def visualize_clusters(self) -> None:
-        """使用 PCA 降维后，将聚类结果可视化。"""
+    def visualize_clusters(self):
+        """使用 PCA 降维后，将聚类结果可视化，返回 matplotlib Figure。"""
+        apply_style()
         if self.kmeans_model is None or self.labels is None or self.scaled_data is None:
             raise RuntimeError("请先调用 fit_predict() 方法进行聚类，然后再进行可视化。")
 
@@ -172,8 +146,8 @@ class ClusterAnalyzer:
         plt.ylabel(f'主成分 2 (解释方差: {pca.explained_variance_ratio_[1]:.2%})')
         plt.legend(title='聚类标签')
         plt.grid(True)
-        plt.show()
         print("可视化完成。")
+        return plt.gcf()
 
     # ====== 新增：PCA 与高维可视化辅助 ======
     def _ensure_scaled(self) -> np.ndarray:
@@ -213,8 +187,9 @@ class ClusterAnalyzer:
         pc_df.attrs["explained_variance_ratio_"] = pca.explained_variance_ratio_
         return pc_df
 
-    def visualize_pca_scree(self, max_components: int = 10) -> None:
-        """绘制 PCA 碎石图（方差贡献率与累积贡献率）。"""
+    def visualize_pca_scree(self, max_components: int = 10):
+        """绘制 PCA 碎石图（方差贡献率与累积贡献率），返回 Figure。"""
+        apply_style()
         X = self._ensure_scaled()
         n = min(max_components, X.shape[1])
         pca = PCA(n_components=n)
@@ -231,13 +206,14 @@ class ClusterAnalyzer:
         plt.title('PCA 碎石图')
         plt.legend()
         plt.grid(True, alpha=0.3)
-        plt.show()
+        return plt.gcf()
 
-    def visualize_pca_biplot(self, top_features: int = 8, scale_arrows: float = 1.0) -> None:
+    def visualize_pca_biplot(self, top_features: int = 8, scale_arrows: float = 1.0):
         """
         绘制 2D PCA biplot：样本在 PC1-PC2 的散点 + 特征载荷箭头。
-        自动选取载荷范数最大的前 top_features 个特征。
+        自动选取载荷范数最大的前 top_features 个特征。返回 Figure。
         """
+        apply_style()
         if self.kmeans_model is None or self.labels is None:
             print("提示：未进行聚类，biplot 仍会绘制，但无颜色分组。")
 
@@ -268,7 +244,7 @@ class ClusterAnalyzer:
         plt.ylabel(f'PC2 (方差贡献: {pca.explained_variance_ratio_[1]:.1%})')
         plt.title('PCA Biplot（含特征载荷）')
         plt.grid(True, alpha=0.3)
-        plt.show()
+        return plt.gcf()
 
     def visualize_pairwise_top_features(self, top_k: int = 5) -> List[str]:
         """
@@ -281,6 +257,7 @@ class ClusterAnalyzer:
         loadings = self.get_pca_loadings(n_components=2)
         selected = loadings.head(top_k).index.tolist()
 
+        apply_style()
         plot_df = self.data[selected].copy()
         if self.labels is not None:
             plot_df['cluster'] = self.labels
@@ -288,11 +265,11 @@ class ClusterAnalyzer:
         else:
             sns.pairplot(plot_df, corner=True, diag_kind='hist', plot_kws={'alpha': 0.7})
         plt.suptitle('自动选择的高权重特征两两散点矩阵', y=1.02)
-        plt.show()
         return selected
 
-    def visualize_clusters_3d(self) -> None:
-        """使用 3D PCA（前三主成分）绘制三维散点图。"""
+    def visualize_clusters_3d(self):
+        """使用 3D PCA（前三主成分）绘制三维散点图，返回 Figure。"""
+        apply_style()
         if self.scaled_data is None:
             self._preprocess_data()
         if self.scaled_data is None:
@@ -320,4 +297,4 @@ class ClusterAnalyzer:
         ax.set_zlabel(f'PC3 ({pca.explained_variance_ratio_[2]:.1%})')
         ax.set_title('PCA 三维可视化')
         plt.tight_layout()
-        plt.show()
+        return plt.gcf()

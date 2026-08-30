@@ -30,11 +30,11 @@
 | | `extract_spectrum` / `extract_curve` / `extract_image` / `accumulate_spectrum_from_events` | 从事件提取产品 |
 | | `write_curve` / `write_image` / `write_pha` | 产品写入 |
 | `jinwu.core.spectrum_prep` | `prepare_spectra` / `PreparedSpectrum` / `PreparedJointSpectrum` / `PreparedCatalog` | 谱准备、链接、联合 |
-| `jinwu.core.fit` | `fit_spectrum` / `fit_spectrum_from_files` / `fit_prepared` / `fit_xray_models` / `fit` / `run_xspec_chain` | XSPEC 拟合入口（EP 项目的拟合均可用） |
+| `jinwu.core.fit` | `fit_prepared` / `fit_xray_models` / `fit` / `run_xspec_chain` | XSPEC 拟合入口（`fit_prepared` 单谱、`fit_xray_models` 多候选比较；旧 `fit_spectrum`/`fit_spectrum_from_files` 已于 2026-08 移除） |
 | | `PowerLawModel` / `BrokenPowerLawModel` / `SmoothlyBrokenPowerLawModel` / `DoubleBrokenPowerLawModel` / `ExponentialModel` / `GaussianModel` / `ConstantModel` | 模型类 |
 | | `ModelRegistry` / `LightcurveFitter` / `resolve_xray_model_specs` / `calculate_model_fit_metrics` | 模型注册、拟合器、指标 |
 | | `FitResult` / `XspecChainResult` / `XRayModelSpec` | 结果与规格类型 |
-| `jinwu.core.plot` | `plot_spectrum` / `plot_lightcurve` / `plot_event_txx` / `plot_ogip` / `plot_xspec_origin` / `plotfit` | X 射线绘图 |
+| `jinwu.core.plot` | `plot_spectrum` / `plot_lightcurve` / `plot_event_txx` / `plotfit` | X 射线绘图（统一样式 `jinwu.core.plotstyle`；旧 `plot_ogip`/`plot_xspec_origin` 已移除） |
 | `jinwu.core.galactic` | `resolve_galactic_absorption` / `GalacticAbsorptionResult` | 银河吸收 |
 | `jinwu.core.datasets` | `netdata` / `LightcurveDataset` / `SpectrumDataset` / `JointDataset` | 数据集契约 |
 | `jinwu.core.config` | `instrument(name, **kwargs)` / `register_instrument` / `FXT` / `WXT` / `BAT` / `GBM` / `GECAM` / `UVOT` + 各 `Config` | 仪器与配置 |
@@ -45,7 +45,7 @@
 | `jinwu.core.host` | `HostGalaxyFinder` | 宿主星系查找/分类 |
 | `jinwu.core.heasoft` | `HeasoftEnvManager` | HEASoft 环境管理（生产标准路径） |
 | `jinwu.core.rebin_rs` | `rebin_lightcurve_rs` | 光变重分箱 |
-| `jinwu.core.products` | `FitProductSet` / `ExternalRunArtifacts` | 产物集 |
+| `jinwu.core.products` | `FitProductSet` / `ExternalRunArtifacts` / `write_json` / `sha256_file` / `safe_filename_token` | 产物集与统一的 JSON 落盘/哈希/文件名助手 |
 
 ## 使用示例（规范写法）
 
@@ -55,7 +55,7 @@ from jinwu.core.time import TimeEP, extract_time_interval
 from jinwu.core.io import readfits
 from jinwu.core.xselect import extract_spectrum_with_xselect
 from jinwu.core.spectrum_prep import prepare_spectra
-from jinwu.core.fit import fit_spectrum_from_files
+from jinwu.core.fit import fit_prepared, fit_xray_models
 ```
 
 ## 登记区（新增/提升公共函数时，在此追加）
@@ -66,5 +66,5 @@ from jinwu.core.fit import fit_spectrum_from_files
 |---|---|---|---|
 | `GBMFlareInterval` / `check_gbm_coverage` / `select_gbm_detectors` | `jinwu.fermi.gbm.pipeline` | 连续 GBM 覆盖、遮挡/SAA/GTI 判定与几何选探测器 | 2026-08-27 |
 | `fetch_gbm_continuous_products` / `extract_gbm_spectral_products` | `jinwu.fermi.gbm.pipeline` | 可恢复连续数据下载及 TTE 局部多项式 PHA/BAK 提取 | 2026-08-27 |
-| `build_gbm_response_command` / `generate_gbm_response` | `jinwu.response.gbm` | 官方 GBM 响应生成器的无 shell 安全封装 | 2026-08-27 |
+| `build_gbm_response_command` / `generate_gbm_response` | `jinwu.fermi.gbm.response` | 官方 GBM 响应生成器的无 shell 安全封装 | 2026-08-27 |
 | `profile_source_amplitude` | `jinwu.core.upperlimit` | 与 response-aware 上限同契约的非负幅度 profile 显著性 | 2026-08-27 |

@@ -15,11 +15,10 @@ jinwu.core.plot
 
 from __future__ import annotations
 from PIL import Image
-from typing import Optional, Union, List, Tuple, Any, Callable, cast, Literal
+from typing import Optional, Union, List, Tuple, Any, cast, Literal
 from pathlib import Path
 import re
 import warnings
-import os
 
 try:  # Most plotting helpers do not require PyXspec.
     import xspec
@@ -34,6 +33,8 @@ except Exception:  # pragma: no cover
         from astropy.time import Time as AstroTime, TimeDelta as AstroTimeDelta
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+
+from .plotstyle import PALETTE, apply_style, format_log_axis, save_figure
 
 """在运行期尝试导入实际数据类；若失败，则使用哑类以便 isinstance 不抛错。"""
 try:  # runtime import; avoids typing.Any isinstance crash
@@ -58,9 +59,7 @@ __all__ = [
     "plot_spectrum",
     "plot_lightcurve",
     "plot_event_txx",
-    "plot_ogip",
     "plotfit",
-    "plot_xspec_origin",
 ]
 
 
@@ -77,9 +76,25 @@ def _ensure_axes(ax: Optional[Axes], figsize=(7.5, 4.5)) -> Axes:
 
 def _safe_filename_token(value: Any) -> str:
     """Return a portable filename component without changing display labels."""
-    token = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value).strip())
-    token = re.sub(r"_+", "_", token).strip("._-")
-    return token or "unnamed"
+    from .products import safe_filename_token
+
+    return safe_filename_token(value)
+
+
+def _dedup_legend(ax: Axes, **kwargs) -> None:
+    """绘制去重后的图例（跳过 ``_nolegend_`` 与重复标签）。"""
+    handles, labels = ax.get_legend_handles_labels()
+    seen: set[str] = set()
+    h_show: list = []
+    l_show: list[str] = []
+    for handle, label in zip(handles, labels):
+        if label == "_nolegend_" or label in seen:
+            continue
+        seen.add(label)
+        h_show.append(handle)
+        l_show.append(label)
+    if h_show:
+        ax.legend(h_show, l_show, **kwargs)
 
 
 # ----------------------------
@@ -105,6 +120,8 @@ def plot_spectrum(
     - ykind: "rate" 时优先 COUNTS/EXPOSURE，"counts" 时直接 COUNTS。
     - out: 若提供路径，则保存图片（不做任何非绘图处理）。
     """
+    apply_style()
+    color = color or PALETTE["data"]
     # 将输入统一为 PhaData
     pha: Optional[Any] = None
     hdul: Optional[fits.HDUList] = None
@@ -171,8 +188,6 @@ def plot_spectrum(
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylab)
-        if grid:
-            ax.grid(alpha=0.3, ls="--")
         if title is None:
             base = Path(getattr(pha, "path", "")).name
             exp = getattr(pha, "exposure", None)
@@ -187,74 +202,71 @@ def plot_spectrum(
     # 情况 B：直接从 HDUList 绘图（极少用，仅兜底）
     else:
         assert hdul is not None
-        try:
-            # 找到 SPECTRUM 表
-            spec = None
+        # 找到 SPECTRUM 表
+        spec = None
+        for h in hdul[1:]:
+            if isinstance(h, fits.BinTableHDU) and h.name.upper() in ("SPECTRUM", "PHA"):
+                spec = h
+                break
+        if spec is None:
             for h in hdul[1:]:
-                if isinstance(h, fits.BinTableHDU) and h.name.upper() in ("SPECTRUM", "PHA"):
+                if isinstance(h, fits.BinTableHDU):
                     spec = h
                     break
-            if spec is None:
-                for h in hdul[1:]:
-                    if isinstance(h, fits.BinTableHDU):
-                        spec = h
-                        break
-            if spec is None:
-                raise ValueError("未在 HDUList 中找到 SPECTRUM 表用于 PHA 绘图")
-            d = spec.data
-            cols = list(getattr(spec.columns, "names", []) or [])
-            # X 轴：尝试 EBOUNDS
-            try:
-                eb_hdu = hdul["EBOUNDS"]
-                eb = getattr(eb_hdu, "data", None)
-                if eb is None:
-                    raise KeyError("EBOUNDS has no data")
-                e_lo = np.asarray(eb["E_MIN"], float)
-                e_hi = np.asarray(eb["E_MAX"], float)
-                x = 0.5 * (e_lo + e_hi)
-                xerr = 0.5 * (e_hi - e_lo)
-                xlabel = "Energy (keV)"
-            except Exception:
-                if "CHANNEL" in cols:
-                    x = np.asarray(d["CHANNEL"], float)
-                else:
-                    x = np.arange(len(d), dtype=float)
-                xerr = None
-                xlabel = "Channel"
-
-            # Y 轴
-            if "RATE" in cols and ykind == "rate":
-                y = np.asarray(d["RATE"], float)
-                yerr = np.asarray(d["ERROR"], float) if "ERROR" in cols else None
-                ylab = "Rate (counts s$^{-1}$)"
+        if spec is None:
+            raise ValueError("未在 HDUList 中找到 SPECTRUM 表用于 PHA 绘图")
+        d = spec.data
+        cols = list(getattr(spec.columns, "names", []) or [])
+        # X 轴：尝试 EBOUNDS
+        try:
+            eb_hdu = hdul["EBOUNDS"]
+            eb = getattr(eb_hdu, "data", None)
+            if eb is None:
+                raise KeyError("EBOUNDS has no data")
+            e_lo = np.asarray(eb["E_MIN"], float)
+            e_hi = np.asarray(eb["E_MAX"], float)
+            x = 0.5 * (e_lo + e_hi)
+            xerr = 0.5 * (e_hi - e_lo)
+            xlabel = "Energy (keV)"
+        except Exception:
+            if "CHANNEL" in cols:
+                x = np.asarray(d["CHANNEL"], float)
             else:
-                y = np.asarray(d["COUNTS"], float) if "COUNTS" in cols else np.asarray(d["RATE"], float)
-                yerr = np.asarray(d.get("STAT_ERR"), float) if "STAT_ERR" in cols else None  # type: ignore[arg-type]
-                ylab = "Counts"
+                x = np.arange(len(d), dtype=float)
+            xerr = None
+            xlabel = "Channel"
 
-            if show_errorbar and yerr is not None:
-                ax.errorbar(x, y, yerr=yerr, xerr=xerr, fmt="o", ms=3.5, lw=1, color=color, label=label)
+        # Y 轴
+        if "RATE" in cols and ykind == "rate":
+            y = np.asarray(d["RATE"], float)
+            yerr = np.asarray(d["ERROR"], float) if "ERROR" in cols else None
+            ylab = "Rate (counts s$^{-1}$)"
+        else:
+            y = np.asarray(d["COUNTS"], float) if "COUNTS" in cols else np.asarray(d["RATE"], float)
+            # 注意：FITS_rec 没有 .get 方法，必须先检查列名再取列。
+            yerr = np.asarray(d["STAT_ERR"], float) if "STAT_ERR" in cols else None
+            ylab = "Counts"
+
+        if show_errorbar and yerr is not None:
+            ax.errorbar(x, y, yerr=yerr, xerr=xerr, fmt="o", ms=3.5, lw=1, color=color, label=label)
+        else:
+            if xerr is not None:
+                ax.errorbar(x, y, xerr=xerr, fmt="o", ms=3.5, lw=1, color=color, label=label)
             else:
-                if xerr is not None:
-                    ax.errorbar(x, y, xerr=xerr, fmt="o", ms=3.5, lw=1, color=color, label=label)
-                else:
-                    ax.plot(x, y, "o-", ms=3.5, lw=1, color=color, label=label)
+                ax.plot(x, y, "o-", ms=3.5, lw=1, color=color, label=label)
 
-            ax.set_xlabel(xlabel)
-            ax.set_ylabel(ylab)
-            if grid:
-                ax.grid(alpha=0.3, ls="--")
-            if title is None:
-                title = Path(str(hdul.filename())).name if hasattr(hdul, "filename") else "PHA"
-            ax.set_title(title)
-            if label:
-                ax.legend()
-        finally:
-            pass
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylab)
+        if title is None:
+            title = Path(str(hdul.filename())).name if hasattr(hdul, "filename") else "PHA"
+        ax.set_title(title)
+        if label:
+            ax.legend()
 
     if out is not None:
         fig = cast(Figure, ax.get_figure() if hasattr(ax, "get_figure") else plt.gcf())
-        fig.savefig(str(out), dpi=150, bbox_inches="tight")
+        suffix = Path(str(out)).suffix.lstrip(".") or "png"
+        save_figure(fig, Path(str(out)).with_suffix(""), formats=(suffix,))
     return ax
 
 
@@ -296,6 +308,8 @@ def plot_lightcurve(
     - 自动标注仪器名称（从 TELESCOP 字段）
     - 若多条 LC 有不同的 timezero，会在图上标注
     """
+    apply_style()
+    color = color or PALETTE["data"]
     lc: Optional[Any] = None
     hdul: Optional[fits.HDUList] = None
 
@@ -383,11 +397,9 @@ def plot_lightcurve(
         xlabel = " ".join(xlabel_parts)
         if extra_parts:
             xlabel += "  [" + " | ".join(extra_parts) + "]"
-        
+
         ax_.set_xlabel(xlabel)
         ax_.set_ylabel(ylab)
-        if grid:
-            ax_.grid(alpha=0.3, ls="--")
 
     # 情况 A：LightcurveData
     if lc is not None:
@@ -586,12 +598,14 @@ def plot_lightcurve(
             except Exception:
                 tz = None
         
-        # 检查 timezero 是否成功获取
+        # 检查 timezero 是否成功获取；合成数据可能没有 TIMEZERO，此时
+        # 退化为 0 并在横轴标注 "start (s)"，而不是直接报错。
         if tz is None:
-            raise ValueError(
-                "LightcurveData 缺少 timezero 字段。"
-                "绘图需要 TIMEZERO 偏移量以正确标注时间轴。"
+            warnings.warn(
+                "LightcurveData 缺少 timezero 字段；横轴按相对时间（起点为 0）绘制。",
+                UserWarning,
             )
+            tz = 0.0
 
         # 多能段还是单能段
         if val_arr.ndim == 2 and val_arr.shape[1] > 1 and (multiband is True or multiband == "auto"):
@@ -730,11 +744,11 @@ def plot_lightcurve(
         if isinstance(axes_to_return, list):
             ax0 = axes_to_return[0]
             fig = cast(Figure, ax0.get_figure() if hasattr(ax0, "get_figure") else plt.gcf())
-            fig.savefig(str(out), dpi=150, bbox_inches="tight")
         else:
             ax_ = axes_to_return
             fig = cast(Figure, ax_.get_figure() if hasattr(ax_, "get_figure") else plt.gcf())
-            fig.savefig(str(out), dpi=150, bbox_inches="tight")
+        suffix = Path(str(out)).suffix.lstrip(".") or "png"
+        save_figure(fig, Path(str(out)).with_suffix(""), formats=(suffix,))
     return axes_to_return
 
 
@@ -776,6 +790,7 @@ def plot_event_txx(
     - for_paper: ``forpaper`` 的兼容别名；两者指定为冲突值时抛出错误。
     """
 
+    apply_style()
     if for_paper is not None:
         if forpaper and bool(for_paper) is not bool(forpaper):
             raise ValueError("forpaper and for_paper specify conflicting plot modes")
@@ -1208,14 +1223,14 @@ def plot_event_txx(
         block_legend_fontsize = 8
         block_text_fontsize = 7
 
-    err_src_color = "#2f6ea6"
-    err_bkg_color = "#6f6f6f"
-    err_net_color = "#d95f5f"
+    err_src_color = PALETTE["data"]
+    err_bkg_color = PALETTE["background"]
+    err_net_color = PALETTE["model"]
 
     # 上面板：原始 Source vs Background（柱状 + 误差）。论文版式有意移除。
     if ax_top is not None:
-        ax_top.bar(x_lc_center, src_hist_lc.astype(float), width=lc_width * 0.82, alpha=0.72, label="Source counts (real events)", color="steelblue")
-        ax_top.bar(x_lc_center, bkg_counts_lc, width=lc_width * 0.82, alpha=0.50, label=bkg_label_top, color="gray")
+        ax_top.bar(x_lc_center, src_hist_lc.astype(float), width=lc_width * 0.82, alpha=0.72, label="Source counts (real events)", color=PALETTE["data"])
+        ax_top.bar(x_lc_center, bkg_counts_lc, width=lc_width * 0.82, alpha=0.50, label=bkg_label_top, color=PALETTE["background"])
         ax_top.errorbar(
             x_lc_center,
             src_hist_lc.astype(float),
@@ -1243,7 +1258,6 @@ def plot_event_txx(
             top_title = f"{srcname} Duration Diagnostic" if srcname is not None else "Duration Diagnostic"
         ax_top.set_title(top_title)
         ax_top.legend(loc="upper right")
-        ax_top.grid(alpha=0.3)
 
         if np.isfinite(bs_lc) and bs_lc > 0.0:
             binsize_text = f"Bin size: {bs_lc:.3f} s"
@@ -1264,16 +1278,16 @@ def plot_event_txx(
             transform=ax_top.transAxes,
             va="top",
             ha="left",
-            fontsize=14,
+            fontsize=9,
             bbox=dict(boxstyle="round", fc="white", ec="0.7", alpha=0.9),
         )
 
     # 中间面板：原始 step 光变 + 误差 + 分块/SNR + T0/T100/T90
     if src_rate_lc.size > 0:
         rate_linewidth = 1.6 if forpaper else 1.1
-        ax_mid.step(x_lc_edges[:-1], src_rate_lc, where="post", color="steelblue", linewidth=rate_linewidth, label="Source rate")
-        ax_mid.hlines(src_rate_lc[-1], x_lc_edges[-2], x_lc_edges[-1], colors="steelblue", linewidth=rate_linewidth)
-        ax_mid.fill_between(x_lc_edges[:-1], 0.0, src_rate_lc, step="post", alpha=0.28, color="steelblue")
+        ax_mid.step(x_lc_edges[:-1], src_rate_lc, where="post", color=PALETTE["data"], linewidth=rate_linewidth, label="Source rate")
+        ax_mid.hlines(src_rate_lc[-1], x_lc_edges[-2], x_lc_edges[-1], colors=PALETTE["data"], linewidth=rate_linewidth)
+        ax_mid.fill_between(x_lc_edges[:-1], 0.0, src_rate_lc, step="post", alpha=0.28, color=PALETTE["data"])
     ax_mid.errorbar(
         x_lc_center,
         src_rate_lc,
@@ -1296,19 +1310,19 @@ def plot_event_txx(
     )
 
     for e in x_bb_edges:
-        ax_mid.axvline(float(e), color="green", linestyle="-", linewidth=1.0, alpha=0.45, label="_nolegend_")
+        ax_mid.axvline(float(e), color=PALETTE["net"], linestyle="-", linewidth=1.0, alpha=0.45, label="_nolegend_")
 
     sig_mask = np.isfinite(snr_arr) & np.isfinite(snr_thr) & (snr_arr > snr_thr)
     for i in range(n_bb):
         if sig_mask[i]:
-            ax_mid.axvspan(float(x_bb_edges[i]), float(x_bb_edges[i + 1]), alpha=0.25, color="yellow", label="_nolegend_")
+            ax_mid.axvspan(float(x_bb_edges[i]), float(x_bb_edges[i + 1]), alpha=0.25, color=PALETTE["band"], label="_nolegend_")
 
     if np.isfinite(x_t100_start):
         t100_start_label = "T100 start" if forpaper else f"T100 start: {x_t100_start:.1f}s"
-        ax_mid.axvline(x_t100_start, color="blue", linestyle="--", linewidth=2.0, label=t100_start_label)
+        ax_mid.axvline(x_t100_start, color=PALETTE["secondary"], linestyle="--", linewidth=2.0, label=t100_start_label)
     if np.isfinite(x_t100_stop):
         t100_stop_label = "T100 end" if forpaper else f"T100 end: {x_t100_stop:.1f}s"
-        ax_mid.axvline(x_t100_stop, color="blue", linestyle="--", linewidth=2.0, label=t100_stop_label)
+        ax_mid.axvline(x_t100_stop, color=PALETTE["secondary"], linestyle="--", linewidth=2.0, label=t100_stop_label)
     if np.isfinite(x_t90_start) and np.isfinite(x_t90_stop) and (x_t90_stop > x_t90_start):
         if forpaper:
             lab_t90 = "T90 interval"
@@ -1316,35 +1330,21 @@ def plot_event_txx(
             lab_t90 = f"T90 interval: {t90_text}"
         else:
             lab_t90 = "T90 interval"
-        ax_mid.axvspan(x_t90_start, x_t90_stop, alpha=0.20, color="orange", label=lab_t90)
+        ax_mid.axvspan(x_t90_start, x_t90_stop, alpha=0.20, color=PALETTE["band"], label=lab_t90)
 
     title_bottom = "" if forpaper else "Light Curve with Bayesian Blocks and Duration"
     ax_mid.set_ylabel("Rate (counts/s)", fontsize=label_fontsize)
     if title_bottom:
         ax_mid.set_title(title_bottom, fontsize=title_fontsize)
-    ax_mid.grid(True, alpha=0.3)
     if tick_fontsize is not None:
         ax_mid.tick_params(axis="both", labelsize=tick_fontsize)
 
-    h_b, l_b = ax_mid.get_legend_handles_labels()
-    if h_b:
-        seen = set()
-        h_show = []
-        l_show = []
-        for h, l in zip(h_b, l_b):
-            if l == "_nolegend_" or l in seen:
-                continue
-            seen.add(l)
-            h_show.append(h)
-            l_show.append(l)
-        if h_show:
-            ax_mid.legend(
-                h_show,
-                l_show,
-                loc="upper right",
-                fontsize=rate_legend_fontsize,
-                framealpha=0.55 if forpaper else None,
-            )
+    _dedup_legend(
+        ax_mid,
+        loc="upper right",
+        fontsize=rate_legend_fontsize,
+        framealpha=0.55 if forpaper else None,
+    )
 
     # 下面板：贝叶斯分块区间色带（独立子图）
     sig_label_added = False
@@ -1353,16 +1353,16 @@ def plot_event_txx(
     for i in range(n_bb):
         is_sig = bool(sig_mask[i]) if i < sig_mask.size else False
         if is_sig:
-            block_color = "#f4a261"
+            block_color = PALETTE["block_sig"]
             label = f"Significant blocks (Li-Ma > {snr_thr:.1f}σ)" if (np.isfinite(snr_thr) and not sig_label_added) else "_nolegend_"
             sig_label_added = sig_label_added or np.isfinite(snr_thr)
-            edge_col = "#aa5f1d"
+            edge_col = PALETTE["block_sig_edge"]
             hatch_pat = "///"
         else:
-            block_color = "#8fb9dd" if (i % 2 == 0) else "#bfd9ee"
+            block_color = PALETTE["block_alt_a"] if (i % 2 == 0) else PALETTE["block_alt_b"]
             label = "Non-significant Bayesian blocks" if not other_label_added else "_nolegend_"
             other_label_added = True
-            edge_col = "#2c5374"
+            edge_col = PALETTE["block_alt_edge"]
             hatch_pat = None
         ax_blocks.axvspan(
             float(x_bb_edges[i]),
@@ -1391,7 +1391,7 @@ def plot_event_txx(
             ha="center",
             va="center",
             fontsize=block_text_fontsize,
-            color=("#7a2e00" if is_sig else "#16324a"),
+            color=(PALETTE["block_sig_text"] if is_sig else PALETTE["block_alt_text"]),
             rotation=rotate_txt,
             alpha=0.95,
             fontweight=("bold" if is_sig else "normal"),
@@ -1400,44 +1400,26 @@ def plot_event_txx(
         )
 
     for e in x_bb_edges:
-        ax_blocks.axvline(float(e), color="#1f2937", linewidth=1.0, alpha=0.68, label="_nolegend_")
+        ax_blocks.axvline(float(e), color=PALETTE["block_edge"], linewidth=1.0, alpha=0.68, label="_nolegend_")
 
     if np.isfinite(x_t100_start):
-        ax_blocks.axvline(x_t100_start, color="blue", linestyle="--", linewidth=1.6, alpha=0.9, label="_nolegend_")
+        ax_blocks.axvline(x_t100_start, color=PALETTE["secondary"], linestyle="--", linewidth=1.6, alpha=0.9, label="_nolegend_")
     if np.isfinite(x_t100_stop):
-        ax_blocks.axvline(x_t100_stop, color="blue", linestyle="--", linewidth=1.6, alpha=0.9, label="_nolegend_")
+        ax_blocks.axvline(x_t100_stop, color=PALETTE["secondary"], linestyle="--", linewidth=1.6, alpha=0.9, label="_nolegend_")
     if np.isfinite(x_t90_start) and np.isfinite(x_t90_stop) and (x_t90_stop > x_t90_start):
-        ax_blocks.axvspan(x_t90_start, x_t90_stop, ymin=0.0, ymax=1.0, color="orange", alpha=0.16, label="_nolegend_")
+        ax_blocks.axvspan(x_t90_start, x_t90_stop, ymin=0.0, ymax=1.0, color=PALETTE["band"], alpha=0.16, label="_nolegend_")
 
     ax_blocks.set_ylim(0.0, 1.0)
     ax_blocks.set_yticks([])
     # ax_blocks.set_ylabel("Bayesian Blocks", fontsize=label_fontsize)
     if not forpaper:
         ax_blocks.set_title("Bayesian Block Significance (Li-Ma)", fontsize=title_fontsize)
-    ax_blocks.grid(axis="x", alpha=0.25, linestyle="--")
     ax_blocks.set_xlabel(x_label, fontsize=label_fontsize)
     if tick_fontsize is not None:
         ax_blocks.tick_params(axis="x", labelsize=tick_fontsize)
 
     if not forpaper:
-        h_blk, l_blk = ax_blocks.get_legend_handles_labels()
-        if h_blk:
-            seen_blk = set()
-            h_show_blk = []
-            l_show_blk = []
-            for h, l in zip(h_blk, l_blk):
-                if l == "_nolegend_" or l in seen_blk:
-                    continue
-                seen_blk.add(l)
-                h_show_blk.append(h)
-                l_show_blk.append(l)
-            if h_show_blk:
-                ax_blocks.legend(
-                    h_show_blk,
-                    l_show_blk,
-                    loc="upper right",
-                    fontsize=block_legend_fontsize,
-                )
+        _dedup_legend(ax_blocks, loc="upper right", fontsize=block_legend_fontsize)
 
     if focus_t100 and x_lc_edges.size >= 2:
         x_lo = float(x_lc_edges[0])
@@ -1446,186 +1428,12 @@ def plot_event_txx(
         ax_blocks.set_xlim(x_lo, x_hi)
 
     if out is not None:
-        fig.savefig(str(out), dpi=150, bbox_inches="tight")
+        suffix = Path(str(out)).suffix.lstrip(".") or "png"
+        save_figure(fig, Path(str(out)).with_suffix(""), formats=(suffix,))
 
     if ax_top is None:
         return fig, (ax_mid, ax_blocks)
     return fig, (ax_top, ax_mid)
-
-
-# ----------------------------
-# 统一路由：自动判断类型并绘制
-# ----------------------------
-
-def plot_ogip(
-    obj: Union[Any, PathLike, fits.HDUList],
-    **kwargs,
-) -> Union[Axes, List[Axes]]:
-    """统一入口：
-    - 若传入 PhaData -> 调用 plot_spectrum
-    - 若传入 LightcurveData -> 调用 plot_lightcurve
-    - 若是路径 -> 基于 guess_ogip_kind 读取并路由
-    - 若是 HDUList -> 尝试基于扩展名路由（SPECTRUM->PHA，RATE/LC->LC）
-    """
-    if isinstance(obj, PhaData):
-        return plot_spectrum(obj, **kwargs)
-    if isinstance(obj, LightcurveData):
-        return plot_lightcurve(obj, **kwargs)
-    if isinstance(obj, (str, Path)):
-        kind = guess_ogip_kind(obj)
-        if kind == "pha":
-            return plot_spectrum(obj, **kwargs)
-        elif kind == "lc":
-            return plot_lightcurve(obj, **kwargs)
-        else:
-            # 不确定类型，尝试读取后按内容再试一次
-            try:
-                with fits.open(obj) as h:
-                    names = {getattr(h[i], "name", "").upper() for i in range(1, len(h))}
-                if "SPECTRUM" in names or "PHA" in names:
-                    return plot_spectrum(obj, **kwargs)
-                return plot_lightcurve(obj, **kwargs)
-            except Exception:
-                raise ValueError(f"无法识别 OGIP 类型：{obj}")
-    if isinstance(obj, fits.HDUList):
-        names = {getattr(obj[i], "name", "").upper() for i in range(1, len(obj))}
-        if ("SPECTRUM" in names) or ("PHA" in names):
-            return plot_spectrum(obj, **kwargs)
-        return plot_lightcurve(obj, **kwargs)
-    raise TypeError("plot_ogip 仅接受 PhaData/LightcurveData/路径/HDUList")
-
-
-
-
-
-
-
-def plot_xspec_origin(
-    plottype: str,srcname: str,
-    group_min: int,redshift: float,
-    modelname:str,instname:str, 
-    outputdir: Optional[Path],
-    output_format: str = "png",
-    device: str = "cps",
-    density: int = 300,
-    xlog: bool = True,
-    ylog: bool = True,
-    **kwargs
-) -> Optional[Path]:
-    """
-    使用自定义命令进行 XSPEC 绘图
-    
-    参数:
-        plottype: 绘图类型
-        output_path: 输出路径
-        output_format: 输出格式
-        device: XSPEC 设备
-        density: 转换分辨率
-        xlog, ylog: 对数坐标
-        **kwargs: 其他 PLT 命令 (如 title="xxx", xlabel="xxx" 等)
-        
-    返回:
-        输出文件路径
-    """
-    
-    
-    now_dir = Path.cwd()
-    
-    if outputdir is None:
-        outputdir = now_dir
-    else:
-        pass
-    os.chdir(outputdir)
-    # 构建 PS 文件路径
-    if redshift is not None:
-        if redshift != 0:
-            redshiftstr = 'True'
-        else:
-            redshiftstr = 'False'
-        ps_file = str(
-            f"{_safe_filename_token(srcname)}_{_safe_filename_token(instname)}_"
-            f"{_safe_filename_token(plottype)}_{_safe_filename_token(modelname)}_"
-            f"redshift{redshiftstr}_groupmin{group_min}.ps"
-        )
-    else:
-        ps_file = str(
-            f"{_safe_filename_token(srcname)}_{_safe_filename_token(instname)}_"
-            f"{_safe_filename_token(plottype)}_{_safe_filename_token(modelname)}_"
-            f"redshiftUnknown_groupmin{group_min}.ps"
-        )
-    xspec.Plot.device = f"{ps_file}/{device}"
-    
-    # 设置绘图参数
-    xspec.Plot.xAxis = "keV"
-    xspec.Plot.xLog = xlog
-    xspec.Plot.yLog = ylog
-    
-    # 构建自定义命令
-    commands = []
-    for key, value in kwargs.items():
-        if value is not None:
-            if key == "title":
-                commands.append(f'title "{value}"')
-            elif key == "xlabel":
-                commands.append(f'xlabel "{value}"')
-            elif key == "ylabel":
-                commands.append(f'ylabel "{value}"')
-            elif key == "label":
-                commands.append(value)  # 完整 label 命令
-    
-    if commands:
-        xspec.Plot.commands = tuple(commands)
-    
-    # 绘图
-    try:
-        xspec.Plot(plottype)
-    except Exception as e:
-        print(f"绘图失败: {e}")
-        return None
-    
-    # 转换格式
-    if output_format != "ps":
-        try:
-            output_file = _convert_ps(ps_file, output_format, density)
-
-            return output_file
-        except Exception as e:
-            raise RuntimeError(f"转换失败: {e}")
-    else:
-        return Path(ps_file)
-    
-
-    
-
-
-def _convert_ps(ps_file: str, output_format: str, density: int = 300) -> Path:
-    """使用 Pillow 转换 PS 文件"""
-
-    
-    ps_path = Path(ps_file)
-    output_file = ps_path.with_suffix(f".{output_format}")
-    
-    # 使用 Pillow 打开 PS 文件 (需要先通过 Ghostscript 转为 PDF/PNG)
-    # Pillow 依赖 ghostscript 来处理 PS/eps 文件
-    try:
-        # 方法 1: 直接用 Pillow 打开 (需要 ghostscript)
-        img = Image.open(ps_file)
-        
-        # 根据输出格式设置质量
-        if output_format.lower() in ['jpg', 'jpeg']:
-            img.save(output_file, "JPEG", quality=95)
-        elif output_format.lower() == 'png':
-            img.save(output_file, "PNG")
-        elif output_format.lower() == 'gif':
-            img.save(output_file, "GIF")
-        else:
-            img.save(output_file)
-        
-        return output_file
-    except Exception as e:
-        # 方法 2: 如果 Pillow 失败，尝试用 ghostscript 直接转换
-        raise RuntimeError(f"Pillow 转换失败: {e}")
-
 
 def _safe_xspec_plot_command(xspec_module, command: str) -> None:
     try:
@@ -1671,6 +1479,23 @@ def _same_length_mask(*arrays: np.ndarray) -> np.ndarray:
     return np.ones(size, dtype=bool)
 
 
+#: plottype 支持的面板令牌 -> (XSPEC/绘图命令, Y 轴标签, 是否含模型曲线)
+_PLOT_PANELS: dict[str, tuple[str, str, bool]] = {
+    "ldata": ("ldata", r"|data| [ct s$^{-1}$ keV$^{-1}$]", True),
+    "eeufspec": ("eeufspec", r"E$^2$N(E) [keV cm$^{-2}$ s$^{-1}$]", True),
+    "eeuf": ("eeuf", r"E$^2$N(E) [keV cm$^{-2}$ s$^{-1}$]", True),
+    "delchi": ("delchi", r"(data$-$model)/error", False),
+    "ratio": ("ratio", r"data/model", False),
+}
+
+
+def _parse_plot_panels(plottype: str) -> list[str]:
+    """把 ``"ldata_eeufspec_delchi"`` 这类 plottype 解析成面板令牌列表。"""
+    tokens = [token for token in re.split(r"[+_ \-]+", plottype.lower()) if token]
+    panels = [token for token in tokens if token in _PLOT_PANELS]
+    return panels or ["ldata", "eeufspec", "delchi"]
+
+
 def plotfit(
     srcname: str,
     instname: str,
@@ -1681,7 +1506,8 @@ def plotfit(
     outputdir: Optional[Path | str] = None,
     backend: str = "matplotlib",
     output_format: str = "png",
-    density: int = 300,
+    dpi: int = 300,
+    density: Optional[int] = None,
     **kwargs
 ) -> Tuple[Optional[Path], Optional[Figure]]:
     """
@@ -1693,15 +1519,18 @@ def plotfit(
         group_min: 分组最小计数
         modelname: 模型名称
         redshift: 红移（默认0.0）
-        plottype: 保留兼容参数；matplotlib 输出固定为 ldata + eeufspec + delchi 三联图
+        plottype: 面板组合，``_``/``+`` 分隔的令牌：
+            ldata / eeufspec(或 eeuf) / delchi / ratio。
+            默认 ``ldata_eeufspec_delchi`` 三面板。
         outputdir: 输出目录（默认当前目录）
         backend: 绘图后端，'matplotlib'或'xspec'
         output_format: 输出格式，'png'、'jpg'等
-        density: 输出分辨率（默认300）
-        **kwargs: 其他绘图参数
+        dpi: 输出分辨率（默认300）
+        density: dpi 的旧别名，仅为兼容保留；与 dpi 同给时以 dpi 为准。
+        **kwargs: 其他绘图参数（title/xlabel/ylabel/label）
 
     返回:
-        (输出文件路径, matplotlib Figure对象)
+        (输出文件路径, matplotlib Figure对象；xspec 后端时 fig 为 None)
 
     示例:
         >>> path, fig = plotfit(
@@ -1715,6 +1544,10 @@ def plotfit(
     """
     import xspec
 
+    apply_style()
+    if density is not None and dpi == 300:
+        dpi = int(density)
+
     if outputdir is None:
         outputdir = Path.cwd()
     else:
@@ -1722,8 +1555,9 @@ def plotfit(
 
     outputdir.mkdir(parents=True, exist_ok=True)
 
+    panels = _parse_plot_panels(plottype)
+    plot_tag = "_".join(panels)
     redshiftstr = "True" if redshift and redshift != 0 else "False"
-    plot_tag = "ldata_eeufspec_delchi"
     filename_stem = (
         f"{_safe_filename_token(srcname)}_{_safe_filename_token(instname)}_"
         f"{plot_tag}_{_safe_filename_token(modelname)}_"
@@ -1751,7 +1585,7 @@ def plotfit(
             xspec.Plot.commands = tuple(commands)
 
         try:
-            xspec.Plot("ldata", "eeufspec", "delchi")
+            xspec.Plot(*[_PLOT_PANELS[token][0] for token in panels])
         except Exception:
             xspec.Plot("ldata", "eeuf", "delchi")
 
@@ -1769,23 +1603,27 @@ def plotfit(
 
         return ps_file, None
 
-    fig = plt.figure(figsize=(12, 10))
-    grid = fig.add_gridspec(3, 1, height_ratios=(3, 3, 2), hspace=0.12)
-    ax_ldata = fig.add_subplot(grid[0])
-    ax_eeuf = fig.add_subplot(grid[1], sharex=ax_ldata)
-    ax_delchi = fig.add_subplot(grid[2], sharex=ax_ldata)
+    n_panels = len(panels)
+    height_ratios = {1: (3,), 2: (3, 2), 3: (3, 3, 2)}
+    ratios = height_ratios.get(n_panels, tuple([3] * (n_panels - 1) + [2]))
+    fig = plt.figure(figsize=(11, 2.9 * n_panels + 0.9))
+    grid = fig.add_gridspec(n_panels, 1, height_ratios=ratios, hspace=0.1)
+    axes = []
+    for index in range(n_panels):
+        share_with = axes[0] if axes else None
+        axes.append(fig.add_subplot(grid[index], sharex=share_with))
 
     xspec.Plot.device = "/null"
     xspec.Plot.xAxis = "keV"
     xspec.Plot.xLog = True
     xspec.Plot.yLog = True
-    ldata = _xspec_plot_arrays(xspec, "ldata", model=True)
-    eeuf = _xspec_plot_arrays(xspec, "eeufspec", model=True)
-    delchi = _xspec_plot_arrays(xspec, "delchi", model=False)
-    n_groups = max(len(ldata), len(eeuf), len(delchi))
+    panel_data = {
+        token: _xspec_plot_arrays(xspec, _PLOT_PANELS[token][0], model=_PLOT_PANELS[token][2])
+        for token in panels
+    }
 
-    def plot_data_model(ax, groups, *, positive_y: bool) -> None:
-        for index, item in enumerate(groups, start=1):
+    def plot_data_model(ax, items: list[dict[str, np.ndarray]], *, positive_y: bool, with_legend: bool) -> None:
+        for item in items:
             x_vals = item["x"]
             y_vals = item["y"]
             x_errs = item["xerr"]
@@ -1807,57 +1645,55 @@ def plotfit(
                 mask &= (y_vals[:size] > 0) & (model_y[:size] > 0)
             if not np.any(mask):
                 continue
-            data_label = f"Data {index}" if n_groups > 1 else "Data"
-            model_label = f"Model {index}" if n_groups > 1 else "Model"
-            line = ax.errorbar(
+            ax.errorbar(
                 x_vals[:size][mask],
                 y_vals[:size][mask],
                 xerr=x_errs[:size][mask],
                 yerr=y_errs[:size][mask],
                 fmt="o",
-                markersize=5,
-                capsize=3,
-                elinewidth=1,
-                label=data_label,
+                markersize=3.5,
+                capsize=2,
+                elinewidth=0.9,
+                color=PALETTE["data"],
+                label="Data" if with_legend else "_nolegend_",
             )
             ax.plot(
                 x_vals[:size][mask],
                 model_y[:size][mask],
-                linewidth=2,
-                color=line[0].get_color(),
-                label=model_label,
+                linewidth=1.8,
+                color=PALETTE["model"],
+                label="Model" if with_legend else "_nolegend_",
             )
 
-    plot_data_model(ax_ldata, ldata, positive_y=True)
-    plot_data_model(ax_eeuf, eeuf, positive_y=True)
-    for index, item in enumerate(delchi, start=1):
-        x_vals = item["x"]
-        y_vals = item["y"]
-        x_errs = item["xerr"]
-        y_errs = item["yerr"]
-        mask = _same_length_mask(x_vals, y_vals, x_errs, y_errs)
-        size = mask.size
-        if size == 0:
-            continue
-        mask &= (
-            np.isfinite(x_vals[:size])
-            & np.isfinite(y_vals[:size])
-            & np.isfinite(x_errs[:size])
-            & np.isfinite(y_errs[:size])
-            & (x_vals[:size] > 0)
-        )
-        if np.any(mask):
-            label = f"Data {index}" if n_groups > 1 else None
-            ax_delchi.errorbar(
+    def plot_residual(ax, items: list[dict[str, np.ndarray]]) -> None:
+        for item in items:
+            x_vals = item["x"]
+            y_vals = item["y"]
+            x_errs = item["xerr"]
+            y_errs = item["yerr"]
+            mask = _same_length_mask(x_vals, y_vals, x_errs, y_errs)
+            size = mask.size
+            if size == 0:
+                continue
+            mask &= (
+                np.isfinite(x_vals[:size])
+                & np.isfinite(y_vals[:size])
+                & np.isfinite(x_errs[:size])
+                & np.isfinite(y_errs[:size])
+                & (x_vals[:size] > 0)
+            )
+            if not np.any(mask):
+                continue
+            ax.errorbar(
                 x_vals[:size][mask],
                 y_vals[:size][mask],
                 xerr=x_errs[:size][mask],
                 yerr=y_errs[:size][mask],
                 fmt="o",
-                markersize=5,
-                capsize=3,
-                elinewidth=1,
-                label=label,
+                markersize=3.5,
+                capsize=2,
+                elinewidth=0.9,
+                color=PALETTE["residual"],
             )
 
     title = kwargs.get("title")
@@ -1866,36 +1702,38 @@ def plotfit(
         if redshift:
             title += f" (z={redshift})"
         try:
-            title += f"\ngroup min {group_min} {xspec.Fit.statMethod}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof}"
+            title += f"   {xspec.Fit.statMethod}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof:g}"
         except Exception:
-            title += f"\ngroup min {group_min}"
-    ax_ldata.set_title(title)
-    ax_ldata.set_xscale("log")
-    ax_ldata.set_yscale("log")
-    ax_ldata.set_ylabel(r"ldata [ct s$^{-1}$ keV$^{-1}$]")
-    ax_ldata.grid(True, alpha=0.3)
-    ax_ldata.tick_params(labelbottom=False)
-    ax_ldata.legend(loc="best", fontsize=10)
+            title += f"   group min {group_min}"
 
-    ax_eeuf.set_xscale("log")
-    ax_eeuf.set_yscale("log")
-    ax_eeuf.set_ylabel(r"E$^2$N(E) [keV cm$^{-2}$ s$^{-1}$]")
-    ax_eeuf.grid(True, alpha=0.3)
-    ax_eeuf.tick_params(labelbottom=False)
-    ax_eeuf.legend(loc="best", fontsize=10)
+    for index, (token, ax) in enumerate(zip(panels, axes)):
+        _, ylab, has_model = _PLOT_PANELS[token]
+        positive_y = token not in ("delchi", "ratio")
+        if has_model:
+            plot_data_model(ax, panel_data[token], positive_y=positive_y, with_legend=(index == 0))
+        else:
+            plot_residual(ax, panel_data[token])
+        if index == 0:
+            ax.set_title(title)
+        if token == "delchi":
+            ax.axhline(0, color=PALETTE["reference"], linestyle="--", linewidth=1.2)
+            ax.axhspan(-3, 3, color="0.5", alpha=0.12, linewidth=0)
+            ax.set_ylim(-5.5, 5.5)
+        if index < n_panels - 1:
+            ax.tick_params(labelbottom=False)
+        else:
+            ax.set_xlabel("Energy (keV)")
+        ax.set_ylabel(ylab)
+        format_log_axis(ax, axis="x")
+        if has_model and not positive_y:  # ratio 面板
+            ax.axhline(1, color=PALETTE["reference"], linestyle="--", linewidth=1.2)
 
-    ax_delchi.axhline(0, color="red", linestyle="--", linewidth=1.5)
-    ax_delchi.axhline(3, color="gray", linestyle=":", linewidth=1)
-    ax_delchi.axhline(-3, color="gray", linestyle=":", linewidth=1)
-    ax_delchi.set_xscale("log")
-    ax_delchi.set_xlabel("Energy (keV)")
-    ax_delchi.set_ylabel("(Data-Model)/Error")
-    ax_delchi.grid(True, alpha=0.3)
-    if n_groups > 1:
-        ax_delchi.legend(loc="best", fontsize=10)
+    # 图例只放首个面板（Data/Model 语义全局一致），残差面板保持干净
+    _dedup_legend(axes[0], loc="best")
 
     output_file = None
     if output_format:
-        output_file = outputdir / f"{filename_stem}.{output_format}"
-        fig.savefig(output_file, dpi=density, bbox_inches="tight")
+        outputs = save_figure(fig, outputdir / filename_stem, formats=(output_format,), dpi=dpi)
+        output_file = outputs.get(output_format.lower())
     return output_file, fig
+

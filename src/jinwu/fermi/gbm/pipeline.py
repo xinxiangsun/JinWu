@@ -748,13 +748,3 @@ def _resume_archive_file(finder: Any, name: str, destination: Path, *, verbose: 
             print(f"GBM archive transfer interrupted for {name}: {exc}")
         return False
 
-
-def _quarantine_invalid(path: Path) -> Path:
-    """Move an invalid cache entry aside so an archive client can resume safely."""
-    candidate = path.with_name(f"{path.name}.invalid")
-    suffix = 1
-    while candidate.exists():
-        candidate = path.with_name(f"{path.name}.invalid.{suffix}")
-        suffix += 1
-    path.rename(candidate)
-    return candidate
