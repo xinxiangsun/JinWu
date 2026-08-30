@@ -32,7 +32,10 @@ def _mock_comoving_distance(z):
 # ---------------------------------------------------------------------------
 def _load_module_objects():
     """Return (_build_model_structure, _ModelStructure, RedshiftTriggerExtrapolator)."""
-    content = open("src/jinwu/lf/redshift.py").read()
+    import importlib
+
+    module = importlib.import_module("jinwu.lf.redshift")
+    content = open(module.__file__).read()
 
     # Pure functions (before class definition)
     match = re.search(

@@ -83,7 +83,7 @@ Quick Start
 
 .. code-block:: python
 
-   import jinwu as jw
+   import jinwu.core as jw
 
    # Read OGIP FITS files
    pha = jw.read_pha("source.pha")
@@ -93,7 +93,7 @@ Quick Start
    band = jw.EnergyBand(0.3, 10.0, unit="keV")
 
    # General net data computation
-   net = jw.netdata(src=src_counts, bkg=bkg_counts, exposure=exposure)
+   net = jw.netdata(src_lc, bkg_lc)
 
 
 Indices and tables

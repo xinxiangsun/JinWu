@@ -68,19 +68,17 @@ Working with Energy Bands
 Computing Net Data
 ------------------
 
-The :func:`jinwu.core.netdata` function computes net (background-subtracted)
-count rates and errors with proper uncertainty propagation:
+The :func:`jinwu.core.netdata` function computes the background-subtracted
+net light curve with proper uncertainty propagation:
 
 .. code-block:: python
 
-   net, net_err = jw.netdata(
-       src=src_counts,
-       bkg=bkg_counts,
-       exposure=1000.0,
-       backscale=0.1,     # BKG / SRC area ratio
-   )
-   snr = net / net_err
-   print(f"S/N = {snr:.1f}")
+   src = jw.read_lc("source.lc")
+   bkg = jw.read_lc("background.lc")
+
+   net = jw.netdata(src, bkg)            # scaling ratio auto-computed
+   net = jw.netdata(src, bkg, ratio=0.1)  # manual source/background ratio
+   net = src - bkg                        # equivalent shorthand
 
 EP/WXT Pointing Pipeline
 ------------------------
