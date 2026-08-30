@@ -118,6 +118,7 @@ def plot_spectrum(
     参数
     - src: 可为 PhaData 或 PHA 文件路径（或已打开的 HDUList）。
     - ykind: "rate" 时优先 COUNTS/EXPOSURE，"counts" 时直接 COUNTS。
+    - grid: 是否显示网格线；默认跟随统一样式（rcParams），False 显式关闭。
     - out: 若提供路径，则保存图片（不做任何非绘图处理）。
     """
     apply_style()
@@ -263,6 +264,8 @@ def plot_spectrum(
         if label:
             ax.legend()
 
+    if not grid:
+        ax.grid(False)
     if out is not None:
         fig = cast(Figure, ax.get_figure() if hasattr(ax, "get_figure") else plt.gcf())
         suffix = Path(str(out)).suffix.lstrip(".") or "png"
@@ -299,7 +302,7 @@ def plot_lightcurve(
     - color: 线条颜色
     - label: 数据标签
     - title: 图表标题（若为 None 则自动生成）
-    - grid: 是否显示网格线
+    - grid: 是否显示网格线；默认跟随统一样式（rcParams），False 显式关闭
     - out: 若提供路径，则保存图片
     - flux_array: 若 ykind='flux' 需要手动提供 flux 数组
 
@@ -738,6 +741,10 @@ def plot_lightcurve(
             axes_to_return[0].set_title(title)
         else:
             axes_to_return.set_title(title)
+
+    if not grid:
+        for axis_ in axes_to_return if isinstance(axes_to_return, list) else [axes_to_return]:
+            axis_.grid(False)
 
     # 保存文件（若需要）
     if out is not None:

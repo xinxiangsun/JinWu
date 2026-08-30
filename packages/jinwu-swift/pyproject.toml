@@ -15,7 +15,6 @@ requires-python = ">=3.11"
 dependencies = [
     "jinwu>=0.2,<0.3",
     "swiftbat",
-    "batanalysis>=2.1",
 ]
 keywords = ["astrophysics", "transient", "swift", "bat", "jinwu"]
 
@@ -28,6 +27,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
     "Development Status :: 3 - Alpha"
 ]
+
+[project.optional-dependencies]
+# gdt-swift 提供 SAO/poshist 指向文件读取（bat_observation 可选导入）
+gdt = ["astro-gdt-swift>=2.2"]
 
 [project.urls]
 Homepage = "https://github.com/xinxiangsun/jinwu"

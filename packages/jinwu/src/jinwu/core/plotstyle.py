@@ -29,7 +29,6 @@ __all__ = [
     "apply_style",
     "save_figure",
     "format_log_axis",
-    "style_spectrum_axis",
 ]
 
 #: 语义调色板（Okabe-Ito 基准）：绘图代码按语义取色，不直接写十六进制。
@@ -192,10 +191,3 @@ def format_log_axis(ax, axis: str = "x") -> None:
     # 绘制完成后（autoscale 生效）再校准一次
     ax.figure.canvas.mpl_connect("draw_event", lambda _event: _apply())
 
-
-def style_spectrum_axis(ax, energy: bool = True) -> None:
-    """谱拟合面板的通用轴样式：对数轴 + 普通数字刻度。"""
-    ax.set_xscale("log")
-    if energy:
-        ax.set_xlabel("Energy (keV)")
-        format_log_axis(ax, axis="x")

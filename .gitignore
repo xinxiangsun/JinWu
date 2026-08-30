@@ -62,7 +62,9 @@ packages/jinwurs/Cargo.lock
 # === AI Coding Agents ===
 .codex/
 .agents/
-
+.mimosa/
+.zcode/
+.qoder/
 # === External Dependencies (large / not in repo) ===
 external_sources/
 test/

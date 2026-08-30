@@ -17,12 +17,15 @@ from ...core.time import Time
 from astropy.coordinates import SkyCoord, get_sun, get_body
 import astropy.units as u
 from pathlib import Path
+import logging
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from glob import glob
 import warnings
+
+logger = logging.getLogger(__name__)
 
 # Local attitude module (inspired by batanalysis)
 from .attitude import Attitude
@@ -34,7 +37,7 @@ try:
 except ImportError:
     HAS_SWIFTTOOLS = False
 
-# gdt-swift imports (optional, for compatibility)
+# gdt-swift imports (optional; install with `pip install 'jinwu-swift[gdt]'`)
 try:
     from gdt.missions.swift.bat.poshist import BatSao
     from gdt.missions.swift.bat.finders import BatAuxiliaryFtp
@@ -45,7 +48,7 @@ try:
     HAS_GDT_SWIFT = True
 except ImportError:
     HAS_GDT_SWIFT = False
-    warnings.warn("gdt-swift not available. Some features may be limited.")
+    logger.debug("gdt-swift not available; SAO/poshist features are limited.")
 
 # Optional: ligo.skymap for advanced projections
 try:

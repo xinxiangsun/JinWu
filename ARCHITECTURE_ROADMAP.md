@@ -1,9 +1,10 @@
 # Jinwu 2030 时域多信使与 AI 原生架构蓝图
 
 > 文档状态：架构方向与实施路线图<br>
-> 当前基线：Jinwu 0.0.31，Alpha<br>
-> 最后更新：2026-07-11<br>
-> 复核周期：至少每 6 个月一次
+> 当前基线：Jinwu 0.2.0（monorepo：`jinwu` 核心 + `jinwu-ep/-fermi/-swift` 仪器发行包），Alpha<br>
+> 最后更新：2026-08-30（实现状态复核）<br>
+> 复核周期：至少每 6 个月一次<br>
+> 状态标记约定：【✅】已实现 ·【🔶】部分实现/有前身 ·【⬜】未开始（按 2026-08-30 代码库复核）
 
 ## 1. 执行摘要
 
@@ -21,38 +22,54 @@ Jinwu 的长期目标，是成为面向 2030 年代时域天文学和多信使�
 
 实施策略必须保持务实：
 
-1. 近期优先完成并稳定 Einstein Probe 数据处理流程。
-2. 生产级 EP、Swift 等 reduction 继续依赖 HEASoft、任务软件和 CALDB。
-3. 原生拟合首先摆脱 XSPEC 对模型、统计量和优化器的垄断。
-4. 脱离 HEASoft 只作为远期、选择性的能力，不是近期成功标准。
+1. 近期优先完成并稳定 Einstein Probe 数据处理流程。【🔶 WXT 已稳定并有 e2e 测试；FXT 待做】
+2. 生产级 EP、Swift 等 reduction 继续依赖 HEASoft、任务软件和 CALDB。【✅ 维持该策略】
+3. 原生拟合首先摆脱 XSPEC 对模型、统计量和优化器的垄断。【⬜ Phase 2 范围】
+4. 脱离 HEASoft 只作为远期、选择性的能力，不是近期成功标准。【✅ 维持该策略】
 5. 新架构在同一个 `jinwu` 发行包中从 `jinwu.kernel` 开始建设。
-6. NumPy/SciPy 是可信参考后端，JAX 是可选高性能后端。
+   【🔶 0.2.0 起修订：`kernel` 仍待建，但发行结构已改为 monorepo——任务插件拆出
+   `jinwu` 主包（见 §5、§14.3），与"避免主包承担所有任务发布周期"的方向一致】
+6. NumPy/SciPy 是可信参考后端，JAX 是可选高性能后端。【✅ NumPy/SciPy 维持；JAX ⬜】
 7. 参考其他项目不等于把它们全部加入基础依赖；外部生态通过显式适配器接入。
+   【✅ 已执行：核心依赖收窄至 numpy/scipy/astropy/matplotlib/pillow】
 
 第一条端到端的新内核能力是：读取已有 OGIP 产品，以 NumPy/SciPy 完成响应折叠、
 统计计算和参数拟合，并使用 XSPEC 作为数值校验基准。
 
 ## 2. 当前基线与主要差距
 
-Jinwu 已经具有可继续发展的基础，而不是从零开始：
+Jinwu 已经具有可继续发展的基础，而不是从零开始（2026-08-30 状态）：
 
-- `core` 中已有 OGIP、事件、光变、PHA、RMF、ARF、GTI、时间系统和数据校验代码。
-- `ep`、`swift`、`fermi` 已承载任务相关能力。
-- `background`、`lightcurve`、`spectrum`、`physics`、`lf` 已形成初步领域模块。
-- 已存在纯 Python FTOOLS 替代实现和可选 Rust 加速路径。
-- 已有 HEASoft 环境管理、XSPEC 拟合、BXA、上限和红移外推等工作代码。
-- 已有覆盖 OGIP、时间、GTI、数据集、拟合、任务 I/O 和显著性的测试资产。
+- 【✅ 属实】`core` 中已有 OGIP、事件、光变、PHA、RMF、ARF、GTI、时间系统和数据校验代码。
+- 【✅ 属实，且已升级】`ep`、`swift`、`fermi` 已承载任务相关能力（0.2.0 起为独立发行包）。
+- 【✅ 属实】`background`、`lightcurve`、`spectrum`、`physics`、`lf` 已形成初步领域模块。
+- 【✅ 属实】已存在纯 Python FTOOLS 替代实现和可选 Rust 加速路径（`jinwurs` 独立发行）。
+- 【🔶 需更新表述】已有 HEASoft 环境管理、XSPEC 拟合、上限和红移外推等工作代码。
+  （BXA 依赖已移除，但其产生的 chain 文件仍可经 `UpperLimit.from_chain` 消费；
+  另新增：逐参数 profile 误差状态、AICc 多模型比较、flux curve 与微信快报产物）
+- 【✅ 属实且已扩充】已有覆盖 OGIP、时间、GTI、数据集、拟合、任务 I/O 和显著性的
+  测试资产（949 项测试，全绿；含端到端 fake 后端管线测试）。
 
-当前结构也存在需要在 Phase 0 处理的债务：
+当前结构也存在需要在 Phase 0 处理的债务（状态按 2026-08-30 复核标注）：
 
-- `bxa`、`pymc`、`swiftbat`、`batanalysis` 等仍是基础安装的强制依赖。
-- XSPEC 调用和 HEASoft 初始化分散在 `core`、`lf` 和绘图代码中。
-- 当前 `ModelBase` 和数据集容器不足以表示单位、先验、参数链接和多后端编译。
-- 响应、数据集、统计量和推断器之间尚未形成稳定的公共契约。
-- 任务发现和产品扫描中仍混有较多 EP 特定逻辑。
-- 发布 CI 负责构建和上传，但当前没有测试、导入和依赖矩阵门禁。
-- 文档、安装元数据和运行时版本存在漂移风险。
-- 部分模块导入会隐式要求交互环境或外部软件，不利于最小安装和自动化。
+- 【✅ 已解决】`bxa`、`pymc`、`swiftbat`、`batanalysis` 等仍是基础安装的强制依赖。
+  （0.2.0：核心依赖仅 numpy/scipy/astropy/matplotlib/pillow；任务能力拆为独立发行包，
+  swiftbat 经 `jinwu-swift` 提供，零引用的 bxa/pymc/batanalysis 已彻底移除）
+- 【🔶 部分解决】XSPEC 调用和 HEASoft 初始化分散在 `core`、`lf` 和绘图代码中。
+  （拟合入口已集中到 `core.fit` + `_require_xspec` 单点；`plotfit`/`upperlimit` 仍直接
+  import xspec；`HeasoftEnvManager` 存在但无 CapabilityProbe 抽象）
+- 【⬜ 未处理】当前 `ModelBase` 和数据集容器不足以表示单位、先验、参数链接和多后端编译。
+- 【⬜ 未处理】响应、数据集、统计量和推断器之间尚未形成稳定的公共契约。
+- 【🔶 部分解决】任务发现和产品扫描中仍混有较多 EP 特定逻辑。
+  （Catalog/Manifest/DataFile 抽象已任务无关，但 `core/instruments.py` 仍内置
+  WXT/FXT 扫描器与 FXTA/FXTB 合束逻辑）
+- 【🔶 部分解决】发布 CI 负责构建和上传，但当前没有测试、导入和依赖矩阵门禁。
+  （publish workflow 已按 tag lockstep 构建 4 个发行包 + Rust wheel 矩阵，但仍不运行 pytest）
+- 【✅ 基本解决】文档、安装元数据和运行时版本存在漂移风险。
+  （`make sync` 统一版本号；版本取自 importlib.metadata；recipe 有 sha256 同步流程）
+- 【✅ 基本解决】部分模块导入会隐式要求交互环境或外部软件，不利于最小安装和自动化。
+  （库代码 plt.show() 已清除；swiftbat/astroquery/plotly 等改为惰性导入 + 守卫报错；
+  仪器 pipeline 经 entry point 懒发现）
 
 这些问题应作为迁移输入，而不是通过一次性重写全部代码解决。
 
@@ -173,6 +190,13 @@ jinwu/
 
 现有领域包不要求立即搬迁。它们先通过新契约接入，只有在职责清晰且测试充分时才逐步
 调整目录。
+
+> 【🔶 2026-08-30 状态】`kernel/` 与 `integrations/` 层【⬜】未开始建设；但任务插件
+> 独立发行已提前落地——0.2.0 起仓库为 monorepo，`ep`/`swift`/`fermi` 拆为独立发行包
+> （`packages/jinwu-ep|-fermi|-swift`），经 PEP 420 命名空间（`jinwu` 无 `__init__.py`）
+> 与 `jinwu.instruments` entry points 接入核心（见 §14.3）。`ep`/`swift`/`fermi`/
+> `background`/`lightcurve`/`spectrum`/`timing`/`physics`/`lf` 目录结构与上图一致；
+> `workflows/`、`ai/` 尚未建立。
 
 ## 6. 内核契约
 
@@ -333,6 +357,11 @@ Raw mission data
 
 ### 7.2 规划中的集成接口
 
+【🔶 2026-08-30 状态】`jinwu.core.heasoft.HeasoftEnvManager` 已存在（HEADAS 探测、
+`init_heasoft()`/`reset_environment()`，quickstart 在用），是本节设计的部分前身；
+`HeasoftEnvironment` 子进程隔离、`CapabilityProbe/Report`、`ToolSpec/Runner/Invocation`
+provenance 链【⬜】未实现。
+
 `jinwu.integrations.heasoft` 应提供：
 
 - `HeasoftEnvironment`：构造隔离的子进程环境，不修改宿主 Python 进程。
@@ -460,7 +489,7 @@ likelihood。Jinwu 负责联合参数和 provenance，不复制其成熟 detecto
 | [nDspec](https://ndspec.readthedocs.io/en/latest/) | Assess | 多维响应、功率谱和 cross-spectrum 互操作 |
 | Stingray | Assess | 通用谱时产品和时间序列分析 |
 | [NWAY](https://johannesbuchner.github.io/nway/) | Assess | 多目录贝叶斯交叉匹配服务 |
-| [BXA](https://johannesbuchner.github.io/BXA/) | Adopt, optional | XSPEC/Sherpa 与 UltraNest 的兼容桥 |
+| [BXA](https://johannesbuchner.github.io/BXA/) | Adopt, optional → Assess* | XSPEC/Sherpa 与 UltraNest 的兼容桥 |
 | UltraNest / dynesty / iminuit | Assess | 采样、evidence 和优化后端 |
 | ArviZ / xarray | Assess | 后验诊断和带标签结果表示 |
 | 3ML / Sherpa / Gammapy | Reference | 插件、拟合职责和 Dataset 设计 |
@@ -469,7 +498,13 @@ likelihood。Jinwu 负责联合参数和 provenance，不复制其成熟 detecto
 | [GCN Kafka](https://gcn.nasa.gov/docs/notices) | Adopt as standard | 实时 alert 交换 |
 | [IVOA VOEvent](https://www.ivoa.net/documents/VOEvent/) | Adopt as standard | 兼容历史和 VO 生态的事件格式 |
 | ASDF | Assess | Jinwu 原生模型、结果和 provenance 序列化 |
-| Rust extension | Trial | 经过 Python 参考实现验证的热点加速 |
+| Rust extension | Trial → 独立发行* | 经过 Python 参考实现验证的热点加速 |
+
+\* 2026-08-30 状态变化：BXA 已从全部依赖（含 extras）中移除——当前 XSPEC 误差采用
+逐参数 profile interval 状态记录，无 Bayesian 桥接需求；BXA 产生的 MCMC chain 文件
+仍可经 `UpperLimit.from_chain` 消费。重引入须按 §9.3 走 ADR。
+Rust 加速已落地为独立发行包 `jinwurs`（`jinwu[rust]` extra 引用），由 CI 构建多平台
+abi3 wheel。
 
 技术雷达至少每 6 个月复核，并在发布说明中记录状态变化。
 
@@ -514,6 +549,13 @@ jinwu[rust]
 
 注意：`jinwu[xspec]` 不能声称通过 pip 安装 HEASoft。它只安装 Python 适配代码，并通过
 capability probe 检查外部环境。大型 `[all]` extra 在兼容矩阵成熟前不提供。
+
+> 【🔶 2026-08-30 状态】已提供：`jinwu[ep]`【✅】、`jinwu[swift]`【✅】、`jinwu[fermi]`
+> （含 `gbm` 别名）【✅】、`jinwu[crossmatch]`【✅】、`jinwu[rust]`【✅】，另有计划外的
+> `cluster`/`docs`；仪器依赖进一步独立为 `jinwu-ep/-swift/-fermi` 发行包（swift 包内
+> 另有 `[gdt]` extra）。未提供：`optim`/`bayes`/`xspec`/`xspec-bayes`/
+> `spectral-timing`/`alerts`/`gw`/`neutrino`/`viz`/`jax`【⬜】。注意 BXA 已不在任何
+> extra 中（见 §9.2 脚注）。
 
 FITS、OGIP、VOTable、GCN JSON 和 VOEvent 继续作为交换格式。Jinwu 原生分析规范和
 结果使用版本化 schema；具体采用 ASDF 或其他容器必须经过 ADR，但 JSON Schema 是机器
@@ -588,22 +630,37 @@ AI benchmark 至少覆盖：
 
 产物：
 
-- 完成 EP WXT/FXT 的核心 reduction 和分析流程。
-- 选择弱源、强源、复杂 GTI/响应各至少一个 golden observation。
-- 记录 HEASoft、任务软件、CALDB、输入和输出校验和。
-- 集中 HEASoft 环境检查和外部命令 provenance。
-- 把 BXA、PyMC 和任务工具从基础依赖迁移到 extras。
-- 增加最小安装、完整安装、无 XSPEC 和 HEASoft 集成测试矩阵。
-- 发布前 CI 必须运行测试、导入检查和 wheel smoke tests。
+- 【🔶】完成 EP WXT/FXT 的核心 reduction 和分析流程。
+  （WXT ✅：`jinwu-ep` 的 WXTPointingPipeline 端到端 16 阶段含拟合/流量曲线/中文快报，
+  有完整 e2e 测试；FXT ⬜：仅 config 与扫描器，无 pipeline）
+- 【🔶】选择弱源、强源、复杂 GTI/响应各至少一个 golden observation。
+  （有真实数据回归工作区如 EP260703a，但未形式化 golden 基准与重放记录）
+- 【🔶】记录 HEASoft、任务软件、CALDB、输入和输出校验和。
+  （pipeline stage manifest 记录输入/输出 sha256 指纹；拟合产物含可回放 .xcm/.log 与
+  `collect_runtime_environment`；CALDB 版本尚未记录）
+- 【🔶】集中 HEASoft 环境检查和外部命令 provenance。
+  （HeasoftEnvManager 见 §7.2；xselect 调用记录 .xco/.log）
+- 【✅】把 BXA、PyMC 和任务工具从基础依赖迁移到 extras。
+  （并超额完成：任务工具升级为独立发行包；emcee/bxa/pymc/batanalysis 彻底移除）
+- 【🔶】增加最小安装、完整安装、无 XSPEC 和 HEASoft 集成测试矩阵。
+  （测试套件 949 项，XSPEC 缺失自动跳过 + network marker；CI 尚无安装矩阵）
+- 【⬜】发布前 CI 必须运行测试、导入检查和 wheel smoke tests。
+  （publish workflow 目前只构建与发布）
 
 退出门槛：
 
-- Golden workflows 可以从干净环境重放。
-- 无 HEASoft 环境能够导入通用模块。
-- 生产 pipeline 缺少能力时给出明确错误。
-- 基础安装不再拉取任务和 Bayesian 重依赖。
+- 【🔶】Golden workflows 可以从干净环境重放。
+  （e2e 测试以 fake 外部后端可重放；真实数据 golden 未形式化）
+- 【✅】无 HEASoft 环境能够导入通用模块。
+- 【✅】生产 pipeline 缺少能力时给出明确错误。
+  （XSPEC ImportError 带 pip 提示；entry-point 缺仪器包时提示 `pip install jinwu-ep`）
+- 【✅】基础安装不再拉取任务和 Bayesian 重依赖。
 
 ### Phase 1：Kernel 契约期，0.1
+
+【⬜ 2026-08-30 状态】未开始。仅有雏形：兼容 shim（`jinwu.core.lf`/`jinwu.core.redshift`
+弃用包装、lightcurve/spectrum 再导出）可视为 adapter 思路的雏形；`FitResult.to_dict`/
+拟合结果 JSON/逐参数误差状态是 ResultManifest 的素材，但均非冻结契约。
 
 目标：冻结最小数据、模型、响应、统计、provenance 和 schema 契约。
 
@@ -623,6 +680,9 @@ AI benchmark 至少覆盖：
 - 人类 API 与机器 schema 表达同一操作。
 
 ### Phase 2：Native OGIP 期，0.2
+
+【⬜ 2026-08-30 状态】未开始。注意 0.2.0 版本号对应的是 monorepo 打包重构，
+与本阶段（原生 OGIP 拟合）无关。
 
 目标：完成第一条脱离 XSPEC 的端到端拟合路径。
 
@@ -644,6 +704,8 @@ AI benchmark 至少覆盖：
 
 ### Phase 3：多波段与谱时期，0.3
 
+【⬜ 2026-08-30 状态】未开始。
+
 目标：从 X 射线内核扩展到真正的多仪器联合分析。
 
 产物：
@@ -663,6 +725,8 @@ AI benchmark 至少覆盖：
 
 ### Phase 4：Alert 与关联期，0.4
 
+【⬜ 2026-08-30 状态】未开始。
+
 目标：接入实时事件生态，并建立可重放的关联分析。
 
 产物：
@@ -681,6 +745,8 @@ AI benchmark 至少覆盖：
 
 ### Phase 5：GW 与中微子适配期，0.5+
 
+【⬜ 2026-08-30 状态】未开始。
+
 目标：让 Jinwu 能够参与多信使联合推断，而不复制成熟生态。
 
 产物：
@@ -697,6 +763,9 @@ AI benchmark 至少覆盖：
 - 合成联合案例可以共享时间、天空位置、距离和源参数。
 
 ### Phase 6：AI 与社区成熟期，1.0
+
+【⬜ 2026-08-30 状态】未开始。唯一相关的雏形是面向 AI 代理的
+`REUSABLE_FUNCTIONS.md` 公共 API 索引（非机器契约）。
 
 目标：稳定公共契约、插件生态和长期治理。
 
@@ -781,6 +850,10 @@ AI benchmark 至少覆盖：
 
 长期允许任务插件在独立发行包中通过 entry points 注册，避免 Jinwu 主包承担所有任务的
 发布周期。
+
+> 【✅ 2026-08-30 状态】该长期项已提前实现：`jinwu-ep`/`jinwu-swift`/`jinwu-fermi`
+> 独立发行，经 `jinwu.instruments` entry points 注册 pipeline；核心注册表懒发现，
+> 缺包时给出 `pip install jinwu-<name>` 提示。conformance suite 部分【⬜】未建。
 
 ## 15. 成功指标
 
