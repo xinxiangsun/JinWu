@@ -7,6 +7,9 @@
 
 PY_PACKAGES = packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi
 
+# 自动探测 Python 解释器（部分环境无裸 `python` 命令，只有 python3）
+PYTHON := $(shell command -v python3 2>/dev/null || command -v python)
+
 help:
 	@echo "用法:"
 	@echo "  make release   — 同步版本号 + git tag + push（唯一需要记的命令）"
@@ -41,13 +44,13 @@ rust-build:
 sdist:
 	@for pkg in $(PY_PACKAGES); do \
 		echo "→ sdist: $$pkg"; \
-		python -m build --sdist "$$pkg" --outdir dist/ || exit 1; \
+		$(PYTHON) -m build --sdist "$$pkg" --outdir dist/ || exit 1; \
 	done
 
 wheel:
 	@for pkg in $(PY_PACKAGES); do \
 		echo "→ wheel: $$pkg"; \
-		python -m build --wheel "$$pkg" --outdir dist/ || exit 1; \
+		$(PYTHON) -m build --wheel "$$pkg" --outdir dist/ || exit 1; \
 	done
 
 build: sdist wheel
@@ -65,7 +68,7 @@ sha256:
 		exit 1; \
 	fi; \
 	HASH=$$(openssl sha256 "$$LATEST" | awk '{print $$2}'); \
-	VERSION=$$(python -c "import tomllib; print(tomllib.load(open('packages/jinwu/pyproject.toml','rb'))['project']['version'])"); \
+	VERSION=$$($(PYTHON) -c "import tomllib; print(tomllib.load(open('packages/jinwu/pyproject.toml','rb'))['project']['version'])"); \
 	sed -i "s/^  version:.*/  version: \"$$VERSION\"/" recipe/meta.yaml; \
 	sed -i "s/^  sha256:.*/  sha256: $$HASH/" recipe/meta.yaml; \
 	echo "✓ recipe/meta.yaml 更新完毕:"; \
@@ -77,19 +80,19 @@ sha256:
 # -----------------------------------------------------------
 publish: build sha256
 	@echo "→ 上传到 PyPI..."
-	python -m twine upload dist/*.tar.gz dist/*-py3-none-any.whl
+	$(PYTHON) -m twine upload dist/*.tar.gz dist/*-py3-none-any.whl
 	@echo "✓ 发布完成！"
 
 # -----------------------------------------------------------
 # 测试
 # -----------------------------------------------------------
 check:
-	python -m pytest test/ -x -q
+	$(PYTHON) -m pytest test/ -x -q
 
 # -----------------------------------------------------------
 # 从 packages/jinwu/pyproject.toml 读取版本号，同步到所有文件
 # -----------------------------------------------------------
-_VERSION = $(shell python -c "import tomllib; print(tomllib.load(open('packages/jinwu/pyproject.toml','rb'))['project']['version'])")
+_VERSION = $(shell $(PYTHON) -c "import tomllib; print(tomllib.load(open('packages/jinwu/pyproject.toml','rb'))['project']['version'])")
 
 sync:
 	@echo "→ 从 packages/jinwu/pyproject.toml 读取版本号: $(_VERSION)"
