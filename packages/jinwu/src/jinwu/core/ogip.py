@@ -26,9 +26,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Sequence
 
+import numpy as np
+
 __all__ = [
     "ValidationMessage", "ValidationReport",
-    "OgipFitsBase", "OgipTimeSeriesBase", "OgipSpectrumBase", "OgipResponseBase"
+    "OgipFitsBase", "OgipTimeSeriesBase", "OgipSpectrumBase", "OgipResponseBase",
+    "check_response_compatibility",
 ]
 
 # ---------------- Validation Data Structures ----------------
@@ -150,6 +153,20 @@ class OgipTimeSeriesBase(OgipFitsBase):
         if timeunit is not None and str(timeunit).upper() not in ('S', 'SEC', 'SECOND', 'SECONDS'):
             # not an error, but note uncommon units
             rpt.add('INFO', 'UNUSUAL_TIMEUNIT', f"TIMEUNIT='{timeunit}'")
+        # GTI 自洽：stop>=start 且区间有序（读端已填充 gti_start/gti_stop 时）
+        g0 = getattr(self, 'gti_start', None)
+        g1 = getattr(self, 'gti_stop', None)
+        if g0 is not None and g1 is not None:
+            try:
+                a = np.asarray(g0, dtype=float)
+                b = np.asarray(g1, dtype=float)
+                if a.shape == b.shape and a.size > 0:
+                    if bool(np.any(b < a)):
+                        rpt.add('ERROR', 'BAD_GTI', 'GTI contains interval(s) with STOP < START.')
+                    if a.size > 1 and bool(np.any(np.diff(a) < 0)):
+                        rpt.add('WARN', 'UNSORTED_GTI', 'GTI START values are not sorted ascending.')
+            except Exception:
+                pass
         # GTI: many EVENTS files include a GTI extension; subclasses or readers should populate a gti field
         # Provide an extension point: subclasses/readers can implement `extract_gti(hdul)` to fill gti.
         rpt.ok = len(rpt.errors()) == 0
@@ -203,7 +220,9 @@ class OgipSpectrumBase(OgipFitsBase):
     OPTIONAL_RATE_COLUMNS = ["COUNTS", "RATE"]
 
     def validate(self) -> ValidationReport:
-        rpt = super().validate()
+        # 显式调用（不用 super()）：具体类会以 `OgipSpectrumBase.validate(self)`
+        # 未绑定方式委托到本方法。
+        rpt = OgipFitsBase.validate(self)
         for k in self.REQUIRED_KEYS:
             if not self._has_key_ci(k):
                 rpt.add('WARN', 'MISSING_KEY', f"Required key '{k}' not found (OGIP-92-007).")
@@ -222,6 +241,12 @@ class OgipSpectrumBase(OgipFitsBase):
                     rpt.add('WARN', 'BAD_EXPOSURE', f"Non-positive exposure value: {exp_val}")
             except Exception:
                 rpt.add('WARN', 'BAD_EXPOSURE', f"Exposure not numeric: {exp_val}")
+        # HDU 分类与版本（对齐 heasp pha::read：检查 HDUCLAS1=SPECTRUM）
+        clas1 = self.get_keyword_ci('HDUCLAS1', None)
+        if clas1 is not None and str(clas1).upper() != 'SPECTRUM':
+            rpt.add('WARN', 'BAD_HDUCLAS1', f"HDUCLAS1={clas1!r}, expected 'SPECTRUM' for a PHA.")
+        if not self._has_key_ci('HDUVERS'):
+            rpt.add('WARN', 'MISSING_HDUVERS', 'HDUVERS missing (OGIP-92-007 version declaration).')
         rpt.ok = len(rpt.errors()) == 0
         self._validation = rpt
         return rpt
@@ -233,16 +258,67 @@ class OgipResponseBase(OgipFitsBase):
     REQUIRED_KEYS_ANY = [["TELESCOP"], ["INSTRUME"], ["DETNAM", "DETNAME"]]
     REQUIRED_COLUMNS_ARF = ["ENERG_LO", "ENERG_HI", "SPECRESP"]
     REQUIRED_COLUMNS_RMF_MIN = ["ENERG_LO", "ENERG_HI", "MATRIX"]  # 简化
+    # HDUCLAS2 合法取值（heasp 扩展定位同时接受 EXTNAME 或这对关键字）
+    RESPONSE_HDUCLAS2 = ("SPECRESP", "RSP_MATRIX")
 
     def validate(self) -> ValidationReport:
-        rpt = super().validate()
+        # 显式调用（不用 super()）：具体类会以 `OgipResponseBase.validate(self)`
+        # 未绑定方式委托到本方法。
+        rpt = OgipFitsBase.validate(self)
         # Header presence: at least one from each group
         for group in self.REQUIRED_KEYS_ANY:
             if not self._has_any_key_ci(group):
                 rpt.add('WARN', 'MISSING_KEY', f"Missing one of required keys {group} (CAL/GEN/92-002).")
+        # HDU 分类与版本（对齐 heasp 扩展定位规则：HDUCLAS1=RESPONSE +
+        # HDUCLAS2=SPECRESP/RSP_MATRIX；缺失时靠 EXTNAME 定位，降为 WARN）。
+        clas1 = self.get_keyword_ci('HDUCLAS1', None)
+        clas2 = self.get_keyword_ci('HDUCLAS2', None)
+        if clas1 is None or str(clas1).upper() != 'RESPONSE':
+            rpt.add('WARN', 'MISSING_HDUCLAS',
+                    f"HDUCLAS1 != 'RESPONSE' (got {clas1!r}); extension must be located by EXTNAME.")
+        if clas2 is not None and str(clas2).upper() not in self.RESPONSE_HDUCLAS2:
+            rpt.add('WARN', 'BAD_HDUCLAS2',
+                    f"HDUCLAS2={clas2!r} not in {self.RESPONSE_HDUCLAS2}.")
+        if not self._has_key_ci('HDUVERS'):
+            rpt.add('WARN', 'MISSING_HDUVERS', 'HDUVERS missing (OGIP response version declaration).')
         # Column checks will be done in concrete subclasses where we know type
         rpt.ok = len(rpt.errors()) == 0
         self._validation = rpt
         return rpt
 
 # 具体数据类将继承上述基类并在自身 validate() 中补充列检查。
+
+
+def check_response_compatibility(spectrum: Any, response: Any) -> ValidationReport:
+    """谱 ↔ 响应兼容性检查（对齐 heasp "checking an RMF and an ARF/spectrum
+    for compatibility" 语义）。
+
+    检查项（能取到字段才查，取不到则跳过）：
+    - 通道数/通道范围：谱的 CHANNEL 数组应落在响应的通道约定（TLMIN+DETCHANS）内；
+    - DETCHANS 与谱通道数的一致性提示。
+    返回 ValidationReport（ok=False 表示不兼容，不应直接相乘/拟合）。
+    """
+    rpt = ValidationReport(kind='compatibility', path=Path(str(getattr(spectrum, 'path', '<in-memory>'))), ok=True)
+    try:
+        tlmin = getattr(response, 'tlmin', None)
+        det_chans = getattr(response, 'det_chans', None)
+        ch = getattr(spectrum, 'channels', None)
+        channels = np.asarray([] if ch is None else ch, dtype=int)
+        if channels.size > 0 and tlmin is not None and det_chans is not None:
+            lo, hi = int(channels.min()), int(channels.max())
+            r_lo, r_hi = int(tlmin), int(tlmin) + int(det_chans) - 1
+            if lo < r_lo or hi > r_hi:
+                rpt.add('ERROR', 'INCOMPATIBLE_CHANNELS',
+                        f"Spectrum channels [{lo}, {hi}] exceed response channel range "
+                        f"[{r_lo}, {r_hi}] (TLMIN={tlmin}, DETCHANS={det_chans}).")
+            sp_det = getattr(spectrum, 'det_chans', None)
+            if sp_det is not None and int(sp_det) != int(det_chans):
+                rpt.add('WARN', 'DETCHANS_MISMATCH',
+                        f"Spectrum DETCHANS={sp_det} differs from response DETCHANS={det_chans}.")
+        elif channels.size > 0:
+            rpt.add('INFO', 'COMPAT_NOT_CHECKED',
+                    'Response TLMIN/DETCHANS unavailable; channel compatibility not checked.')
+    except Exception as exc:
+        rpt.add('WARN', 'COMPAT_CHECK_FAILED', f"Compatibility check failed: {exc}")
+    rpt.ok = len(rpt.errors()) == 0
+    return rpt

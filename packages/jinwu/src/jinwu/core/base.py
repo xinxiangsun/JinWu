@@ -106,6 +106,8 @@ class ArfBase(OgipResponseBase):
     energ_hi: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))
     specresp: np.ndarray = field(default_factory=lambda: np.asarray([], dtype=float))
     columns: Tuple[str, ...] = ()
+    # OGIP 版本声明（HDUVERS，如 '1.1.0'）
+    hduvers: Optional[str] = None
 
 
 @dataclass(slots=True)
@@ -124,6 +126,11 @@ class RmfBase(OgipResponseBase):
     e_min: Optional[np.ndarray] = None
     e_max: Optional[np.ndarray] = None
     columns: Tuple[str, ...] = ()
+    # 通道约定键（对齐 HEASoft 6.37 heasp 读入行为）：
+    # tlmin = F_CHAN 的 TLMINn（0 基/1 基），det_chans = DETCHANS。
+    tlmin: Optional[int] = None
+    det_chans: Optional[int] = None
+    hduvers: Optional[str] = None
 
 @dataclass(slots=True)
 class PhaBase(OgipSpectrumBase):
@@ -145,6 +152,10 @@ class PhaBase(OgipSpectrumBase):
     ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None
     raw_spectrum_columns: Optional[Dict[str, np.ndarray]] = None
     columns: Tuple[str, ...] = ()
+    # 通道编号三件套（TLMIN1/TLMAX1/DETCHANS），缺失时由通道数组回退推断。
+    tlmin: Optional[int] = None
+    tlmax: Optional[int] = None
+    det_chans: Optional[int] = None
 
 
 @dataclass(slots=True)

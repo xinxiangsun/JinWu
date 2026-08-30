@@ -120,9 +120,11 @@ __all__ = [
     "rebin_events_to_lightcurve",
     # Bayesian Blocks
     "BayesianBlocksBinner",
+    "bayesian_blocks_exposure",
     "bin_bblocks",
     "autobin",
     "txx",
+    "txx_iterbkg",
 ]
 
 
@@ -913,6 +915,91 @@ def rebin_events_to_lightcurve(
 
 # ==================== Bayesian Blocks Binning ====================
 
+def bayesian_blocks_exposure(
+    counts: np.ndarray | Sequence[float],
+    exposure: np.ndarray | Sequence[float],
+    *,
+    p0: float = 0.05,
+    gamma: Optional[float] = None,
+    ncp_prior: Optional[float] = None,
+) -> np.ndarray:
+    """曝光加权的分箱 Bayesian Blocks（Scargle 2013）。
+
+    移植自 HEASoft 6.37 ``burstcube/lib/bayesian_blocks.py``（其基于 astropy 版本修改）。
+    相对 ``astropy.stats.bayesian_blocks`` 的差别（原实现文件头注明）：
+
+    1. 修复了 astropy#14017；
+    2. 支持 0 计数箱（Scargle 约定至少 1 计数，此处放宽）；
+    3. 适应函数用逐箱曝光量 ``T_k`` 而非等宽时间——对 GTI 间隙/帧效应导致的
+       逐箱曝光变化（如 EP/WXT）是正确的处理；
+    4. 返回变点处的 **箱索引**：第 ``i`` 个块覆盖 ``bins[idx[i]:idx[i+1]]``。
+
+    参数
+    ----
+    counts : 逐箱计数（允许 0）。
+    exposure : 逐箱有效曝光（秒），与 ``counts`` 同形，应 > 0。
+    p0 : 假阳性率；与 ``gamma``/``ncp_prior`` 三选一（后者优先）。
+
+    返回：变点箱索引数组（int），首尾分别为 0 与 ``n``。
+    """
+    counts = np.asarray(counts, dtype=float)
+    exposure = np.asarray(exposure, dtype=float)
+    if counts.shape != exposure.shape:
+        raise ValueError("counts 与 exposure 必须同形")
+    n = counts.size
+    if n == 0:
+        return np.asarray([0], dtype=int)
+
+    # 先验：块数的惩罚项。Scargle (2013) Eq. 21（注意原文缺 log）
+    if ncp_prior is None:
+        if gamma is not None:
+            ncp_prior = -float(np.log(gamma))
+        elif p0 is not None:
+            ncp_prior = 4.0 - float(np.log(73.53 * p0 * (n ** -0.478)))
+        else:
+            raise ValueError("p0/gamma/ncp_prior 至少需提供一个")
+    ncp_prior = float(ncp_prior)
+
+    # 反向累加便于 O(1) 取任意后缀和；尾部补 0 使 R 取到末尾时后缀和为全段。
+    exposure_cumsum = np.append(np.cumsum(exposure[::-1])[::-1], 0.0)
+    counts_cumsum = np.append(np.cumsum(counts[::-1])[::-1], 0.0)
+
+    best = np.zeros(n, dtype=float)   # best[R]: 前 R+1 箱的最优总适应度
+    last = np.zeros(n, dtype=int)     # last[R]: 最优划分下最后一块的起始箱
+
+    for R in range(n):
+        # 适应函数：Scargle 2013 Eq. 19，用曝光 T_k 代替等宽时间。
+        T_k = exposure_cumsum[: R + 1] - exposure_cumsum[R + 1]
+        N_k = counts_cumsum[: R + 1] - counts_cumsum[R + 1]
+
+        # N_k=0 时 N·ln(N/T) 的极限为 0（避免 nan）；T_k=0 亦跳过。
+        fit_vec_log = np.zeros(N_k.size)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            np.log(N_k / T_k, out=fit_vec_log, where=(N_k != 0) & (T_k > 0))
+        fit_vec = N_k * fit_vec_log
+
+        A_R = fit_vec - ncp_prior
+        A_R[1:] += best[:R]
+
+        i_max = int(np.argmax(A_R))
+        last[R] = i_max
+        best[R] = A_R[i_max]
+
+    # 从末尾逐块剥离恢复变点序列（同原实现）。
+    change_points = np.zeros(n, dtype=int)
+    i_cp = n
+    ind = n
+    while i_cp > 0:
+        i_cp -= 1
+        change_points[i_cp] = ind
+        if ind == 0:
+            break
+        ind = last[ind - 1]
+    if i_cp == 0:
+        change_points[i_cp] = 0
+    return change_points[i_cp:]
+
+
 class BayesianBlocksBinner:
     """基于贝叶斯块的自适应分 bin。
 
@@ -920,6 +1007,8 @@ class BayesianBlocksBinner:
     ----
         - 传入 `LightcurveData`（counts 或 rate），采用 `astropy.stats.bayesian_blocks`
             计算时间边界；输出块边界由 Bayesian Blocks 直接决定，不再做 SNR 阈值后合并。
+        - `use_exposure=True` 时改用曝光加权的分箱贝叶斯块（`bayesian_blocks_exposure`，
+            移植自 HEASoft burstcube），适应函数用逐箱曝光而非等宽时间，适合逐箱曝光变化显著的仪器（如 EP/WXT）。
 
     参数
     ----
@@ -928,6 +1017,7 @@ class BayesianBlocksBinner:
       * 'events': 泊松事件（光子计数等）
       * 'regular_events': 规则采样的事件数据
       * 'measures': 带误差的测量值（高斯统计，适用于已分bin的光变）
+    - use_exposure: 启用逐箱曝光加权变点检测（此时忽略 fitness，仅作用于 ``fit``）
 
     返回
     ----
@@ -939,6 +1029,7 @@ class BayesianBlocksBinner:
         self,
         p0: float = 0.05,
         fitness: Literal['events', 'regular_events', 'measures'] = 'measures',
+        use_exposure: bool = False,
         **kwargs,
     ) -> None:
         if 'min_snr' in kwargs:
@@ -953,6 +1044,7 @@ class BayesianBlocksBinner:
             raise TypeError(f"BayesianBlocksBinner() got unexpected keyword argument(s): {unknown}")
         self.p0 = float(p0)
         self.fitness: Literal['events', 'regular_events', 'measures'] = fitness
+        self.use_exposure = bool(use_exposure)
         # 暴露接口：便于后续 Txx 计算使用原始或合并后的边界
         self.last_edges: Optional[np.ndarray] = None
         self.last_merged_indices: Optional[list[np.ndarray]] = None
@@ -1037,19 +1129,28 @@ class BayesianBlocksBinner:
 
         # 调用 bayesian_blocks 构建初始块边界
         # fitness 类型：'events'(泊松事件), 'regular_events'(规则采样事件), 'measures'(带误差测量)
-        if self.fitness == 'regular_events':
+        if self.use_exposure:
+            # 曝光加权变点检测（burstcube 移植版）：逐箱曝光优先用 bin_exposure，
+            # 否则退化为有效箱宽。变点索引→时间边界：块 i 覆盖 bins[cp[i]:cp[i+1]]。
+            _orig_expo = getattr(lc, 'bin_exposure', None)
+            expo_bins = np.asarray(_orig_expo if _orig_expo is not None else eff_width, dtype=float)
+            cp = bayesian_blocks_exposure(counts, expo_bins, p0=self.p0)
+            edges = np.concatenate(([left[int(cp[0])]], right[cp[1:] - 1]))
+        elif self.fitness == 'regular_events':
             edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0, dt=orig_dt)
         elif self.fitness == 'measures':
             edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0, sigma=err_counts)
         else:
             edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0)
-        # heapy/ppsignal 的做法会扩展首末边界到原始范围；保持与之兼容
+        # heapy/ppsignal 的做法会扩展首末边界到原始范围；保持与之兼容。
+        # use_exposure 路径的边界已覆盖全段，无需再拼接。
         full_left = float(left.min())
         full_right = float(right.max())
-        if edges.size > 0:
-            edges = np.concatenate(([full_left], edges, [full_right]))
-        else:
-            edges = np.asarray([full_left, full_right], dtype=float)
+        if not self.use_exposure:
+            if edges.size > 0:
+                edges = np.concatenate(([full_left], edges, [full_right]))
+            else:
+                edges = np.asarray([full_left, full_right], dtype=float)
         self.last_edges = edges.copy()
 
         # 根据块边界，将原始 bins 分配到各块并聚合（不做 SNR 阈值后合并）
@@ -1834,1002 +1935,30 @@ def autobin(
     )
 
 
-def _txx54_is_lightcurve_like(obj: object) -> bool:
-    if isinstance(obj, LightcurveDataBase):
-        return True
-    kind = getattr(obj, 'kind', None)
-    if kind == 'lc':
-        required_attrs = ('time', 'value', 'error', 'dt', 'is_rate')
-        return all(hasattr(obj, attr) for attr in required_attrs)
-    return False
 
-
-def _txx54_array_to_lc(arr: np.ndarray, name: str) -> 'LightcurveData':
-    from .data import LightcurveData as _LightcurveData
-
-    arr = np.asarray(arr)
-    if arr.ndim == 1:
-        counts = arr.astype(float)
-        time = np.arange(counts.size, dtype=float)
-        err = None
-    elif arr.ndim == 2 and arr.shape[1] in (2, 3):
-        time = arr[:, 0].astype(float)
-        counts = arr[:, 1].astype(float)
-        err = arr[:, 2].astype(float) if arr.shape[1] == 3 else None
-    else:
-        raise ValueError(f"{name} ndarray 仅支持 1D 或 (N,2)/(N,3) 形状")
-
-    dt = float(np.median(np.diff(time))) if time.size >= 2 else 1.0
-    bin_expo = np.full_like(time, dt, dtype=float)
-    return _LightcurveData(
-        path=_Path("<array_input>"),
-        time=time,
-        value=counts,
-        error=err,
-        dt=dt,
-        exposure=float(np.sum(bin_expo)),
-        bin_exposure=bin_expo,
-        is_rate=False,
-        header={},
-        meta={},
-        headers_dump=None,
-        region=None,
-        bin_lo=(time - 0.5 * dt),
-        bin_hi=(time + 0.5 * dt),
-        bin_width=np.full_like(time, dt, dtype=float),
-        binning='uniform',
-    )
-
-
-def _txx54_to_counts(lc: 'LightcurveData') -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    left, right, width = _infer_bin_geometry(lc)
-    width = np.maximum(np.asarray(width, dtype=float), 1e-12)
-    vals = np.asarray(lc.value, dtype=float)
-    if vals.ndim != 1:
-        raise NotImplementedError("txx 新实现暂不支持多能段光变，请先切片到单能段。")
-
-    if lc.is_rate:
-        eff = _effective_exposure_from_lc(lc, width)
-        counts = vals * np.asarray(eff, dtype=float)
-    else:
-        counts = vals.copy()
-
-    order = np.argsort(left)
-    return (
-        np.asarray(left, dtype=float)[order],
-        np.asarray(right, dtype=float)[order],
-        np.asarray(width, dtype=float)[order],
-        np.asarray(counts, dtype=float)[order],
-    )
-
-
-def _txx54_project_counts_to_src_grid(
-    src_left: np.ndarray,
-    src_right: np.ndarray,
-    bkg_left: np.ndarray,
-    bkg_right: np.ndarray,
-    bkg_counts: np.ndarray,
-) -> np.ndarray:
-    out = np.zeros(src_left.size, dtype=float)
-    bkg_width = np.maximum(bkg_right - bkg_left, 1e-12)
-    for i in range(src_left.size):
-        a = float(src_left[i])
-        b = float(src_right[i])
-        overlap = np.minimum(bkg_right, b) - np.maximum(bkg_left, a)
-        mask = overlap > 0.0
-        if not np.any(mask):
-            continue
-        frac = overlap[mask] / bkg_width[mask]
-        out[i] = float(np.sum(bkg_counts[mask] * frac))
-    return out
-
-
-def _txx54_overlap_sum(
-    values: np.ndarray,
-    left: np.ndarray,
-    right: np.ndarray,
-    a: float,
-    b: float,
-) -> float:
-    overlap = np.minimum(right, b) - np.maximum(left, a)
-    mask = overlap > 0.0
-    if not np.any(mask):
-        return 0.0
-    width = np.maximum(right[mask] - left[mask], 1e-12)
-    frac = overlap[mask] / width
-    return float(np.sum(values[mask] * frac))
-
-
-def _txx54_contiguous_groups(mask: np.ndarray) -> list[tuple[int, int]]:
-    groups: list[tuple[int, int]] = []
-    i = 0
-    n = mask.size
-    while i < n:
-        if not mask[i]:
-            i += 1
-            continue
-        j = i
-        while j + 1 < n and mask[j + 1]:
-            j += 1
-        groups.append((i, j))
-        i = j + 1
-    return groups
-
-
-def _txx54_cross_target(
-    target: float,
-    seg_left: np.ndarray,
-    seg_right: np.ndarray,
-    seg_counts: np.ndarray,
-) -> float:
-    if seg_left.size == 0:
-        return np.nan
-    if target <= 0.0:
-        return float(seg_left[0])
-
-    csum = 0.0
-    for l, r, c in zip(seg_left, seg_right, seg_counts):
-        if csum + c >= target:
-            if c <= 0.0:
-                return float(l)
-            frac = (target - csum) / c
-            return float(l + frac * (r - l))
-        csum += c
-    return float(seg_right[-1])
-
-
-def _txx54_asymm_err_from_samples(samples: np.ndarray, nominal: float) -> tuple[float, float]:
-    vals = np.asarray(samples, dtype=float)
-    vals = vals[np.isfinite(vals)]
-    if vals.size < 10 or (not np.isfinite(nominal)):
-        return np.nan, np.nan
-    q16, q84 = np.percentile(vals, [16.0, 84.0])
-    err_m = max(float(nominal - q16), 0.0)
-    err_p = max(float(q84 - nominal), 0.0)
-    return err_m, err_p
-
-
-def _txx54_robust_sigma(samples: np.ndarray) -> float:
-    vals = np.asarray(samples, dtype=float)
-    vals = vals[np.isfinite(vals)]
-    if vals.size < 2:
-        return np.nan
-    med = float(np.median(vals))
-    mad = float(np.median(np.abs(vals - med)))
-    sig = 1.4826 * mad
-    if np.isfinite(sig) and sig > 0.0:
-        return float(sig)
-    std = float(np.std(vals, ddof=1))
-    if np.isfinite(std) and std >= 0.0:
-        return std
-    return np.nan
-
-
-def _txx54_is_event_file_input(obj: object) -> bool:
-    if isinstance(obj, (str, _Path)):
-        p = _Path(obj).expanduser()
-        return p.exists() and p.suffix.lower() in {'.evt', '.fits', '.fit'}
-    return False
-
-
-def _txx54_is_event_data_input(obj: object) -> bool:
-    return isinstance(obj, EventDataBase)
-
-
-def _txx54_read_evt_file(path: _Path) -> dict:
-    from astropy.io import fits
-
-    with fits.open(path, memmap=True) as hdul:
-        if 'EVENTS' not in hdul:
-            raise ValueError(f"事件文件缺少 EVENTS 扩展: {path}")
-
-        evt_hdu = hdul['EVENTS']
-        if evt_hdu.data is None or 'TIME' not in evt_hdu.columns.names:
-            raise ValueError(f"EVENTS 扩展缺少 TIME 列: {path}")
-
-        times = np.asarray(evt_hdu.data['TIME'], dtype=float)
-        if times.size == 0:
-            raise ValueError(f"事件文件 EVENTS 为空: {path}")
-
-        if 'GTI' in hdul and hdul['GTI'].data is not None:
-            gti_start = np.asarray(hdul['GTI'].data['START'], dtype=float)
-            gti_stop = np.asarray(hdul['GTI'].data['STOP'], dtype=float)
-        else:
-            hdr = evt_hdu.header
-            tstart = float(hdr.get('TSTART', np.min(times)))
-            tstop = float(hdr.get('TSTOP', np.max(times)))
-            gti_start = np.asarray([tstart], dtype=float)
-            gti_stop = np.asarray([tstop], dtype=float)
-
-        backscal = None
-        backscal_raw = evt_hdu.header.get('BACKSCAL', None)
-        if backscal_raw is not None:
-            try:
-                b = float(backscal_raw)
-                if np.isfinite(b) and b > 0.0:
-                    backscal = b
-            except Exception:
-                backscal = None
-
-        area = None
-        if 'REG00101' in hdul and hdul['REG00101'].data is not None and len(hdul['REG00101'].data) > 0:
-            reg = hdul['REG00101'].data[0]
-            try:
-                shape = reg['SHAPE']
-                if isinstance(shape, (bytes, bytearray)):
-                    shape = shape.decode(errors='ignore')
-                shape_u = str(shape).strip().upper()
-                r = np.asarray(reg['R'], dtype=float).reshape(-1)
-                if shape_u.startswith('CIRCLE') and r.size >= 1:
-                    area = float(np.pi * r[0] ** 2)
-                elif shape_u.startswith('ANNULUS') and r.size >= 2:
-                    area = float(np.pi * (r[1] ** 2 - r[0] ** 2))
-            except Exception:
-                area = None
-
-        # 无 region 时，退化为把 BACKSCAL 作为面积代理
-        if area is None and backscal is not None:
-            area = backscal
-
-    return {
-        'path': str(path),
-        'time': times,
-        'gti_start': gti_start,
-        'gti_stop': gti_stop,
-        'area': area,
-        'backscal': backscal,
-    }
-
-
-def _txx54_read_event_object(ev: EventDataBase, *, arg_name: str) -> dict:
-    """将 EventDataBase/EventData 统一抽取为 txx 内部事件字典。"""
-    try:
-        if hasattr(ev, 'absolute_time'):
-            times = np.asarray(getattr(ev, 'absolute_time'), dtype=float)
-        else:
-            time_raw = np.asarray(getattr(ev, 'time', None), dtype=float)
-            tz = float(getattr(ev, 'timezero', 0.0) or 0.0)
-            times = time_raw + tz
-    except Exception as exc:
-        raise ValueError(f"{arg_name}: 读取事件时间失败") from exc
-
-    times = np.asarray(times, dtype=float)
-    times = times[np.isfinite(times)]
-    if times.size == 0:
-        raise ValueError(f"{arg_name}: 事件数据为空，无法计算 Txx")
-
-    gti_start = None
-    gti_stop = None
-    gti_s = getattr(ev, 'gti_start', None)
-    gti_e = getattr(ev, 'gti_stop', None)
-    if gti_s is not None and gti_e is not None:
-        try:
-            gs = np.asarray(gti_s, dtype=float).reshape(-1)
-            ge = np.asarray(gti_e, dtype=float).reshape(-1)
-            if gs.size > 0 and ge.size > 0 and gs.size == ge.size:
-                tz = float(getattr(ev, 'timezero', 0.0) or 0.0)
-                gs = gs + tz
-                ge = ge + tz
-                good = np.isfinite(gs) & np.isfinite(ge) & (ge > gs)
-                if np.any(good):
-                    gti_start = gs[good]
-                    gti_stop = ge[good]
-        except Exception:
-            gti_start = None
-            gti_stop = None
-
-    if gti_start is None or gti_stop is None:
-        gti_start = np.asarray([float(np.min(times))], dtype=float)
-        gti_stop = np.asarray([float(np.max(times))], dtype=float)
-
-    backscal = _txx54_positive_scalar(getattr(ev, 'backscal', None))
-    if backscal is None:
-        try:
-            backscal = _txx54_positive_scalar(getattr(ev, 'get_keyword_ci')('BACKSCAL', None))
-        except Exception:
-            backscal = None
-    if backscal is None:
-        hdr = getattr(ev, 'header', None)
-        if isinstance(hdr, dict):
-            backscal = _txx54_positive_scalar(hdr.get('BACKSCAL', hdr.get('backscal', None)))
-
-    ev_path = getattr(ev, 'path', None)
-    return {
-        'path': str(ev_path) if ev_path is not None else f"<{type(ev).__name__}>",
-        'time': np.asarray(times, dtype=float),
-        'gti_start': np.asarray(gti_start, dtype=float),
-        'gti_stop': np.asarray(gti_stop, dtype=float),
-        'area': None,
-        'backscal': backscal,
-    }
-
-
-def _txx54_event_input_to_dict(obj: object, *, arg_name: str) -> dict:
-    if isinstance(obj, (str, _Path)):
-        p = _Path(obj).expanduser()
-        if not p.exists():
-            raise FileNotFoundError(f"{arg_name}: 文件不存在: {p}")
-        if p.suffix.lower() not in {'.evt', '.fits', '.fit', '.fts'}:
-            raise TypeError(f"{arg_name}: 仅支持事件文件 (.evt/.fits/.fit/.fts)，当前={p}")
-        return _txx54_read_evt_file(p)
-
-    if _txx54_is_event_data_input(obj):
-        return _txx54_read_event_object(cast(EventDataBase, obj), arg_name=arg_name)
-
-    raise TypeError(
-        f"{arg_name}: txx 仅支持事件文件路径或 EventDataBase/EventData 输入，当前={type(obj).__name__}"
-    )
-
-
-def _txx54_positive_scalar(v: object) -> Optional[float]:
-    if v is None:
-        return None
-    try:
-        arr = np.asarray(v, dtype=float).reshape(-1)
-    except Exception:
-        return None
-    if arr.size == 0:
-        return None
-    val = float(np.nanmedian(arr))
-    if not np.isfinite(val) or val <= 0.0:
-        return None
-    return val
-
-
-def _txx54_bin_evt_to_array(evt: dict, binsize: float, t0: float, t1: float) -> np.ndarray:
-    if not np.isfinite(t0) or not np.isfinite(t1) or t1 <= t0:
-        raise ValueError(f"无效时间范围: t0={t0}, t1={t1}")
-    if not np.isfinite(binsize) or binsize <= 0.0:
-        raise ValueError(f"evt_binsize 必须为正数，当前={binsize}")
-
-    edges = np.arange(float(t0), float(t1) + float(binsize), float(binsize), dtype=float)
-    if edges.size < 2:
-        edges = np.asarray([float(t0), float(t1)], dtype=float)
-    elif edges[-1] < float(t1):
-        edges = np.append(edges, float(t1))
-
-    hist, _ = np.histogram(np.asarray(evt['time'], dtype=float), bins=edges)
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    return np.column_stack([centers.astype(float), hist.astype(float)])
-
-
-def _txx54_convert_event_inputs(
-    lc_src,
-    background,
-    alpha: Optional[float],
-    *,
-    evt_binsize: float,
-) -> tuple[dict, Optional[dict], Optional[float]]:
-    # evt_binsize 在事件直输模式下不参与输入转换；保留参数仅为兼容签名
-    _ = float(evt_binsize)
-
-    src_evt = _txx54_event_input_to_dict(lc_src, arg_name='lc_src')
-    bkg_evt = None if background is None else _txx54_event_input_to_dict(background, arg_name='background')
-
-    # 事件输入下，若未显式传 alpha，则优先用事件元信息估计
-    if bkg_evt is not None and alpha is None:
-        bs_src = _txx54_positive_scalar(src_evt.get('backscal', None))
-        bs_bkg = _txx54_positive_scalar(bkg_evt.get('backscal', None))
-        if bs_src is not None and bs_bkg is not None:
-            alpha = float(bs_src / bs_bkg)
-        else:
-            a_src = src_evt.get('area', None)
-            a_bkg = bkg_evt.get('area', None)
-            if a_src is not None and a_bkg is not None and np.isfinite(a_src) and np.isfinite(a_bkg) and a_bkg > 0:
-                alpha = float(a_src / a_bkg)
-
-    return src_evt, bkg_evt, alpha
-
-
-def txx(
-    lc_src: 'EventDataBase | str | _Path',
-    background: Optional['EventDataBase | str | _Path'] = None,
-    *,
-    alpha: Optional[float] = None,
-    percent: float | Sequence[float] = (0.5, 0.9),
-    nmc: int = 1000,
-    p0: float = 0.05,
-    use_edge_bkg: bool = False,
-    lbkg: Optional[float] = None,
-    rbkg: Optional[float] = None,
-    burst_tstart: Optional[float] = None,
-    burst_tstop: Optional[float] = None,
-    tpeak: Optional[float] = None,
-    src_dist: Literal['poisson', 'gaussian'] = 'poisson',
-    bkg_dist: Literal['poisson', 'gaussian'] = 'poisson',
-    seed: Optional[int] = None,
-    timebins: Optional[Sequence[float]] = None,
-    small_bin_threshold: float = 4.0,
-    weak_peak_bins: Sequence[float] = (8.0, 16.0, 32.0),
-    weak_peak_weight: float = 0.2,
-    window_mode: Literal['auto', 'density', 'weak_peak', 'peak'] = 'auto',
-    density_quantile: float = 60.0,
-    evt_binsize: float = 1.0,
-    cumulative_mode: Literal['adaptive', 'fixed'] = 'adaptive',
-    block_snr_threshold: float = 3.0,
-    **kwargs,
-) -> dict:
-    """基于事件时间（photon events）直接运行 Bayesian Blocks 计算 T100/T90/T50。
-
-    输入限制
-    --------
-    - `lc_src` 仅支持：事件文件路径（.evt/.fits/.fit/.fts）或 EventDataBase/EventData。
-    - `background` 若提供，也必须是同类事件输入。
-
-    说明
-    ----
-    - Bayesian Blocks 直接使用源事件到达时刻（fitness='events'）。
-    - `cumulative_mode` 默认值是 `'adaptive'`（即不传该参数时走自适应累计）。
-    - `cumulative_mode='adaptive'`：在 T100 内使用 Bayesian block 边界做累计（推荐）。
-    - `cumulative_mode='fixed'`：使用 `evt_binsize` 等宽分段累计（兼容旧行为）。
-    - 统计误差的 Poisson MC 在默认 adaptive 路径下以 0.5 s 细时间 bin 进行采样。
-    - `block_snr_threshold` 默认 3.0，可按需求修改。
-    - `alpha` 优先使用显式参数；若未提供，尝试从事件元信息（BACKSCAL/区域面积）推断。
-    - 为兼容旧接口保留参数签名，其中 nmc/use_edge_bkg/timebins 等参数不使用。
-    """
-    # 兼容旧接口：保留参数但提示未使用。
-    _unused = {
-        'use_edge_bkg': use_edge_bkg,
-        'lbkg': lbkg,
-        'rbkg': rbkg,
-        'burst_tstart': burst_tstart,
-        'burst_tstop': burst_tstop,
-        'tpeak': tpeak,
-        'src_dist': src_dist,
-        'bkg_dist': bkg_dist,
-        'timebins': timebins,
-        'small_bin_threshold': small_bin_threshold,
-        'weak_peak_bins': weak_peak_bins,
-        'weak_peak_weight': weak_peak_weight,
-        'window_mode': window_mode,
-        'density_quantile': density_quantile,
-    }
-    if kwargs:
-        unknown = ", ".join(sorted(str(k) for k in kwargs.keys()))
-        raise TypeError(f"txx() got unexpected keyword argument(s): {unknown}")
-    if any(v is not None for k, v in _unused.items() if k in ('lbkg', 'rbkg', 'burst_tstart', 'burst_tstop', 'tpeak', 'timebins')) or use_edge_bkg:
-        warnings.warn(
-            "txx 新实现使用 A&A 5.4 方法，部分旧参数当前被忽略。",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-
-    if isinstance(percent, (float, int)):
-        user_percent_arr = np.asarray([float(percent)], dtype=float)
-    else:
-        user_percent_arr = np.asarray(list(percent), dtype=float)
-    if np.any((user_percent_arr <= 0.0) | (user_percent_arr >= 1.0)):
-        raise ValueError("percent 必须在 (0, 1) 内")
-    core_percent_arr = np.unique(np.concatenate([user_percent_arr, np.asarray([0.5, 0.9], dtype=float)]))
-
-    src_evt, bkg_evt, alpha = _txx54_convert_event_inputs(
-        lc_src,
-        background,
-        alpha,
-        evt_binsize=float(evt_binsize),
-    )
-
-    def _evt_bounds(evt: dict) -> tuple[float, float]:
-        t = np.asarray(evt['time'], dtype=float)
-        t = t[np.isfinite(t)]
-        if t.size == 0:
-            raise ValueError(f"事件输入为空: {evt.get('path', '<unknown>')}")
-
-        gs = np.asarray(evt.get('gti_start', np.asarray([], dtype=float)), dtype=float).reshape(-1)
-        ge = np.asarray(evt.get('gti_stop', np.asarray([], dtype=float)), dtype=float).reshape(-1)
-        good = np.isfinite(gs) & np.isfinite(ge) & (ge > gs)
-        if np.any(good):
-            return float(np.min(gs[good])), float(np.max(ge[good]))
-        return float(np.min(t)), float(np.max(t))
-
-    src_bounds = _evt_bounds(src_evt)
-    if bkg_evt is not None:
-        bkg_bounds = _evt_bounds(bkg_evt)
-        # 源/背景分析统一约束到公共时间范围，避免窗口不一致带来的统计偏差。
-        t0 = max(src_bounds[0], bkg_bounds[0])
-        t1 = min(src_bounds[1], bkg_bounds[1])
-        if t1 <= t0:
-            raise ValueError(
-                f"源/背景事件 GTI 无交集: src={src_evt.get('path')}, bkg={bkg_evt.get('path')}"
-            )
-        if (
-            (not np.isclose(src_bounds[0], bkg_bounds[0], rtol=0.0, atol=1e-9))
-            or (not np.isclose(src_bounds[1], bkg_bounds[1], rtol=0.0, atol=1e-9))
-        ):
-            warnings.warn(
-                (
-                    "txx: 源/背景时间窗不完全一致，"
-                    f"将使用公共时间范围 [{t0:.6f}, {t1:.6f}] 进行约束。"
-                ),
-                RuntimeWarning,
-                stacklevel=2,
-            )
-    else:
-        t0, t1 = src_bounds
-
-    src_times_abs = np.asarray(src_evt['time'], dtype=float)
-    src_times_abs = src_times_abs[np.isfinite(src_times_abs)]
-    src_use = src_times_abs[(src_times_abs >= t0) & (src_times_abs <= t1)]
-    if src_use.size == 0:
-        raise ValueError("源事件在分析时间窗内为空，无法计算 Txx")
-
-    if bkg_evt is not None:
-        bkg_times_abs = np.asarray(bkg_evt['time'], dtype=float)
-        bkg_times_abs = bkg_times_abs[np.isfinite(bkg_times_abs)]
-        bkg_use = bkg_times_abs[(bkg_times_abs >= t0) & (bkg_times_abs <= t1)]
-        alpha_val = _txx54_positive_scalar(alpha)
-        if alpha_val is None:
-            raise ValueError(
-                "txx: 提供 background 时必须显式传入 alpha，"
-                "或保证源/背景事件包含可推断的 BACKSCAL/区域面积信息。"
-            )
-        alpha = float(alpha_val)
-    else:
-        bkg_use = np.asarray([], dtype=float)
-        alpha = 0.0
-
-    duration = float(t1 - t0)
-    if duration <= 0.0:
-        raise ValueError(f"无效分析时长: t0={t0}, t1={t1}")
-
-    src_rel = np.sort(src_use - t0)
-    try:
-        bb_edges_rel = np.asarray(
-            bayesian_blocks(src_rel, fitness='events', p0=float(p0)),
-            dtype=float,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            "Bayesian Blocks 在事件时间轴运行失败，请检查事件输入或 p0 参数。"
-        ) from exc
-
-    bb_edges_rel = bb_edges_rel[np.isfinite(bb_edges_rel)]
-    if bb_edges_rel.size == 0:
-        bb_edges_rel = np.asarray([0.0, duration], dtype=float)
-    bb_edges_rel = np.clip(np.unique(bb_edges_rel), 0.0, duration)
-    if bb_edges_rel.size < 2:
-        bb_edges_rel = np.asarray([0.0, duration], dtype=float)
-    else:
-        # 确保边界覆盖完整分析窗，后续 T100 与累计分段不丢端点。
-        if bb_edges_rel[0] > 0.0:
-            bb_edges_rel = np.concatenate(([0.0], bb_edges_rel))
-        if bb_edges_rel[-1] < duration:
-            bb_edges_rel = np.concatenate((bb_edges_rel, [duration]))
-
-    bb_edges_time = bb_edges_rel + t0
-    bb_edges_tprime = bb_edges_rel.copy()
-
-    src_sorted = np.sort(src_use)
-    bkg_sorted = np.sort(bkg_use)
-
-    def _count_in(sorted_arr: np.ndarray, a: float, b: float) -> float:
-        if sorted_arr.size == 0 or b <= a:
-            return 0.0
-        i0 = int(np.searchsorted(sorted_arr, a, side='left'))
-        i1 = int(np.searchsorted(sorted_arr, b, side='left'))
-        return float(max(i1 - i0, 0))
-
-    block_net = []
-    block_snr = []
-    block_bkg_model = []
-    for a, b in zip(bb_edges_time[:-1], bb_edges_time[1:]):
-        # 每个 BB 块独立计算源计数、背景模型与显著性。
-        s_blk = _count_in(src_sorted, float(a), float(b))
-        if bkg_evt is not None:
-            b_raw_blk = _count_in(bkg_sorted, float(a), float(b))
-            b_blk = float(alpha) * b_raw_blk
-        else:
-            b_raw_blk = 0.0
-            b_blk = 0.0
-
-        net_blk = s_blk - b_blk
-        var_blk = max(s_blk + b_blk, 1e-12)
-        block_net.append(net_blk)
-        block_bkg_model.append(b_blk)
-
-        if bkg_evt is not None and alpha > 0.0:
-            s_pos = max(float(s_blk), 0.0)
-            b_pos = max(float(b_raw_blk), 0.0)
-            try:
-                # Keep the exact Li & Ma boundary branches, including N_off=0.
-                snr_blk = li_ma_snr(float(s_pos), float(b_pos), float(alpha))
-            except Exception:
-                snr_blk = float(net_blk / np.sqrt(var_blk))
-            if not np.isfinite(snr_blk):
-                snr_blk = float(net_blk / np.sqrt(var_blk))
-            if net_blk < 0.0 and np.isfinite(snr_blk):
-                snr_blk = -abs(snr_blk)
-        else:
-            snr_blk = float(net_blk / np.sqrt(var_blk))
-        block_snr.append(snr_blk)
-
-    block_snr_arr = np.asarray(block_snr, dtype=float)
-    block_bkg_model_arr = np.asarray(block_bkg_model, dtype=float)
-
-    snr_thr = float(block_snr_threshold)
-    if (not np.isfinite(snr_thr)) or snr_thr <= 0.0:
-        raise ValueError(
-            f"block_snr_threshold 必须为正且有限，当前={block_snr_threshold}"
-        )
-    snr_mask = block_snr_arr > snr_thr
-    if not np.any(snr_mask):
-        raise RuntimeError(
-            f"没有任何贝叶斯块的 SNR > {snr_thr:.3g}，无法按阈值定义 T0/T100。"
-        )
-
-    # T100 由第一个/最后一个高显著块外边界定义。
-    i_first = int(np.where(snr_mask)[0][0])
-    i_last = int(np.where(snr_mask)[0][-1])
-    t100_start = float(bb_edges_time[i_first])
-    t100_stop = float(bb_edges_time[i_last + 1])
-
-    mode = str(cumulative_mode).strip().lower()
-    if mode not in {'adaptive', 'fixed'}:
-        raise ValueError(f"cumulative_mode 必须是 'adaptive' 或 'fixed'，当前={cumulative_mode!r}")
-
-    binsize = float(evt_binsize)
-    if (not np.isfinite(binsize)) or binsize <= 0.0:
-        raise ValueError(f"evt_binsize 必须为正且有限，当前={evt_binsize}")
-
-    if mode == 'adaptive':
-        # 自适应模式：直接使用 T100 内 BB 边界累计。
-        seg_edges = np.asarray(bb_edges_time[i_first:i_last + 2], dtype=float)
-        seg_edges = seg_edges[np.isfinite(seg_edges)]
-        if seg_edges.size < 2:
-            seg_edges = np.asarray([t100_start, t100_stop], dtype=float)
-        else:
-            seg_edges = np.clip(seg_edges, t100_start, t100_stop)
-            seg_edges = np.unique(seg_edges)
-            if seg_edges.size < 2:
-                seg_edges = np.asarray([t100_start, t100_stop], dtype=float)
-            else:
-                if seg_edges[0] > t100_start:
-                    seg_edges = np.concatenate(([t100_start], seg_edges))
-                if seg_edges[-1] < t100_stop:
-                    seg_edges = np.concatenate((seg_edges, [t100_stop]))
-    else:
-        # 固定模式：按等宽时间步长累计。
-        seg_edges = np.arange(t100_start, t100_stop + binsize, binsize, dtype=float)
-        if seg_edges.size < 2:
-            seg_edges = np.asarray([t100_start, t100_stop], dtype=float)
-        elif seg_edges[-1] < t100_stop:
-            seg_edges = np.append(seg_edges, t100_stop)
-
-    if seg_edges.size < 2:
-        seg_edges = np.asarray([t100_start, t100_stop], dtype=float)
-
-    src_hist, _ = np.histogram(src_use, bins=seg_edges)
-    if bkg_evt is not None and alpha > 0.0:
-        bkg_hist, _ = np.histogram(bkg_use, bins=seg_edges)
-        bkg_model_counts = float(alpha) * bkg_hist.astype(float)
-    else:
-        bkg_model_counts = np.zeros_like(src_hist, dtype=float)
-
-    seg_left_arr = np.asarray(seg_edges[:-1], dtype=float)
-    seg_right_arr = np.asarray(seg_edges[1:], dtype=float)
-    seg_net_pos_arr = np.maximum(src_hist.astype(float) - bkg_model_counts, 0.0)
-
-    def _duration_vectors(
-        seg_left_local: np.ndarray,
-        seg_right_local: np.ndarray,
-        seg_net_local: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        n_local = core_percent_arr.size
-        dur_local = np.full(n_local, np.nan, dtype=float)
-        t1_local = np.full(n_local, np.nan, dtype=float)
-        t2_local = np.full(n_local, np.nan, dtype=float)
-
-        total_local = float(np.sum(seg_net_local)) if seg_net_local.size > 0 else 0.0
-        if total_local <= 0.0 or seg_net_local.size == 0:
-            return dur_local, t1_local, t2_local
-
-        for i_p, p in enumerate(core_percent_arr):
-            # A&A 5.4: 以累计净计数的双侧分位定义 Txx 及其左右边界。
-            low = 0.5 * (1.0 - float(p)) * total_local
-            high = 0.5 * (1.0 + float(p)) * total_local
-            t1v = _txx54_cross_target(low, seg_left_local, seg_right_local, seg_net_local)
-            t2v = _txx54_cross_target(high, seg_left_local, seg_right_local, seg_net_local)
-            t1_local[i_p] = float(t1v)
-            t2_local[i_p] = float(t2v)
-            dur_local[i_p] = float(t2v - t1v)
-
-        return dur_local, t1_local, t2_local
-
-    def _duration_vectors_from_edges(seg_edges_local: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        src_local, _ = np.histogram(src_use, bins=seg_edges_local)
-        if bkg_evt is not None and alpha > 0.0:
-            bkg_local_raw, _ = np.histogram(bkg_use, bins=seg_edges_local)
-            bkg_local = float(alpha) * bkg_local_raw.astype(float)
-        else:
-            bkg_local = np.zeros_like(src_local, dtype=float)
-
-        seg_left_local = np.asarray(seg_edges_local[:-1], dtype=float)
-        seg_right_local = np.asarray(seg_edges_local[1:], dtype=float)
-        seg_net_local = np.maximum(src_local.astype(float) - bkg_local, 0.0)
-        return _duration_vectors(seg_left_local, seg_right_local, seg_net_local)
-
-    dur_all_arr, t1_all_arr, t2_all_arr = _duration_vectors(seg_left_arr, seg_right_arr, seg_net_pos_arr)
-
-    def _indices_for(perc_all: np.ndarray, perc_pick: np.ndarray) -> np.ndarray:
-        idx = []
-        for p in perc_pick:
-            hits = np.where(np.isclose(perc_all, p, rtol=0.0, atol=1e-12))[0]
-            if hits.size == 0:
-                raise RuntimeError(f"内部百分位映射失败: p={p}")
-            idx.append(int(hits[0]))
-        return np.asarray(idx, dtype=int)
-
-    idx_user = _indices_for(core_percent_arr, user_percent_arr)
-    idx50 = int(_indices_for(core_percent_arr, np.asarray([0.5], dtype=float))[0])
-    idx90 = int(_indices_for(core_percent_arr, np.asarray([0.9], dtype=float))[0])
-
-    txx_nom = dur_all_arr[idx_user]
-    txx1_nom = t1_all_arr[idx_user]
-    txx2_nom = t2_all_arr[idx_user]
-
-    t50_nom = float(dur_all_arr[idx50])
-    t50_start_nom = float(t1_all_arr[idx50])
-    t50_stop_nom = float(t2_all_arr[idx50])
-    t90_nom = float(dur_all_arr[idx90])
-    t90_start_nom = float(t1_all_arr[idx90])
-    t90_stop_nom = float(t2_all_arr[idx90])
-    t100_nom = float(t100_stop - t100_start)
-
-    seg_width = np.maximum(seg_right_arr - seg_left_arr, 1e-12)
-    background_rate = bkg_model_counts / seg_width if seg_width.size > 0 else np.asarray([], dtype=float)
-
-    n_core = int(core_percent_arr.size)
-    err_shape = (n_core, 2)
-    dur_err_stat_all = np.full(err_shape, np.nan, dtype=float)
-    t1_err_stat_all = np.full(err_shape, np.nan, dtype=float)
-    t2_err_stat_all = np.full(err_shape, np.nan, dtype=float)
-    dur_err_sys_all = np.full(err_shape, np.nan, dtype=float)
-    t1_err_sys_all = np.full(err_shape, np.nan, dtype=float)
-    t2_err_sys_all = np.full(err_shape, np.nan, dtype=float)
-
-    nmc_eff = int(max(float(nmc), 0.0))
-    if nmc_eff >= 20:
-        # 统计误差：在 T100 内细分网格做 Poisson MC（adaptive 默认 0.5 s 细 bin），并重新计算分位时标。
-        span = max(float(t100_stop - t100_start), 1e-6)
-        dt_floor = max(span / 512.0, 0.1)
-        dt_cap = max(float(evt_binsize), 0.25)
-        if mode == 'adaptive':
-            dt_ref = min(max(dt_floor, min(float(evt_binsize), 1.0) / 2.0), dt_cap)
-        else:
-            dt_ref = min(max(dt_floor, float(evt_binsize) / 2.0), dt_cap)
-        if (not np.isfinite(dt_ref)) or dt_ref <= 0.0:
-            dt_ref = max(span / 256.0, 0.25)
-
-        n_ref = int(np.clip(np.ceil(span / dt_ref), 20, 1200))
-        mc_edges = np.linspace(float(t100_start), float(t100_stop), n_ref + 1, dtype=float)
-        src_ref_hist, _ = np.histogram(src_use, bins=mc_edges)
-        if bkg_evt is not None and alpha > 0.0:
-            bkg_ref_raw, _ = np.histogram(bkg_use, bins=mc_edges)
-            bkg_ref_raw = bkg_ref_raw.astype(float)
-        else:
-            bkg_ref_raw = np.zeros_like(src_ref_hist, dtype=float)
-
-        rng_seed = None if seed is None else int(seed)
-        rng = np.random.default_rng(rng_seed)
-
-        dur_samples: list[np.ndarray] = []
-        t1_samples: list[np.ndarray] = []
-        t2_samples: list[np.ndarray] = []
-        src_ref_nonneg = np.maximum(src_ref_hist.astype(float), 0.0)
-        bkg_ref_nonneg = np.maximum(bkg_ref_raw, 0.0)
-
-        for _ in range(nmc_eff):
-            src_draw = rng.poisson(src_ref_nonneg).astype(float)
-            if bkg_evt is not None and alpha > 0.0:
-                # 背景按“先对原始背景抽样，再乘 alpha”处理。
-                bkg_draw_raw = rng.poisson(bkg_ref_nonneg).astype(float)
-                bkg_draw = float(alpha) * bkg_draw_raw
-            else:
-                bkg_draw = np.zeros_like(src_draw, dtype=float)
-
-            seg_left_mc = mc_edges[:-1]
-            seg_right_mc = mc_edges[1:]
-            seg_net_mc = np.maximum(src_draw - bkg_draw, 0.0)
-            d_mc, t1_mc, t2_mc = _duration_vectors(seg_left_mc, seg_right_mc, seg_net_mc)
-            if np.any(np.isfinite(d_mc)):
-                dur_samples.append(d_mc)
-                t1_samples.append(t1_mc)
-                t2_samples.append(t2_mc)
-
-        if len(dur_samples) >= 20:
-            dur_samples_arr = np.asarray(dur_samples, dtype=float)
-            t1_samples_arr = np.asarray(t1_samples, dtype=float)
-            t2_samples_arr = np.asarray(t2_samples, dtype=float)
-
-            for j in range(n_core):
-                em, ep = _txx54_asymm_err_from_samples(dur_samples_arr[:, j], dur_all_arr[j])
-                dur_err_stat_all[j, 0] = em
-                dur_err_stat_all[j, 1] = ep
-
-                em, ep = _txx54_asymm_err_from_samples(t1_samples_arr[:, j], t1_all_arr[j])
-                t1_err_stat_all[j, 0] = em
-                t1_err_stat_all[j, 1] = ep
-
-                em, ep = _txx54_asymm_err_from_samples(t2_samples_arr[:, j], t2_all_arr[j])
-                t2_err_stat_all[j, 0] = em
-                t2_err_stat_all[j, 1] = ep
-
-    variant_edges: list[np.ndarray] = []
-    _seen_edge_keys: set[tuple[float, ...]] = set()
-
-    def _add_variant_edges(edges_in: np.ndarray) -> None:
-        e = np.asarray(edges_in, dtype=float)
-        e = e[np.isfinite(e)]
-        if e.size < 2:
-            return
-        e = np.clip(np.unique(e), t100_start, t100_stop)
-        if e.size < 2:
-            return
-        if e[0] > t100_start:
-            e = np.concatenate(([t100_start], e))
-        if e[-1] < t100_stop:
-            e = np.concatenate((e, [t100_stop]))
-        e = np.clip(np.unique(e), t100_start, t100_stop)
-        if e.size < 2:
-            return
-        key = tuple(float(v) for v in np.round(np.asarray(e, dtype=float), 6))
-        if key in _seen_edge_keys:
-            return
-        _seen_edge_keys.add(key)
-        variant_edges.append(e)
-
-    _add_variant_edges(np.asarray(seg_edges, dtype=float))
-    _add_variant_edges(np.asarray(bb_edges_time[i_first:i_last + 2], dtype=float))
-    for scale in (0.5, 1.0, 2.0):
-        # 系统误差：使用多种边界方案评估分段敏感性。
-        bs_i = max(0.25, float(binsize) * float(scale))
-        e_i = np.arange(t100_start, t100_stop + bs_i, bs_i, dtype=float)
-        if e_i.size < 2:
-            e_i = np.asarray([t100_start, t100_stop], dtype=float)
-        elif e_i[-1] < t100_stop:
-            e_i = np.append(e_i, t100_stop)
-        _add_variant_edges(e_i)
-
-    var_dur: list[np.ndarray] = []
-    var_t1: list[np.ndarray] = []
-    var_t2: list[np.ndarray] = []
-    for e_var in variant_edges:
-        d_var, t1_var, t2_var = _duration_vectors_from_edges(e_var)
-        if np.any(np.isfinite(d_var)):
-            var_dur.append(d_var)
-            var_t1.append(t1_var)
-            var_t2.append(t2_var)
-
-    if len(var_dur) >= 2:
-        var_dur_arr = np.asarray(var_dur, dtype=float)
-        var_t1_arr = np.asarray(var_t1, dtype=float)
-        var_t2_arr = np.asarray(var_t2, dtype=float)
-
-        for j in range(n_core):
-            sig = _txx54_robust_sigma(var_dur_arr[:, j])
-            if np.isfinite(sig):
-                dur_err_sys_all[j, :] = float(sig)
-
-            sig = _txx54_robust_sigma(var_t1_arr[:, j])
-            if np.isfinite(sig):
-                t1_err_sys_all[j, :] = float(sig)
-
-            sig = _txx54_robust_sigma(var_t2_arr[:, j])
-            if np.isfinite(sig):
-                t2_err_sys_all[j, :] = float(sig)
-
-    def _combine_err(stat_arr: np.ndarray, sys_arr: np.ndarray) -> np.ndarray:
-        # 总误差按上下误差分量分别做二范数合成。
-        out = np.full_like(stat_arr, np.nan, dtype=float)
-        for col in range(stat_arr.shape[1]):
-            s = stat_arr[:, col]
-            y = sys_arr[:, col]
-
-            both = np.isfinite(s) & np.isfinite(y)
-            out[both, col] = np.sqrt(np.maximum(s[both], 0.0) ** 2 + np.maximum(y[both], 0.0) ** 2)
-
-            only_s = np.isfinite(s) & (~np.isfinite(y))
-            out[only_s, col] = np.maximum(s[only_s], 0.0)
-
-            only_y = (~np.isfinite(s)) & np.isfinite(y)
-            out[only_y, col] = np.maximum(y[only_y], 0.0)
-        return out
-
-    dur_err_tot_all = _combine_err(dur_err_stat_all, dur_err_sys_all)
-    t1_err_tot_all = _combine_err(t1_err_stat_all, t1_err_sys_all)
-    t2_err_tot_all = _combine_err(t2_err_stat_all, t2_err_sys_all)
-
-    txx_err_stat_user = dur_err_stat_all[idx_user]
-    txx1_err_stat_user = t1_err_stat_all[idx_user]
-    txx2_err_stat_user = t2_err_stat_all[idx_user]
-    txx_err_sys_user = dur_err_sys_all[idx_user]
-    txx1_err_sys_user = t1_err_sys_all[idx_user]
-    txx2_err_sys_user = t2_err_sys_all[idx_user]
-    txx_err_tot_user = dur_err_tot_all[idx_user]
-    txx1_err_tot_user = t1_err_tot_all[idx_user]
-    txx2_err_tot_user = t2_err_tot_all[idx_user]
-
-    t50_err_stat = dur_err_stat_all[idx50]
-    t50_start_err_stat = t1_err_stat_all[idx50]
-    t50_stop_err_stat = t2_err_stat_all[idx50]
-    t50_err_sys = dur_err_sys_all[idx50]
-    t50_start_err_sys = t1_err_sys_all[idx50]
-    t50_stop_err_sys = t2_err_sys_all[idx50]
-    t50_err_tot = dur_err_tot_all[idx50]
-    t50_start_err_tot = t1_err_tot_all[idx50]
-    t50_stop_err_tot = t2_err_tot_all[idx50]
-
-    t90_err_stat = dur_err_stat_all[idx90]
-    t90_start_err_stat = t1_err_stat_all[idx90]
-    t90_stop_err_stat = t2_err_stat_all[idx90]
-    t90_err_sys = dur_err_sys_all[idx90]
-    t90_start_err_sys = t1_err_sys_all[idx90]
-    t90_stop_err_sys = t2_err_sys_all[idx90]
-    t90_err_tot = dur_err_tot_all[idx90]
-    t90_start_err_tot = t1_err_tot_all[idx90]
-    t90_stop_err_tot = t2_err_tot_all[idx90]
-
-    nan_pair = np.asarray([np.nan, np.nan], dtype=float)
-
-    return {
-        "method": "aanda_2021_sec5_4",
-        "percent": user_percent_arr,
-        "txx": txx_nom,
-        "txx_err": txx_err_tot_user,
-        "txx_err_stat": txx_err_stat_user,
-        "txx_err_sys": txx_err_sys_user,
-        "txx1": txx1_nom,
-        "txx1_err": txx1_err_tot_user,
-        "txx1_err_stat": txx1_err_stat_user,
-        "txx1_err_sys": txx1_err_sys_user,
-        "txx2": txx2_nom,
-        "txx2_err": txx2_err_tot_user,
-        "txx2_err_stat": txx2_err_stat_user,
-        "txx2_err_sys": txx2_err_sys_user,
-
-        "t50": t50_nom,
-        "t50_err": t50_err_tot,
-        "t50_err_stat": t50_err_stat,
-        "t50_err_sys": t50_err_sys,
-        "t50_tstart": t50_start_nom,
-        "t50_tstart_err": t50_start_err_tot,
-        "t50_tstart_err_stat": t50_start_err_stat,
-        "t50_tstart_err_sys": t50_start_err_sys,
-        "t50_tstop": t50_stop_nom,
-        "t50_tstop_err": t50_stop_err_tot,
-        "t50_tstop_err_stat": t50_stop_err_stat,
-        "t50_tstop_err_sys": t50_stop_err_sys,
-
-        "t90": t90_nom,
-        "t90_err": t90_err_tot,
-        "t90_err_stat": t90_err_stat,
-        "t90_err_sys": t90_err_sys,
-        "t90_tstart": t90_start_nom,
-        "t90_tstart_err": t90_start_err_tot,
-        "t90_tstart_err_stat": t90_start_err_stat,
-        "t90_tstart_err_sys": t90_start_err_sys,
-        "t90_tstop": t90_stop_nom,
-        "t90_tstop_err": t90_stop_err_tot,
-        "t90_tstop_err_stat": t90_stop_err_stat,
-        "t90_tstop_err_sys": t90_stop_err_sys,
-
-        "t100": t100_nom,
-        "t100_err": nan_pair,
-        "t100_tstart": t100_start,
-        "t100_tstop": t100_stop,
-        "burst_tstart": t100_start,
-        "burst_tstop": t100_stop,
-
-        "bb_edges_tprime": bb_edges_tprime,
-        "bb_edges_time": bb_edges_time,
-        "bb_block_snr": block_snr_arr,
-        "bb_snr_threshold": snr_thr,
-        "cumulative_mode": mode,
-        "cumulative_edges_time": seg_edges,
-        "background_rate": background_rate,
-        "background_model_counts": bkg_model_counts,
-        "bb_block_bkg_model_counts": block_bkg_model_arr,
-    }
+# 时标计算已拆分至 .timescale（txx 与 txx_iterbkg 两种方法学）；
+# 此处重导出保持 `jinwu.core.ops.txx` 及其内部助手的既有导入路径不变。
+from .timescale import (  # noqa: E402,F401
+    txx,
+    txx_iterbkg,
+    _txx54_is_lightcurve_like,
+    _txx54_array_to_lc,
+    _txx54_to_counts,
+    _txx54_project_counts_to_src_grid,
+    _txx54_overlap_sum,
+    _txx54_contiguous_groups,
+    _txx54_cross_target,
+    _txx54_asymm_err_from_samples,
+    _txx54_robust_sigma,
+    _txx54_is_event_file_input,
+    _txx54_is_event_data_input,
+    _txx54_read_evt_file,
+    _txx54_read_event_object,
+    _txx54_event_input_to_dict,
+    _txx54_positive_scalar,
+    _txx54_bin_evt_to_array,
+    _txx54_convert_event_inputs,
+)
 
 # ==================== HEASoft/FTOOLS process operations ====================
 # These helpers are intentionally mission-agnostic. They prepare a safe

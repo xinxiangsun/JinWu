@@ -336,6 +336,38 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
     return regions[0]
 
 
+def _opt_int(value: Any) -> Optional[int]:
+    """宽容的整型关键字解析（空串/非法值 → None）。"""
+    try:
+        if value is None or str(value).strip() == '':
+            return None
+        return int(float(value))
+    except Exception:
+        return None
+
+
+def _infer_rmf_tlmin(header: Mapping[str, Any], f_chan: Optional[np.ndarray]) -> Optional[int]:
+    """F_CHAN 的 TLMIN（0 基/1 基约定）：优先读文件声明的 TLMINn（n>1），
+    否则从 F_CHAN 列最小值推断（对齐 HEASoft 6.37 heasp::rmf 行为）。"""
+    for k, v in dict(header).items():
+        ku = str(k).upper()
+        if ku.startswith('TLMIN') and ku != 'TLMIN1':
+            got = _opt_int(v)
+            if got is not None:
+                return got
+    if f_chan is not None:
+        try:
+            if isinstance(f_chan, np.ndarray) and f_chan.dtype == object:
+                vals = np.concatenate([np.atleast_1d(np.asarray(r, dtype=int)) for r in f_chan if np.size(r) > 0])
+            else:
+                vals = np.atleast_1d(np.asarray(f_chan, dtype=int))
+            if vals.size > 0:
+                return int(vals.min())
+        except Exception:
+            pass
+    return None
+
+
 class OgipArfReader:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -364,6 +396,7 @@ class OgipArfReader:
             header=header,
             meta=meta,
             headers_dump=headers_dump,
+            hduvers=(str(header.get("HDUVERS")).strip() or None) if header.get("HDUVERS") is not None else None,
         )
         return self._data
 
@@ -409,6 +442,14 @@ class OgipRmfReader:
                 e_max = np.asarray(de["E_MAX"], float)
 
         columns = matrix_columns + tuple(name for name in ebounds_columns if name not in matrix_columns)
+        # 通道约定键：TLMIN（F_CHAN 索引基准）与 DETCHANS，供一致性校验与回写使用。
+        tlmin = _infer_rmf_tlmin(header, f_chan)
+        det_chans = _opt_int(header.get("DETCHANS"))
+        if det_chans is None:
+            if channel is not None:
+                det_chans = int(np.asarray(channel).size)
+            elif e_min is not None:
+                det_chans = int(np.asarray(e_min).size)
         self._data = RmfData(
             path=self.path,
             energ_lo=energ_lo,
@@ -424,6 +465,9 @@ class OgipRmfReader:
             header=header,
             meta=meta,
             headers_dump=headers_dump,
+            tlmin=tlmin,
+            det_chans=det_chans,
+            hduvers=(str(header.get("HDUVERS")).strip() or None) if header.get("HDUVERS") is not None else None,
         )
         return self._data
 
@@ -451,6 +495,17 @@ class OgipPhaReader:
             counts = np.asarray(ds["COUNTS"], float) if "COUNTS" in spectrum_columns else None
             stat_err = np.asarray(ds["STAT_ERR"], float) if "STAT_ERR" in spectrum_columns else None
             header_map = cast(Any, hs.header)
+            # 通道编号三件套：优先读文件声明，缺失时由通道数组回退。
+            pha_tlmin = _opt_int(header_map.get("TLMIN1"))
+            pha_tlmax = _opt_int(header_map.get("TLMAX1"))
+            pha_det_chans = _opt_int(header_map.get("DETCHANS"))
+            if channels.size > 0:
+                if pha_tlmin is None:
+                    pha_tlmin = int(channels[0])
+                if pha_tlmax is None:
+                    pha_tlmax = int(channels[-1])
+                if pha_det_chans is None:
+                    pha_det_chans = int(channels.size)
             exposure = float(header_map.get("EXPOSURE", header_map.get("EXPTIME", np.nan)))
             if counts is None:
                 if rate is None:
@@ -518,6 +573,9 @@ class OgipPhaReader:
             header=header,
             meta=meta,
             headers_dump=headers_dump,
+            tlmin=pha_tlmin,
+            tlmax=pha_tlmax,
+            det_chans=pha_det_chans,
         )
         return self._data
 
@@ -974,6 +1032,16 @@ class PhaWriter:
         hdr['HDUCLAS1'] = 'SPECTRUM'
         hdr['CHANTYPE'] = str(getattr(pha.header, 'get', lambda *_: None)('CHANTYPE') or 'PI') if pha.header is not None else 'PI'
 
+        # 通道编号三件套（HEASoft 6.37 heasp::pha 写入约定：总是写全）。
+        # 优先用读入时解析的结构化字段；否则以本文件实际通道数组为准。
+        if channels.size > 0:
+            _tlmin1 = getattr(pha, 'tlmin', None)
+            _tlmax1 = getattr(pha, 'tlmax', None)
+            _detch = getattr(pha, 'det_chans', None)
+            hdr['TLMIN1'] = int(_tlmin1 if _tlmin1 is not None else channels[0])
+            hdr['TLMAX1'] = int(_tlmax1 if _tlmax1 is not None else channels[-1])
+            hdr['DETCHANS'] = int(_detch if _detch is not None else channels.size)
+
         if pha.meta is not None and getattr(pha.meta, 'telescop', None) is not None:
             hdr['TELESCOP'] = str(pha.meta.telescop)
         elif pha.header is not None and 'TELESCOP' in pha.header:
@@ -1057,6 +1125,7 @@ class ArfWriter:
         hdu.header['HDUCLASS'] = 'OGIP'
         hdu.header['HDUCLAS1'] = 'RESPONSE'
         hdu.header['HDUCLAS2'] = 'SPECRESP'
+        hdu.header['HDUVERS'] = str(getattr(arf, 'hduvers', None) or '1.1.0')
         if arf.header is not None:
             for key in ('TELESCOP', 'INSTRUME', 'DETNAM', 'FILTER'):
                 if key in arf.header:
@@ -1110,6 +1179,66 @@ class RmfWriter:
         hdu_mat.header['HDUCLASS'] = 'OGIP'
         hdu_mat.header['HDUCLAS1'] = 'RESPONSE'
         hdu_mat.header['HDUCLAS2'] = 'RSP_MATRIX'
+
+        # 响应矩阵统计与通道约定键（对齐 HEASoft 6.37 heasp::rmf 写入约定），
+        # 供下游工具的 F_CHAN+N_CHAN vs TLMIN+DETCHANS 一致性校验使用。
+        n_det = getattr(rmf, 'det_chans', None)
+        if n_det is None:
+            if rmf.e_min is not None:
+                n_det = int(np.asarray(rmf.e_min).size)
+            elif rmf.channel is not None:
+                n_det = int(np.asarray(rmf.channel).size)
+        if n_det is not None:
+            hdu_mat.header['DETCHANS'] = int(n_det)
+        if rmf.n_grp is not None:
+            hdu_mat.header['NUMGRP'] = int(np.sum(np.asarray(rmf.n_grp, dtype=int)))
+        try:
+            mat = rmf.matrix
+            if isinstance(mat, np.ndarray) and mat.dtype == object:
+                n_elt = int(sum(int(np.size(row)) for row in mat))
+            else:
+                n_elt = int(np.size(mat))
+            hdu_mat.header['NUMELT'] = n_elt
+        except Exception:
+            pass
+        # F_CHAN 的 TLMIN（0 基/1 基约定）：优先用读入时解析的结构化字段，
+        # 其次沿用源文件声明，否则从 F_CHAN 列最小值推断。
+        tlmin4 = getattr(rmf, 'tlmin', None)
+        if tlmin4 is None and rmf.header is not None:
+            for k, v in dict(rmf.header).items():
+                ku = str(k).upper()
+                if ku.startswith('TLMIN') and ku != 'TLMIN1':
+                    try:
+                        tlmin4 = int(v)
+                        break
+                    except Exception:
+                        pass
+        if tlmin4 is None and rmf.f_chan is not None:
+            try:
+                fc = rmf.f_chan
+                if isinstance(fc, np.ndarray) and fc.dtype == object:
+                    vals = np.concatenate([np.atleast_1d(np.asarray(r, dtype=int)) for r in fc if np.size(r) > 0])
+                else:
+                    vals = np.atleast_1d(np.asarray(fc, dtype=int))
+                if vals.size > 0:
+                    tlmin4 = int(vals.min())
+            except Exception:
+                pass
+        if tlmin4 is not None:
+            hdu_mat.header['TLMIN4'] = tlmin4
+
+        # 源 header 透传（与 PhaWriter 同策略；已写入的键不被覆盖）
+        if rmf.header is not None:
+            for k, v in dict(rmf.header).items():
+                key = str(k).upper()
+                if key in hdu_mat.header:
+                    continue
+                if key in {'SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND'}:
+                    continue
+                try:
+                    hdu_mat.header[key] = v
+                except Exception:
+                    continue
 
         prih = fits.PrimaryHDU()
         hdul = fits.HDUList([prih, hdu_mat])

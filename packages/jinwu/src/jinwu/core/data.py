@@ -7,7 +7,7 @@ from typing import Any, Dict, Literal, Optional, Tuple, Union, cast
 import numpy as np
 
 from .base import ArfBase, RmfBase, PhaBase, LightcurveDataBase, EventDataBase, FitsHeaderDump
-from .ogip import OgipFitsBase, ValidationReport
+from .ogip import OgipFitsBase, OgipResponseBase, OgipSpectrumBase, ValidationReport
 
 
 def _normalize_gti(gti: Any) -> np.ndarray:
@@ -117,6 +117,20 @@ def _validate_time_series_like(obj: Any) -> ValidationReport:
         timeunit = (obj.header or {}).get('TIMEUNIT')
     if timeunit is not None and str(timeunit).upper() not in ('S', 'SEC', 'SECOND', 'SECONDS'):
         rpt.add('INFO', 'UNUSUAL_TIMEUNIT', f"TIMEUNIT='{timeunit}'")
+    # GTI 自洽：stop>=start 且区间有序（与 OgipTimeSeriesBase.validate 同规则）
+    g0 = getattr(obj, 'gti_start', None)
+    g1 = getattr(obj, 'gti_stop', None)
+    if g0 is not None and g1 is not None:
+        try:
+            a = np.asarray(g0, dtype=float)
+            b = np.asarray(g1, dtype=float)
+            if a.shape == b.shape and a.size > 0:
+                if bool(np.any(b < a)):
+                    rpt.add('ERROR', 'BAD_GTI', 'GTI contains interval(s) with STOP < START.')
+                if a.size > 1 and bool(np.any(np.diff(a) < 0)):
+                    rpt.add('WARN', 'UNSORTED_GTI', 'GTI START values are not sorted ascending.')
+        except Exception:
+            pass
     return rpt
 
 
@@ -124,11 +138,8 @@ class ArfData(ArfBase):
     """Concrete ARF data class with local behavior implementation."""
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
-        rpt = OgipFitsBase.validate(self)
-        hdr = self.header
-        for group in self.REQUIRED_KEYS_ANY:
-            if not any(g in hdr for g in group):
-                rpt.add('WARN', 'MISSING_KEY', f"Missing one of required keys {group} (CAL/GEN/92-002).")
+        # 委托基类（含 HDUCLAS/HDUVERS 检查），此处只补 ARF 专属列检查。
+        rpt = OgipResponseBase.validate(self)
         colset = {c.upper() for c in self.columns}
         for c in ["ENERG_LO", "ENERG_HI", "SPECRESP"]:
             if c not in colset:
@@ -224,11 +235,8 @@ class RmfData(RmfBase):
         raise ValueError("RMF does not contain recognizable sparse columns and MATRIX is not dense")
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
-        rpt = OgipFitsBase.validate(self)
-        hdr = self.header
-        for group in self.REQUIRED_KEYS_ANY:
-            if not any(g in hdr for g in group):
-                rpt.add('WARN', 'MISSING_KEY', f"Missing one of required keys {group} (CAL/GEN/92-002).")
+        # 委托基类（含 HDUCLAS/HDUVERS 检查），此处只补 RMF 专属列与通道检查。
+        rpt = OgipResponseBase.validate(self)
         colset = {c.upper() for c in self.columns}
         for c in ["ENERG_LO", "ENERG_HI", "MATRIX"]:
             if c not in colset:
@@ -237,6 +245,40 @@ class RmfData(RmfBase):
             for c in ["CHANNEL", "E_MIN", "E_MAX"]:
                 if c not in colset:
                     rpt.add('WARN', 'MISSING_COLUMN', f"EBOUNDS expected column {c}")
+        # 通道一致性（对齐 HEASoft 6.37 heasp::rmf 读入校验）：
+        # F_CHAN+N_CHAN 不得越过 TLMIN+DETCHANS 声明的通道范围；
+        # 0 基/1 基索引约定混乱的畸形文件在旧工具里会被静默读入。
+        if self.tlmin is None or self.det_chans is None:
+            rpt.add('WARN', 'MISSING_CHANNEL_CONVENTION',
+                    'TLMIN/DETCHANS unavailable; F_CHAN range consistency not checked.')
+        elif self.f_chan is not None and self.n_chan is not None:
+            try:
+                fc, nc = self.f_chan, self.n_chan
+                if isinstance(fc, np.ndarray) and fc.dtype == object:
+                    last_chans = [
+                        int((np.asarray(f, dtype=int) + np.asarray(n, dtype=int)).max())
+                        for f, n in zip(fc, nc) if np.size(f) > 0
+                    ]
+                    max_last = max(last_chans) if last_chans else None
+                else:
+                    f_arr = np.atleast_1d(np.asarray(fc, dtype=int))
+                    n_arr = np.atleast_1d(np.asarray(nc, dtype=int))
+                    max_last = int((f_arr + n_arr).max()) if f_arr.size else None
+                if max_last is not None:
+                    last_legal = int(self.tlmin) + int(self.det_chans)
+                    if max_last > last_legal:
+                        rpt.add('ERROR', 'INCONSISTENT_CHANNELS',
+                                f"F_CHAN+N_CHAN reaches channel {max_last} but "
+                                f"TLMIN={self.tlmin} with DETCHANS={self.det_chans} "
+                                f"allows only up to {last_legal} (possible 0/1-based indexing mismatch).")
+            except Exception:
+                pass
+        # DETCHANS 与 EBOUNDS 行数一致性（不一致多为拼装的畸形响应）
+        if self.det_chans is not None and self.e_min is not None:
+            if int(self.det_chans) != int(np.asarray(self.e_min).size):
+                rpt.add('WARN', 'DETCHANS_MISMATCH',
+                        f"DETCHANS={self.det_chans} differs from EBOUNDS rows "
+                        f"({int(np.asarray(self.e_min).size)}).")
         rpt.ok = len(rpt.errors()) == 0
         return rpt
 
@@ -318,23 +360,16 @@ class PhaData(PhaBase):
     """Concrete PHA data class with local behavior implementation."""
 
     def validate(self) -> ValidationReport:  # type: ignore[override]
-        rpt = OgipFitsBase.validate(self)
-        for k in self.REQUIRED_KEYS:
-            if not self._has_key_ci(k):
-                rpt.add('WARN', 'MISSING_KEY', f"Required key '{k}' not found (OGIP-92-007).")
-        colset = {c.upper() for c in self.columns}
-        for c in ['CHANNEL']:
-            if c not in colset:
-                rpt.add('ERROR', 'MISSING_COLUMN', f"PHA missing column {c}")
-        if not any(c in colset for c in ('COUNTS', 'RATE')):
-            rpt.add('ERROR', 'MISSING_COLUMN', "PHA missing one of COUNTS/RATE")
-        exp_val = self.get_keyword_ci('EXPOSURE', self.get_keyword_ci('EXPTIME', None))
-        if exp_val is not None:
-            try:
-                if float(exp_val) <= 0:
-                    rpt.add('WARN', 'BAD_EXPOSURE', f"Non-positive exposure value: {exp_val}")
-            except Exception:
-                rpt.add('WARN', 'BAD_EXPOSURE', f"Exposure not numeric: {exp_val}")
+        # 委托基类（含 REQUIRED_KEYS/列/EXPOSURE/HDUCLAS1/HDUVERS 检查），
+        # 此处只补通道三件套自洽检查。
+        rpt = OgipSpectrumBase.validate(self)
+        # 通道三件套自洽（heasp 约定）：TLMAX1 = TLMIN1 + DETCHANS - 1
+        if self.tlmin is not None and self.tlmax is not None and self.det_chans is not None:
+            expect = int(self.tlmin) + int(self.det_chans) - 1
+            if int(self.tlmax) != expect:
+                rpt.add('ERROR', 'INCONSISTENT_CHANNEL_KEYS',
+                        f"TLMAX1={self.tlmax} but TLMIN1={self.tlmin} + DETCHANS={self.det_chans} "
+                        f"implies {expect}.")
         rpt.ok = len(rpt.errors()) == 0
         return rpt
 
@@ -1470,13 +1505,30 @@ class timescale:
         *,
         background: Optional[EventLike] = None,
         alpha: Optional[float] = None,
+        method: Literal['aanda', 'iterbkg'] = 'aanda',
         **txx_kwargs: Any,
     ) -> Dict[str, Any]:
-        """调用 `ops.txx` 计算时标结果。"""
-        from .ops import txx as _txx
+        """计算时标结果。
+
+        参数
+        ----
+        method : 'aanda' | 'iterbkg'
+            - ``'aanda'``（默认）：`ops.txx`，事件级贝叶斯块 + A&A 5.4 分位累计；
+            - ``'iterbkg'``：`timescale_mod.txx_iterbkg`，迭代背景自洽的分箱贝叶斯块法
+              （burstcube 移植，支持 ``nsamples`` 全流水线重采样误差）。
+            两种方法返回结构兼容，可用同一分析器先后调用做方法学对比。
+        """
+        from . import timescale as timescale_mod
+
+        if method == 'aanda':
+            _txx = timescale_mod.txx
+        elif method == 'iterbkg':
+            _txx = timescale_mod.txx_iterbkg
+        else:
+            raise ValueError(f"timescale.compute: 未知方法 {method!r}，可选 'aanda'/'iterbkg'")
 
         bkg = self.background if background is None else background
-        if bkg is None:
+        if bkg is None and method == 'aanda':
             raise ValueError('timescale.compute 需要提供 background（EventData 或路径）')
 
         alpha_eff = self.alpha if alpha is None else alpha

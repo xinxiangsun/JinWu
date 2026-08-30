@@ -28,12 +28,16 @@ if TYPE_CHECKING:
 	from . import time as time
 	from . import ops as ops
 	from . import io as io
+	from . import timescale as timescale
 	from .base import (
 		EnergyBand, ChannelBand, RegionArea, RegionAreaSet,
 		HduHeader, FitsHeaderDump, OgipMeta,
 		ArfBase, RmfBase, PhaBase, LightcurveDataBase, EventDataBase,
 	)
-	from .data import ArfData, RmfData, PhaData, LightcurveData, EventData, timescale
+	from .ogip import (
+		ValidationReport, ValidationMessage, OgipFitsBase, check_response_compatibility,
+	)
+	from .data import ArfData, RmfData, PhaData, LightcurveData, EventData
 	from .datasets import LightcurveDataset, SpectrumDataset, JointDataset, netdata
 	from .io import (
 		OgipArfReader, OgipRmfReader, OgipPhaReader, OgipLightcurveReader, OgipEventReader,
@@ -54,7 +58,11 @@ except PackageNotFoundError:  # pragma: no cover - during editable installs
 	__version__ = "0.0.0"
 
 _MODULE_EXPORTS = {
-	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift',
+	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift', 'timescale',
+}
+
+_OGIP_EXPORTS = {
+	'ValidationReport', 'ValidationMessage', 'OgipFitsBase', 'check_response_compatibility',
 }
 
 _BASE_EXPORTS = {
@@ -90,7 +98,9 @@ _TIME_EXPORTS = {
 
 __all__ = [
 	# Submodules
-	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift',
+	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift', 'timescale',
+	# OGIP validation
+	'ValidationReport', 'ValidationMessage', 'OgipFitsBase', 'check_response_compatibility',
 	# Time primitives
 	'Time', 'TimeDelta',
 	# Data containers
@@ -121,6 +131,12 @@ def __getattr__(name: str):
 		mod = import_module(f'.{name}', __name__)
 		globals()[name] = mod
 		return mod
+
+	if name in _OGIP_EXPORTS:
+		mod = import_module('.ogip', __name__)
+		value = getattr(mod, name)
+		globals()[name] = value
+		return value
 
 	if name in _BASE_EXPORTS:
 		mod = import_module('.base', __name__)

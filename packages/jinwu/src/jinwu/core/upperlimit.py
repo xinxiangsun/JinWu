@@ -55,6 +55,7 @@ __all__ = [
     "ResponseAwareUpperLimitResult",
     "UpperLimitStrategy",
     "register_upper_limit_strategy",
+    "FastNormFit",
     "estimate_upper_limit",
     "profile_source_amplitude",
 ]
@@ -574,6 +575,201 @@ for _strategy in (
     ),
 ):
     register_upper_limit_strategy(_strategy)
+
+
+# ============================================================================
+# Poisson TS 归一化快速拟合（移植自 HEASoft burstcube 的 FastNormFit）
+# ============================================================================
+
+
+class FastNormFit:
+    """固定背景上的源归一化 Poisson 似然比（TS）快速拟合。
+
+    移植自 HEASoft 6.37 ``burstcube/lib/fast_norm_fit.py``（纯 numpy，无 GDT 依赖），
+    相对原版做了两点改进：全面向量化（原版逐道 Python 循环）；欠涨分支的 TS
+    按 Taylor 展开取正确符号（原实现符号为负）。
+
+    似然比定义为（对全部道/时间 bin 求和）
+
+    .. math::
+
+        TS(N) = 2 \\sum_i \\left[ d_i \\ln\\frac{b_i + N e_i}{b_i} - N e_i \\right]
+
+    其中 ``d`` 为观测计数，``b`` 为固定的背景预期计数，``e`` 是单位归一化的预期
+    超出计数（即总超出计数恰为 ``N``）。数学性质：
+
+    - ``TS(N)`` 具有任意阶解析导数（见 :meth:`dts`），Newton 法从 ``N=0`` 出发保证收敛；
+    - 欠涨情形（``dTS(0) < 0``，背景向上涨落）走解析分支，无需迭代；
+    - 归一化误差由 ``ΔTS=1`` 抛物线近似给出，仅在渐近（高斯）区有效；
+      ``TS`` 与 ``norm`` 本身在 Poisson 区仍然有效。
+
+    假设背景固定不参与浮动（背景估计误差远小于背景自身涨落）。典型用途：
+    瞬变源搜索的定量确认、弱源流量与泊松精确区上限（见 :meth:`upper_limit`）。
+
+    参数
+    ----
+    data : array
+        观测计数（逐道或逐时间 bin）。
+    bkg : array
+        背景预期计数，与 ``data`` 同形，每个元素必须 > 0。
+    unit_excess : array
+        单位归一化的预期超出计数（如源模型计数模板），与 ``data`` 同形。
+    max_iter / conv_frac_tol / zero_ts_tol / allow_negative :
+        迭代与数值容差参数，含义同原实现；``allow_negative`` 仅在渐近区有意义。
+    """
+
+    def __init__(
+        self,
+        data: Sequence[float] | np.ndarray,
+        bkg: Sequence[float] | np.ndarray,
+        unit_excess: Sequence[float] | np.ndarray,
+        *,
+        max_iter: int = 1000,
+        conv_frac_tol: float = 1e-3,
+        zero_ts_tol: float = 1e-5,
+        allow_negative: bool = False,
+    ) -> None:
+        self.data = np.asarray(data, dtype=float).ravel()
+        self.bkg = np.asarray(bkg, dtype=float).ravel()
+        self.unit_excess = np.asarray(unit_excess, dtype=float).ravel()
+        if not (self.data.size == self.bkg.size == self.unit_excess.size):
+            raise ValueError("data, bkg, unit_excess 必须等长")
+        if self.data.size == 0:
+            raise ValueError("data 不能为空")
+        if np.any(self.bkg <= 0.0):
+            raise ValueError("bkg 的每个元素必须 > 0")
+        if np.any(self.unit_excess < 0.0):
+            raise ValueError("unit_excess 不能为负")
+        self.max_iter = int(max_iter)
+        self.conv_frac_tol = float(conv_frac_tol)
+        self.zero_ts_tol = float(zero_ts_tol)
+        self.allow_negative = bool(allow_negative)
+
+    def ts(self, norm: float | np.ndarray) -> float | np.ndarray:
+        """计算给定归一化处的似然比 ``TS(N)``（支持标量或数组广播）。
+
+        用 ``log1p(e/b)`` 计算 ``ln((b+e)/b)``，避免弱源时 ``e≪b`` 的舍入损失。
+        ``d=0`` 的道由统一公式自然给出 ``-e`` 项（``d·log1p`` 为 0），无需分支。
+        """
+        norm_arr = np.asarray(norm, dtype=float)
+        # e 的形状: norm 各维 + 道维；对道求和得每个 norm 的 TS
+        e = norm_arr[..., np.newaxis] * self.unit_excess
+        term = self.data * np.log1p(e / self.bkg) - e
+        out = 2.0 * term.sum(axis=-1)
+        return float(out) if out.ndim == 0 else out
+
+    def dts(self, norm: float | np.ndarray, order: int = 1) -> float | np.ndarray:
+        """``TS`` 对归一化的 ``order`` 阶解析导数（任意阶）。
+
+        一阶：``2 [Σ d_i e_i/(b_i+e_i) - Σ e_i]``（``e_i`` 为单位超出）；
+        高阶：``2 (-1)^{n-1} (n-1)! Σ d_i (e_i/(b_i+e_i))^n``。
+        """
+        if order < 1:
+            raise ValueError("order 必须 >= 1")
+        norm_arr = np.asarray(norm, dtype=float)
+        e = norm_arr[..., np.newaxis] * self.unit_excess
+        frac = self.unit_excess / (self.bkg + e)
+        if order == 1:
+            out = 2.0 * ((self.data * frac).sum(axis=-1) - self.unit_excess.sum())
+        else:
+            out = (
+                2.0
+                * ((-1.0) ** (order - 1))
+                * math.factorial(order - 1)
+                * (self.data * frac**order).sum(axis=-1)
+            )
+        return float(out) if out.ndim == 0 else out
+
+    def solve(self) -> tuple[float, float, float, bool]:
+        """求最大 TS、最佳归一化及其误差（``ΔTS=1``）。
+
+        返回 ``(ts, norm, norm_err, failed)``；``failed=False`` 表示结果可信。
+        欠涨时：不允许负归一化则解析给出 ``TS=0, norm=0`` 及单侧误差；
+        ``allow_negative=True`` 时用 Taylor 展开解析外推（仅渐近区有效）。
+        """
+        dts0 = float(self.dts(0.0, 1))
+
+        if dts0 < 0.0:
+            # 欠涨：背景向上涨落，最优归一化在边界附近，解析处理。
+            ddts0 = float(self.dts(0.0, 2))
+            if self.allow_negative:
+                # TS ≈ dts0*N + ddts0*N^2/2，极值点 N* = -dts0/ddts0
+                norm = -dts0 / ddts0
+                ts = -0.5 * dts0 * dts0 / ddts0
+                norm_err = math.sqrt(-2.0 / ddts0)
+            else:
+                ts = 0.0
+                norm = 0.0
+                if ddts0 == 0.0:
+                    norm_err = -1.0 / dts0
+                else:
+                    # 由 TS(N)=1 的抛物线方程解出单侧误差（同原实现）
+                    norm_err = -(math.sqrt(dts0 * dts0 - 2.0 * ddts0) + dts0) / ddts0
+            return (ts, norm, norm_err, False)  # 解析结果，永不失败
+
+        # 过涨：Newton 法（从 N=0 出发保证收敛）
+        norm = 0.0
+        converged = False
+        iteration = 0
+        while not converged and iteration < self.max_iter:
+            step = -float(self.dts(norm, 1)) / float(self.dts(norm, 2))
+            norm += step
+            if norm > 0.0 and abs(step / norm) < self.conv_frac_tol:
+                converged = True
+            iteration += 1
+
+        # 补一步 Halley 法，消除 Newton 在有限迭代下的残余偏置（同原实现）
+        f = float(self.dts(norm, 1))
+        fp = float(self.dts(norm, 2))
+        fpp = float(self.dts(norm, 3))
+        denom = 2.0 * fp * fp - f * fpp
+        if denom != 0.0:
+            norm -= 2.0 * f * fp / denom
+
+        ts = float(self.ts(norm))
+        norm_err = math.sqrt(-2.0 / float(self.dts(norm, 2)))
+        failed = (norm < 0.0) or (iteration >= self.max_iter)
+        if ts < -self.zero_ts_tol:
+            failed = True  # 解析上 TS>=0，明显为负说明数值异常
+        elif ts < 0.0:
+            ts = 0.0  # 视为数值噪声
+        return (ts, norm, norm_err, failed)
+
+    def upper_limit(self, confidence: float = 0.9) -> tuple[float, float]:
+        """泊松精确区的归一化上限：解 ``TS(N_up) = TS_best - ΔTS``。
+
+        ``ΔTS`` 采用 XSPEC 惯例取 ``confidence`` 对应的卡方分位数（双侧中心区间，
+        单侧使用时即上限判据），默认 90% → ``ΔTS=2.7055``。求解用 Brent 法，
+        从最佳归一化向右单调下降段搜根，不依赖渐近近似，低计数区同样有效。
+
+        返回 ``(norm_upper, delta_ts)``；欠涨（最佳归一化为 0）时从 0 起算。
+        """
+        from scipy.stats import chi2
+
+        if not 0.0 < confidence < 1.0:
+            raise ValueError("confidence 必须在 (0, 1) 内")
+        delta_ts = float(chi2.ppf(confidence, df=1))
+
+        _ts_best, norm_best, _err, _failed = self.solve()
+        ts_best = float(self.ts(max(norm_best, 0.0)))
+
+        def _f(n: float) -> float:
+            # _f 在 lo 处为 +delta_ts > 0，随 N 单调下降，根即上限。
+            return float(self.ts(n)) - ts_best + delta_ts
+
+        lo = max(norm_best, 0.0)
+        if _f(lo) <= 0.0:
+            return (lo, delta_ts)  # 已在阈值之下（理论上 _f(lo)=delta_ts>0，不会进入）
+        # 从抛物线近似的 20σ 处起步，倍增直到 _f 变负（即 TS 跌破阈值）
+        norm_err = max(float(_err) if math.isfinite(float(_err)) else 0.0, 1e-6)
+        hi = lo + max(20.0 * norm_err, 1.0)
+        for _ in range(100):
+            if _f(hi) < 0.0:
+                break
+            hi *= 2.0
+        else:
+            raise RuntimeError("FastNormFit.upper_limit: 未能定位上限搜索区间")
+        return (float(brentq(_f, lo, hi, xtol=1e-10)), delta_ts)
 
 
 @dataclass(frozen=True, slots=True)

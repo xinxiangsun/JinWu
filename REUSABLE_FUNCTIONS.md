@@ -1,6 +1,9 @@
 # REUSABLE_FUNCTIONS — jinwu 公共 API 索引
 
-> jinwu 是跨项目**可复用库**（`~/research/jinwu/src`，editable 安装，改源码即时生效）。
+> jinwu 是跨项目**可复用库**（monorepo：`packages/jinwu` 为核心，`packages/jinwu-ep`、
+> `packages/jinwu-fermi`、`packages/jinwu-swift` 为按仪器拆分的发行包；editable 安装，
+> 改源码即时生效）。自 0.2.0 起顶层只有命名空间，无便捷导出——**一律从 `jinwu.core.*`
+> 导入**（如 `from jinwu.core import Time, read_pha`）。
 > 本索引列出高频公共入口，供所有 AI 代理（Codex / Claude / Hermes）在写任何分析
 > 代码前快速定位："库里已有 X，别重复造"。
 >
@@ -8,8 +11,9 @@
 > 1. 先查本表 + 模块 docstring + 测试，再写新代码。
 > 2. 新增公共函数 → 在文末「登记区」追加；已有函数不改签名时无需条目。
 > 3. 提升新函数：遵守 `ARCHITECTURE_ROADMAP.md` 分层（`core` 不导入任务包/HEASoft/XSPEC 等
->   外部运行时；任务相关放 `jinwu.<mission>`；适配器放 `integrations/`）。参考现有
->   `jinwu.core.fit`（XSPEC 调用封装为函数）与 `jinwu.core.heasoft` 的边界方式。
+>   外部运行时；任务相关放 `packages/jinwu-<mission>`，经 `jinwu.instruments` entry point
+>   被 pipeline 注册表发现）。参考现有 `jinwu.core.fit`（XSPEC 调用封装为函数）与
+>   `jinwu.core.heasoft` 的边界方式。
 
 ## core 层高频入口
 
@@ -42,6 +46,8 @@
 | `jinwu.core.base` | `EnergyBand` / `RegionArea` / `OgipMeta` / `PhaBase` / `RmfBase` / `ArfBase` / `EventDataBase` / `LightcurveDataBase` | 基类与数据原语 |
 | `jinwu.core.ogip` | `ValidationReport` / `OgipFitsBase` | OGIP 校验 |
 | `jinwu.core.pipeline` | `register_pipeline` / `pipeline` / `InstrumentPipeline` / `PipelineStatus` | 流水线 |
+| `jinwu.core.timescale` | `txx` / `txx_iterbkg` / `iterative_bayesian_blocks` | 时标（T100/T90/T50）计算：`txx` 事件级贝叶斯块 + A&A 5.4 分位；`txx_iterbkg` 迭代背景自洽分箱贝叶斯块（burstcube 移植，含全流水线重采样误差）。`ops.txx` 为兼容别名；推荐入口 `jinwu.core.data.timescale` 分析器（`method='aanda'/'iterbkg'`） |
+| `jinwu.core.ops` | `bin_bblocks` / `autobin` / `BayesianBlocksBinner(use_exposure=True)` / `bayesian_blocks_exposure` | 贝叶斯块分箱（`use_exposure` 启用逐箱曝光加权变点，适合 EP/WXT） |
 | `jinwu.core.host` | `HostGalaxyFinder` | 宿主星系查找/分类 |
 | `jinwu.core.heasoft` | `HeasoftEnvManager` | HEASoft 环境管理（生产标准路径） |
 | `jinwu.core.rebin_rs` | `rebin_lightcurve_rs` | 光变重分箱 |
@@ -68,3 +74,10 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `fetch_gbm_continuous_products` / `extract_gbm_spectral_products` | `jinwu.fermi.gbm.pipeline` | 可恢复连续数据下载及 TTE 局部多项式 PHA/BAK 提取 | 2026-08-27 |
 | `build_gbm_response_command` / `generate_gbm_response` | `jinwu.fermi.gbm.response` | 官方 GBM 响应生成器的无 shell 安全封装 | 2026-08-27 |
 | `profile_source_amplitude` | `jinwu.core.upperlimit` | 与 response-aware 上限同契约的非负幅度 profile 显著性 | 2026-08-27 |
+| `FastNormFit` | `jinwu.core.upperlimit` | Poisson 似然比（TS）归一化快速拟合（解析任意阶导数 + Newton/Halley；`upper_limit()` 给泊松精确区上限），移植自 HEASoft burstcube | 2026-08-30 |
+| `bayesian_blocks_exposure` | `jinwu.core.ops` | 曝光加权分箱贝叶斯块（支持 0 计数箱，返回变点箱索引），移植自 HEASoft burstcube | 2026-08-30 |
+| `iterative_bayesian_blocks` / `txx_iterbkg` | `jinwu.core.timescale` | 迭代背景自洽贝叶斯块（Giacomo 技巧 + prominence 定界 + 循环检测）与其 Txx 封装 | 2026-08-30 |
+| `txx`（拆分） | `jinwu.core.timescale` | 时标计算从 `ops.py` 拆入独立模块；`jinwu.core.ops.txx` 及 `_txx54_*` 助手保持兼容重导出 | 2026-08-30 |
+| `PhaWriter`/`RmfWriter`/`ArfWriter`（关键字对齐） | `jinwu.core.io` | 写出对齐 HEASoft 6.37 heasp 约定：PHA 补 `TLMIN1/TLMAX1/DETCHANS`；RMF 补 `DETCHANS/NUMGRP/NUMELT/TLMIN4` + header 透传；ARF 补 `HDUVERS` | 2026-08-30 |
+| 读端结构化解析 + 通道校验 | `jinwu.core.io` / `jinwu.core.data` | `PhaData.tlmin/tlmax/det_chans`、`RmfData.tlmin/det_chans`、`ArfData.hduvers` 读入即解析（缺失时回退推断）；`RmfData.validate()` 新增 `INCONSISTENT_CHANNELS` 校验（F_CHAN+N_CHAN vs TLMIN+DETCHANS，同 6.37 heasp） | 2026-08-30 |
+| `check_response_compatibility` + validate 对齐 ftverify/heasp | `jinwu.core.ogip` | 谱↔响应通道兼容性检查；`validate()` 全面对齐 HEASoft 6.37 校验：HDUCLAS1/HDUCLAS2/HDUVERS、PHA 通道三件套自洽、RMF DETCHANS↔EBOUNDS、GTI 自洽（BAD_GTI/UNSORTED_GTI）；均从 `jinwu.core` 懒加载导出 | 2026-08-30 |
