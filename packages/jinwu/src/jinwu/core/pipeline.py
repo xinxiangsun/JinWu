@@ -102,25 +102,48 @@ def register_pipeline(key: str):
     return decorator
 
 
+def _discover_pipelines(key: str) -> None:
+    """Import instrument packages declared via ``jinwu.instruments`` entry points.
+
+    Importing an instrument package triggers its ``register_pipeline``
+    decorators, populating ``_PIPELINES`` lazily. Only entry points whose
+    name matches the first segment of ``key`` are loaded (all of them if
+    nothing matches).
+    """
+    try:
+        from importlib.metadata import entry_points
+    except ImportError:  # pragma: no cover - stdlib on all supported versions
+        return
+    eps = list(entry_points(group="jinwu.instruments"))
+    prefix = key.split(".", 1)[0]
+    matched = [ep for ep in eps if ep.name == prefix]
+    for ep in (matched or eps):
+        try:
+            ep.load()
+        except ImportError as exc:
+            raise ImportError(
+                f"The {key!r} pipeline requires the {ep.name!r} instrument "
+                f"package; install it with `pip install jinwu-{ep.name}`"
+            ) from exc
+
+
 def pipeline(config: InstrumentConfig, input_data: PipelineInput, **kwargs):
     """Construct the concrete pipeline selected by an instrument config."""
     if not config.pipeline:
         raise ValueError(f"Instrument {config.name} has no pipeline configured")
     key = config.pipeline.strip().lower()
     if key not in _PIPELINES:
-        if key == "ep.wxt.pointing":
-            try:
-                __import__("jinwu.ep.wxt.pipeline")
-            except ImportError as exc:  # pragma: no cover - depends on optional runtime env
-                raise ImportError(
-                    "The 'ep.wxt.pointing' pipeline requires the EP instrument "
-                    "package; install it with `pip install jinwu-ep`"
-                ) from exc
+        _discover_pipelines(key)
     try:
         cls = _PIPELINES[key]
     except KeyError as exc:
         choices = ", ".join(sorted(_PIPELINES)) or "none"
-        raise ValueError(f"Unknown pipeline {config.pipeline!r}; registered: {choices}") from exc
+        raise ValueError(
+            f"Unknown pipeline {config.pipeline!r}; registered: {choices}. "
+            "Instrument pipelines are discovered via the 'jinwu.instruments' "
+            "entry points; install the matching instrument package "
+            "(e.g. `pip install jinwu-ep`)."
+        ) from exc
     return cls(input_data, config=config, **kwargs)
 
 

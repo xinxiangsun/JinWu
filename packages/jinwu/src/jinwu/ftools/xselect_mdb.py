@@ -20,6 +20,20 @@ from typing import Dict, Tuple, Optional, Any
 _MEM_CACHE: Dict[str, Tuple[float, Dict[Tuple[str, ...], Dict[str, str]]]] = {}
 
 
+def default_cache_path() -> str:
+    """Return a user-writable path for the persistent parsed-MDB cache.
+
+    Package directories may be read-only (e.g. system site-packages), so the
+    pickle cache is kept under the user cache directory instead.
+    """
+    import tempfile
+    base = os.environ.get('XDG_CACHE_HOME')
+    if not base:
+        home = os.path.expanduser('~')
+        base = os.path.join(home, '.cache') if home and home != '~' else tempfile.gettempdir()
+    return os.path.join(base, 'jinwu', 'xselect_mdb.pkl')
+
+
 def _parse_value(s: str) -> Any:
     s = s.strip()
     if not s or s.upper() == 'NONE':

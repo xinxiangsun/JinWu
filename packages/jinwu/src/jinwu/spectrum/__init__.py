@@ -12,6 +12,15 @@ Example:
 
 from __future__ import annotations
 
+import warnings
+
+warnings.warn(
+    "jinwu.spectrum is deprecated and will be removed in 1.0; import from "
+    "jinwu.lf.specfake instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 try:
     from .specfake import (
         KConfig,

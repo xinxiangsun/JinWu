@@ -369,7 +369,7 @@ def rebin_lightcurve(
             # load MDB tree (package-local cache)
             base = _Path(__file__).resolve().parents[1]
             mdb_path = base / 'data' / 'xselect.mdb'
-            cache_path = str(_Path(__file__).resolve().parents[1] / 'xselect_mdb.pkl')
+            cache_path = xselect_mdb.default_cache_path()
             if mdb_path.exists():
                 tree = xselect_mdb.load_mdb(str(mdb_path), use_cache=True, cache_path=cache_path)
             else:
@@ -855,7 +855,7 @@ def rebin_events_to_lightcurve(
             try:
                 base = _Path(__file__).resolve().parents[1]
                 mdb_path = base / 'data' / 'xselect.mdb'
-                cache_path = str(mdb_path) + '.pkl'
+                cache_path = xselect_mdb.default_cache_path()
                 if mdb_path.exists():
                     mdb_path_tree = xselect_mdb.load_mdb(str(mdb_path), use_cache=True, cache_path=cache_path)
                 else:

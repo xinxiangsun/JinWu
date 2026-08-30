@@ -1126,8 +1126,10 @@ class LightcurveFitter:
         """
         try:
             import matplotlib.pyplot as plt
-        except ImportError:
-            raise ImportError("matplotlib is required for plotting")
+        except ImportError as exc:
+            raise ImportError(
+                "matplotlib is required for plotting; install it with `pip install matplotlib`"
+            ) from exc
         from jinwu.core.plotstyle import PALETTE, apply_style
 
         apply_style()

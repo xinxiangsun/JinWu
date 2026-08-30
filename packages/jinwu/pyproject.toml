@@ -67,5 +67,4 @@ where = ["src"]
 include = ["jinwu*"]
 
 [tool.setuptools.package-data]
-"jinwu" = ["*.pyi", "xselect.mdb", "xselect_mdb.pkl"]
-"jinwu.data" = ["*.fits", "*.mdb", "*.pkl"]
+"jinwu.data" = ["*.fits", "*.mdb"]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -58,6 +59,8 @@ from ...core.xselect import (
 # 落盘/哈希/文件名统一复用 core.products 的唯一实现
 # （支持 dataclass/Enum/np 类型、NaN→None、原子写入）。
 _json_dump = write_json
+
+logger = logging.getLogger(__name__)
 _file_hash = sha256_file
 _safe_filename_token = safe_filename_token
 
@@ -1875,7 +1878,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         if utc is not None:
             try:
                 time_anchor = Time(str(utc), scale="utc")
-            except Exception:
+            except Exception as exc:
+                logger.debug("Duration UTC anchor could not be reconstructed: %s", exc)
                 time_axis["relative_seconds_only"] = True
                 time_axis["warning"] = (
                     "Duration UTC anchor could not be reconstructed; "
@@ -2017,8 +2021,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                     import matplotlib.pyplot as plt
 
                     plt.close(figure)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to close duration plot figure: %s", exc)
                 outputs[f"plot_{extension}"] = str(plot_path)
             if self.config.plotting.required:
                 missing = [value for key, value in outputs.items() if key.startswith("plot_") and not Path(value).is_file()]
@@ -2352,6 +2356,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             except Exception as exc:
                 # 单时段失败不拖垮整个 fit 阶段；bb 段回退到配置候选集。
                 detail = f"{type(exc).__name__}: {exc}"
+                logger.warning("Fit failed for interval %s: %s", label, detail)
                 comparisons[label] = {"fit_error": detail}
                 failure_logs.setdefault(label, {})["interval"] = detail
 
@@ -2382,6 +2387,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 )
             except Exception as exc:
                 detail = f"{type(exc).__name__}: {exc}"
+                logger.warning("Fit failed for segment %s: %s", key, detail)
                 comparisons[key] = {"fit_error": detail}
                 failure_logs.setdefault(key, {})["interval"] = detail
 

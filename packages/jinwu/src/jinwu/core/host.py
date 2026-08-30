@@ -452,7 +452,7 @@ class HostGalaxyFinder:
                 if gal > 0:
                     features.append(f"✓ Gal标志: {gal} (Gaia星系标志位)")
                     return 'Galaxy', 80, features
-            except:
+            except (KeyError, TypeError, ValueError):
                 pass
         
         return source_type, confidence, features

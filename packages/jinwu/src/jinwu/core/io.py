@@ -164,20 +164,18 @@ def _build_meta(hdul: fits.HDUList, prefer_header: Optional[Dict[str, Any]]) -> 
 def _mission_timezero_object(telescop: Optional[str], timezero: float, *, allow_unix_fallback: bool = False):
     if telescop is None:
         return None
-    try:
-        from .time import Time, time_from_mission_seconds
+    from .time import Time, time_from_mission_seconds
 
-        mission_time = time_from_mission_seconds(telescop, timezero)
-        if mission_time is not None:
-            return mission_time
-        if allow_unix_fallback:
-            try:
-                return Time(timezero, format='unix', scale='utc')
-            except Exception:
-                return None
-        raise RuntimeError("未知望远镜类型,请将header中的相关关键字发送给作者以方便添加" + telescop)
-    except ImportError:
-        return None
+    mission_time = time_from_mission_seconds(telescop, timezero)
+    if mission_time is not None:
+        return mission_time
+    if allow_unix_fallback:
+        try:
+            return Time(timezero, format='unix', scale='utc')
+        except Exception:
+            return None
+    raise RuntimeError(f"Unknown telescope '{telescop}' for time conversion; "
+                       "please report the related header keywords to the authors")
 
 
 def _extract_gti(hdul: fits.HDUList) -> Optional[list[tuple[float, float]]]:

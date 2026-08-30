@@ -80,27 +80,31 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
         if ':' in tok:
             try:
                 from astropy.coordinates import Angle
-                a = Angle(tok)
-                return float(a.degree)
-            except Exception:
+                from astropy.units import UnitsError
+            except ImportError:
                 pass
+            else:
+                try:
+                    return float(Angle(tok).degree)
+                except (ValueError, TypeError, UnitsError):
+                    pass
         # handle units: trailing double-quote for arcsec or 'arcsec'/'deg'
         if tok.endswith('"') or tok.lower().endswith('arcsec'):
             try:
-                v = float(re.sub(r'[^0-9.+-eE]', '', tok))
+                v = float(re.sub(r'[^0-9.+\-eE]', '', tok))
                 return v  # mark as numeric in arcsec; caller will interpret
-            except Exception:
+            except (TypeError, ValueError):
                 return tok
         if tok.lower().endswith('deg') or tok.lower().endswith('d'):
             try:
-                v = float(re.sub(r'[^0-9.+-eE]', '', tok))
+                v = float(re.sub(r'[^0-9.+\-eE]', '', tok))
                 return v
-            except Exception:
+            except (TypeError, ValueError):
                 return tok
         # plain float
         try:
             return float(tok)
-        except Exception:
+        except (TypeError, ValueError):
             return tok
 
     vals = [_parse_token(p) for p in parts]
@@ -124,16 +128,10 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
                 unit = _unit_of(parts_raw[2])
                 if unit:
                     d['r_unit'] = unit
-            except Exception:
+            except (IndexError, KeyError, TypeError):
                 pass
             if coordsys:
                 d['coordsys'] = coordsys
-            # Try to record unit hints for radius if token was string-like
-            try:
-                # if radius token was non-float string originally, keep as-is
-                pass
-            except Exception:
-                pass
             return d
     if typ == 'point':
         # point(x,y) - treat as very small circle (or exact point)
@@ -153,7 +151,7 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
                     d['r_in_unit'] = u_in
                 if u_out:
                     d['r_out_unit'] = u_out
-            except Exception:
+            except (IndexError, KeyError, TypeError):
                 pass
             if coordsys:
                 d['coordsys'] = coordsys
@@ -170,7 +168,7 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
                     res['width_unit'] = u_w
                 if u_h:
                     res['height_unit'] = u_h
-            except Exception:
+            except (IndexError, KeyError, TypeError):
                 pass
             if len(vals) >= 5:
                 res['angle'] = vals[4]
@@ -196,7 +194,7 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
                     d['a_unit'] = ua
                 if ub:
                     d['b_unit'] = ub
-            except Exception:
+            except (IndexError, KeyError, TypeError):
                 pass
             if coordsys:
                 d['coordsys'] = coordsys

@@ -687,7 +687,7 @@ class BATObservation:
             tck, _ = splprep([boundary_ra, boundary_dec], s=0, per=True)
             u_new = np.linspace(0, 1, n_interpolate)
             boundary_ra, boundary_dec = splev(u_new, tck)
-        except:
+        except (ImportError, ValueError, TypeError):
             pass  # Use original points if interpolation fails
         
         return np.array(boundary_ra), np.array(boundary_dec)

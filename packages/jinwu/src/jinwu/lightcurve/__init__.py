@@ -22,6 +22,15 @@ Example:
 
 from __future__ import annotations
 
+import warnings
+
+warnings.warn(
+    "jinwu.lightcurve is deprecated and will be removed in 1.0; import from "
+    "jinwu.core.utils (SNR/trigger utilities) or jinwu.lf.lcfake (LightcurveFaker) instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from .duration import (
     li_ma_snr,
     LightcurveSNREvaluator,

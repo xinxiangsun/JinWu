@@ -2,7 +2,7 @@
 Date: 2025-04-23 11:11:08
 LastEditors: Xinxiang Sun sunxx@nao.cas.cn
 LastEditTime: 2025-11-07 12:41:26
-FilePath: /research/jinwu/src/jinwu/missions/fermi/gbm/GBMObservation.py
+FilePath: /research/jinwu/src/jinwu/missions/fermi/gbm/gbm_observation.py
 '''
 from ...core.time import Time
 from astropy.coordinates import SkyCoord

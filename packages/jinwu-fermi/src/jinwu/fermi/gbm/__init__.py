@@ -12,7 +12,7 @@ Example:
 
 from __future__ import annotations
 
-from .GBMObservation import GBMObservation
+from .gbm_observation import GBMObservation
 from .pipeline import (
     GBMBackgroundSummary,
     GBMCoverageResult,

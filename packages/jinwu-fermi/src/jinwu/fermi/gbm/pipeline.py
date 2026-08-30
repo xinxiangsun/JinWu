@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 import hashlib
+import logging
 import math
 from pathlib import Path
 from typing import Any, Iterable, Literal, Mapping, Sequence
@@ -38,6 +39,8 @@ __all__ = [
 
 _NAI_DETECTORS = tuple(f"n{index}" for index in range(10)) + ("na", "nb")
 _BGO_DETECTORS = ("b0", "b1")
+
+logger = logging.getLogger(__name__)
 
 
 def _as_scalar_time(value: Time | str) -> Time:
@@ -742,9 +745,11 @@ def _resume_archive_file(finder: Any, name: str, destination: Path, *, verbose: 
                         handle.write(block)
         if verbose:
             print(f"GBM archive {name}: {destination.stat().st_size} bytes")
+        logger.info("GBM archive %s: %d bytes", name, destination.stat().st_size)
         return True
     except requests.RequestException as exc:
         if verbose:
             print(f"GBM archive transfer interrupted for {name}: {exc}")
+        logger.warning("GBM archive transfer interrupted for %s: %s", name, exc)
         return False
 

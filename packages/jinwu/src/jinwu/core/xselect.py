@@ -1094,7 +1094,7 @@ def _get_mdb_tree(use_cache: bool = True):
     try:
         base = Path(__file__).resolve().parents[1]
         mdb_path = base / 'data' / 'xselect.mdb'
-        cache_path = str(mdb_path) + '.pkl'
+        cache_path = xselect_mdb.default_cache_path()
         if mdb_path.exists():
             _MDB_TREE = xselect_mdb.load_mdb(str(mdb_path), use_cache=use_cache, cache_path=cache_path)
             return _MDB_TREE
