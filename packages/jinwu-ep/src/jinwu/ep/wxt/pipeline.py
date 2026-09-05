@@ -18,7 +18,7 @@ from astropy.io import fits
 from astropy.time import Time, TimeDelta
 from astropy.wcs import WCS
 import astropy.units as u
-from ...core.config import InstrumentConfig
+from ...core.config import InstrumentConfig, get_fit_settings
 from ...core.galactic import resolve_galactic_absorption
 from ...core.instruments import Catalog, DataFile, Manifest, SpectrumBundle, scan
 from ...core.time import mission_time_format, time_from_mission_seconds
@@ -209,10 +209,17 @@ class WXTPointingResult:
         try:
             from IPython.display import Image, SVG, display
         except ImportError:
+            # 无 IPython 时保持与富显示相同的输出契约：先图表（【标题】头）、
+            # 后快报文本（测试 test_result_display_prints_wechat_summary_after_plots
+            # 依赖该顺序与格式，任何环境都不得改变）
             for title, paths in self.plot_groups.items():
-                print(f"{title}: {', '.join(map(str, paths))}")
+                existing = [path for path in paths if path.is_file()]
+                if not existing:
+                    continue
+                print(f"\n【{title}】")
+                print(", ".join(map(str, existing)))
             if print_summary:
-                print(self.summary_text())
+                print(f"\n{self.summary_text()}")
             return
         for title, paths in self.plot_groups.items():
             existing = [path for path in paths if path.is_file()]
@@ -1334,31 +1341,121 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         return cast(WXTPointingResult, super().run(until=until, resume=resume))
 
     def stage_code_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
-        core = Path(__file__).resolve().parents[2] / "core"
+        """声明各阶段依赖的核心源码文件，用于阶段缓存失效指纹（AUD-01）。
+
+        旧实现用 ``Path(__file__).resolve().parents[2] / "core"`` 拼接路径，
+        monorepo 拆分后该路径指向不存在的 ``packages/jinwu-ep/src/jinwu/core/``，
+        指纹退化为常量、核心算法改动永不触发缓存失效。现改为"导入真实模块 +
+        ``inspect.getsourcefile``"定位实际加载的源文件（与 Swift GRB/BAT 一致），
+        editable 与 wheel 安装均正确；声明了但不存在的文件由基类
+        ``_stage_code_fingerprint`` 显式报错。
+
+        声明以各阶段实际执行路径为准（含函数内延迟导入）：
+        - duration 经 ``...core.ops.txx`` 使用 ops，而 ops 仅从 timescale
+          重导出（真实算法在 timescale.py），两者都须登记；
+        - fit 经 ``_fit_one`` 使用 fit/spectrum_prep，method 为 ``"bxa"`` 时
+          再经 bxa_fit；config 提供 get_fit_settings 的生效方法。
+        """
+        import inspect
+
+        from ...core import (
+            bxa_fit,
+            config as _config,
+            data as _data,
+            fit as _fit,
+            instruments as _instruments,
+            io as _io,
+            ops as _ops,
+            plot as _plot,
+            products as _products,
+            spectrum_prep as _spectrum_prep,
+            time as _time,
+            timescale as _timescale,
+            utils as _utils,
+            xselect as _xselect,
+            galactic as _galactic,
+            pipeline as _core_pipeline,
+        )
+
+        def _src(module) -> Path:
+            path = inspect.getsourcefile(module)
+            if not path:
+                raise RuntimeError(f"无法定位模块源文件: {module!r}")
+            return Path(path)
+
+        core = {
+            "config.py": _src(_config),
+            "data.py": _src(_data),
+            "fit.py": _src(_fit),
+            "galactic.py": _src(_galactic),
+            "instruments.py": _src(_instruments),
+            "io.py": _src(_io),
+            "ops.py": _src(_ops),
+            "pipeline.py": _src(_core_pipeline),
+            "plot.py": _src(_plot),
+            "products.py": _src(_products),
+            "spectrum_prep.py": _src(_spectrum_prep),
+            "time.py": _src(_time),
+            "timescale.py": _src(_timescale),
+            "utils.py": _src(_utils),
+            "xselect.py": _src(_xselect),
+        }
+        # bxa_fit 单独定位：模块本身可安全导入（bxa/ultranest 在函数内惰性导入）
+        core["bxa_fit.py"] = _src(bxa_fit)
+
         dependencies = {
-            "discover": (core / "instruments.py",),
-            "galactic_absorption": (core / "galactic.py", core / "utils.py"),
+            "discover": (core["instruments.py"],),
+            "galactic_absorption": (core["galactic.py"], core["utils.py"]),
             "pipeline_spectrum": (),
-            "regions": (core / "xselect.py",),
-            "provisional_events": (core / "xselect.py",),
-            "final_events": (core / "xselect.py",),
-            "lightcurves": (core / "products.py", core / "time.py", core / "xselect.py"),
+            "regions": (core["xselect.py"],),
+            "provisional_events": (core["xselect.py"],),
+            "final_events": (core["xselect.py"],),
+            "exposure_arm_qc": (),
+            "lightcurves": (core["products.py"], core["time.py"], core["xselect.py"]),
             "duration": (
-                core / "products.py",
-                core / "plot.py",
-                core / "ops.py",
-                core / "time.py",
-                core / "io.py",
-                core / "data.py",
+                core["products.py"],
+                core["plot.py"],
+                core["ops.py"],
+                core["timescale.py"],
+                core["time.py"],
+                core["io.py"],
+                core["data.py"],
             ),
-            "t100_spectra": (core / "xselect.py",),
-            "t90_spectra": (core / "xselect.py",),
-            "bayesian_block_spectra": (core / "xselect.py",),
-            "fit": (core / "fit.py", core / "products.py", core / "plot.py"),
-            "fluxcurve": (core / "products.py",),
-            "report": (core / "products.py",),
+            "t100_spectra": (core["xselect.py"],),
+            "t90_spectra": (core["xselect.py"],),
+            "ogip_finalize": (core["utils.py"], core["products.py"]),
+            "bayesian_block_spectra": (core["xselect.py"],),
+            "fit": (
+                core["config.py"],
+                core["fit.py"],
+                core["spectrum_prep.py"],
+                core["bxa_fit.py"],
+                core["products.py"],
+                core["plot.py"],
+            ),
+            "fluxcurve": (core["products.py"],),
+            "report": (core["products.py"],),
         }
         return dependencies.get(stage.name, ())
+
+    def stage_config_dependencies(self, stage: PipelineStage) -> Any:
+        """把生效的全局拟合方法纳入 fit 阶段指纹（Major B 修复）。
+
+        ``_fit_one`` 的有效 method 在 ``config.fitting.method`` 停留在默认
+        ``"mle"`` 时会回退到进程级 ``get_fit_settings().method``；而默认指纹只由
+        config + 实现文件 SHA 构成，导致全局 mle 与全局 bxa 的 fit 指纹相同、
+        缓存被跨方法错误复用。这里仅对 fit 阶段追加“生效 method”，使全局
+        切换触发 fit 缓存失效，同时不影响 discover/regions 等无关阶段。该钩子
+        在 ``_load_cached_stage``（检查）与 ``_write_stage_manifest``（写入）两处
+        一致调用，故检查/写入指纹对称，resume 契约稳定。
+        """
+        base = super().stage_config_dependencies(stage)
+        if stage.name == "fit":
+            return {
+                "config": base,
+                "effective_fit_method": self._effective_fit_method(),
+            }
+        return base
 
     @property
     def approval_path(self) -> Path:
@@ -2222,6 +2319,20 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         _json_dump(segments_path, segment_payload)
         return StageResult(outputs=outputs, data={"segments": segment_payload})
 
+    def _effective_fit_method(self) -> str:
+        """解析驱动 ``_fit_one`` 路由的生效拟合方法（mle/chain/bxa）。
+
+        优先级：per-instrument ``config.fitting.method`` 显式取 ``chain``/``bxa``
+        时直接生效；当其停留在打包默认 ``"mle"``（无法与“未显式设置”区分）时
+        回退到进程级 ``get_fit_settings().method``，使 ``set_fit_method(...)`` 能真正
+        驱动 pipeline。默认全局亦为 ``"mle"`` → 与现状完全一致（零回归）。
+        同时供 ``stage_config_dependencies`` 复用，保证路由与指纹使用同一生效值。
+        """
+        method = str(getattr(self.config.fitting, "method", "") or "").strip().lower()
+        if method in ("", "mle"):
+            method = str(get_fit_settings().method).strip().lower()
+        return method
+
     def _fit_one(
         self,
         label: str,
@@ -2282,16 +2393,51 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             detail = "; ".join(prepared_catalog.diagnostics) or "unknown preparation failure"
             raise RuntimeError(f"Unable to prepare {label} spectrum: {detail}")
         prepared = prepared_catalog.spectra[0]
-        return fit_xray_models(
+
+        # 变更 6：按“有效 method”路由拟合后端（解析见 _effective_fit_method）。
+        method = self._effective_fit_method()
+        effective_candidate_keys = (
+            candidate_keys
+            if candidate_keys is not None
+            else self.config.fitting.candidate_keys
+        )
+
+        if method == "bxa":
+            # BXA / UltraNest 嵌套采样：透传 BXAConfig 字段与相关 fitting 项。
+            # 输出目录用 workspace/'bxa'/<label>/；缺 bxa/xspec 时惰性导入抛
+            # ImportError，由 _stage_fit 既有的 try/except 记为 fit_error（跳过
+            # 语义，不伪造后验、不崩溃）。fit_prepared_bxa 不接受 plot_*/
+            # calculate_errors/error_delta_stat/selection_metric，故不透传这些项。
+            from ...core.bxa_fit import fit_xray_models_bxa
+
+            bxa_cfg = self.config.bxa
+            return fit_xray_models_bxa(
+                prepared,
+                outdir=self.workspace / "bxa" / label,
+                model_class=self.config.fitting.model_class,
+                absorption_mode=self.config.fitting.absorption_mode,
+                candidate_keys=effective_candidate_keys,
+                galactic_nh_1e22=galactic_nh_1e22,
+                redshift=self.input.redshift,
+                stat_method=self.config.fitting.statistic,
+                abundance=self.config.fitting.abundance,
+                cross_section=self.config.fitting.cross_section,
+                srcname=self.input.target_id,
+                instname=f"WXT_{label}",
+                n_live_points=bxa_cfg.n_live_points,
+                evidence_tolerance=bxa_cfg.evidence_tolerance,
+                speed=bxa_cfg.speed,
+                resume=bxa_cfg.resume,
+                calculate_flux_chain=bxa_cfg.calculate_flux_chain,
+                flux_erange=bxa_cfg.flux_erange,
+            )
+
+        comparison = fit_xray_models(
             prepared,
             outdir=fit_dir,
             model_class=self.config.fitting.model_class,
             absorption_mode=self.config.fitting.absorption_mode,
-            candidate_keys=(
-                candidate_keys
-                if candidate_keys is not None
-                else self.config.fitting.candidate_keys
-            ),
+            candidate_keys=effective_candidate_keys,
             selection_metric=self.config.fitting.selection_metric,
             stat_method=self.config.fitting.statistic,
             abundance=self.config.fitting.abundance,
@@ -2308,6 +2454,45 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             plot_dpi=self.config.plotting.dpi,
             plot_required=self.config.plotting.enabled and self.config.plotting.required,
         )
+
+        if method == "chain":
+            # Major A 修复：pipeline 比较层不保留 adopted 模型的 XSPEC 会话。
+            # fit_prepared 只在开头清空会话、结尾不清空，fit_xray_models 结尾也不
+            # 清空，故比较返回时 AllData/AllModels 仍加载着“最后被评估的候选”——
+            # 未必是 adopted_key 采纳模型。而 run_xspec_chain 只能对“当前已加载会话”
+            # 跑链（spectra= 仅用于计数选择、refit=True 只对当前会话 Fit.perform()，
+            # 二者都不能从 prepared 谱重建 adopted 会话）。若在此直接跑链，会对错误
+            # 模型伪造后验并触发一次昂贵的默认 5 万步 MCMC。为遵守“绝不在非 adopted
+            # 模型上跑链、绝不把错模型的链标 completed”，这里显式清空遗留会话并诚实
+            # 记为 skipped；返回的 XRayModelComparisonResult 契约不变（下游 _stage_fit
+            # 的 adopted_fit/comparison_json/failure_logs 完全复用）。
+            # 如需真正的 MCMC 链，请改用 fit_spectral(method="chain")，或对 adopted
+            # 候选的 prepared 谱直接调用 run_xspec_chain。
+            adopted_key = getattr(comparison, "adopted_key", None)
+            try:
+                import xspec  # noqa: PLC0415 - 惰性、可选依赖
+
+                xspec.AllData.clear()
+                xspec.AllModels.clear()
+            except Exception:  # noqa: BLE001 - 缺 xspec 时无遗留会话可清，安全跳过
+                pass
+            chain_status: dict[str, Any] = {
+                "status": "skipped",
+                "adopted_key": adopted_key,
+                "reason": (
+                    "pipeline comparison layer does not retain the adopted model's "
+                    "XSPEC session; refusing to sample the last-evaluated (possibly "
+                    "non-adopted) candidate. Use fit_spectral(method='chain') or call "
+                    "run_xspec_chain directly on the adopted candidate's prepared "
+                    "spectrum."
+                ),
+            }
+            _json_dump(fit_dir / "chain_status.json", chain_status)
+            logger.warning(
+                "XSPEC MCMC chain skipped for %s: %s", label, chain_status["reason"]
+            )
+
+        return comparison
 
     def _stage_fit(self, context) -> StageResult:
         summary_path = self.workspace / "fit" / "fit_summary.json"

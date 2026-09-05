@@ -1,4 +1,10 @@
-"""HEASoft ``grppha`` wrapper used by prepared spectrum workflows."""
+"""HEASoft ``grppha`` wrapper used by prepared spectrum workflows.
+
+.. deprecated::
+    This module is deprecated and will be removed in a future version.
+    Use :mod:`jinwu.ftools.ftgrouppha` instead, which provides a modern
+    Pure-Python equivalent aligned with HEASoft 6.37 HEASPTOOLS.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,7 @@ from pathlib import Path
 import os
 import shutil
 import subprocess
+import warnings
 from typing import Any
 
 try:
@@ -155,7 +162,17 @@ def grppha_hsp(
     PHA directory. Response/background header values are written as bare file
     names, matching XSPEC workflows that change into the spectrum directory
     before loading the grouped PHA.
+
+    .. deprecated::
+        ``grppha_hsp`` is deprecated and will be removed in a future version.
+        Use :func:`jinwu.ftools.ftgrouppha.group_min_counts` instead.
     """
+    warnings.warn(
+        "grppha_hsp is deprecated and will be removed in a future version. "
+        "Use jinwu.ftools.ftgrouppha.group_min_counts instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     source = Path(infile).expanduser().resolve()
     target = Path(outfile).expanduser().resolve()
     if not source.exists():

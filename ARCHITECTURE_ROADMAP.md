@@ -2,9 +2,9 @@
 
 > 文档状态：架构方向与实施路线图<br>
 > 当前基线：Jinwu 0.2.0（monorepo：`jinwu` 核心 + `jinwu-ep/-fermi/-swift` 仪器发行包），Alpha<br>
-> 最后更新：2026-08-30（实现状态复核）<br>
+> 最后更新：2026-09-05（源码审查、定向回归与实施顺序修订，见 §19）<br>
 > 复核周期：至少每 6 个月一次<br>
-> 状态标记约定：【✅】已实现 ·【🔶】部分实现/有前身 ·【⬜】未开始（按 2026-08-30 代码库复核）
+> 状态标记约定：【✅】已实现 ·【🔶】部分实现/有前身 ·【⬜】未开始。未注明更新日期的状态保留 2026-08-30 历史复核口径；2026-09-05 的复核结论与执行优先级见 §19，冲突时以较新的明确记录为准。规划登记不代表实现或验收完成。
 
 ## 1. 执行摘要
 
@@ -12,6 +12,10 @@ Jinwu 的长期目标，是成为面向 2030 年代时域天文学和多信使�
 科学平台。它不应只是一组 X 射线任务脚本，也不应通过重新实现所有成熟软件来追求
 表面上的“独立”。Jinwu 应提供稳定的科学语义、任务无关的数据契约、可组合的模型与
 似然、可追踪的工作流，以及能够被研究者和 AI 系统一致调用的公共接口。
+
+2026-09-05 定位补充：近期聚焦“连接多任务观测数据与可复现物理推断的公共分析层”，
+以 EP、Swift、GBM 的完整研究流程作为外部采用的起点。优先提升科学结果可信度、
+接口稳定性和外部研究者独立使用能力，再逐步扩大波段与信使范围。
 
 长期能力范围包括：
 
@@ -22,9 +26,10 @@ Jinwu 的长期目标，是成为面向 2030 年代时域天文学和多信使�
 
 实施策略必须保持务实：
 
-1. 近期优先完成并稳定 Einstein Probe 数据处理流程。【🔶 WXT 已稳定并有 e2e 测试；FXT 待做】
+1. 近期优先完成并稳定 Einstein Probe 数据处理流程。【🔶 WXT 已有流水线与 fake 后端 e2e 测试，但仍有缓存依赖缺陷；FXT 待做，见 §19】
 2. 生产级 EP、Swift 等 reduction 继续依赖 HEASoft、任务软件和 CALDB。【✅ 维持该策略】
-3. 原生拟合首先摆脱 XSPEC 对模型、统计量和优化器的垄断。【⬜ Phase 2 范围】
+3. 从已有统计与响应折叠组件提炼公共契约，原生拟合与外部采用并行推进。
+   【🔶 已有上限分析中的原生组件；完整原生谱拟合仍待建设，不作为告警接入和多任务产品互操作的前置条件】
 4. 脱离 HEASoft 只作为远期、选择性的能力，不是近期成功标准。【✅ 维持该策略】
 5. 新架构在同一个 `jinwu` 发行包中从 `jinwu.kernel` 开始建设。
    【🔶 0.2.0 起修订：`kernel` 仍待建，但发行结构已改为 monorepo——任务插件拆出
@@ -33,8 +38,9 @@ Jinwu 的长期目标，是成为面向 2030 年代时域天文学和多信使�
 7. 参考其他项目不等于把它们全部加入基础依赖；外部生态通过显式适配器接入。
    【✅ 已执行：核心依赖收窄至 numpy/scipy/astropy/matplotlib/pillow】
 
-第一条端到端的新内核能力是：读取已有 OGIP 产品，以 NumPy/SciPy 完成响应折叠、
-统计计算和参数拟合，并使用 XSPEC 作为数值校验基准。
+第一条端到端的新内核能力仍以已有 OGIP 产品的响应折叠、统计计算和参数拟合为目标，
+并使用 XSPEC 作为数值校验基准；优先迁移现有真实调用路径，避免新旧内核长期维护两套
+统计实现。文档、发布门禁、插件规范与社区维护从当前阶段开始建设。
 
 ## 2. 当前基线与主要差距
 
@@ -42,19 +48,23 @@ Jinwu 已经具有可继续发展的基础，而不是从零开始（2026-08-30 
 
 - 【✅ 属实】`core` 中已有 OGIP、事件、光变、PHA、RMF、ARF、GTI、时间系统和数据校验代码。
 - 【✅ 属实，且已升级】`ep`、`swift`、`fermi` 已承载任务相关能力（0.2.0 起为独立发行包）。
-- 【✅ 属实】`background`、`lightcurve`、`spectrum`、`physics`、`lf` 已形成初步领域模块。
+- 【🔶】`background`、`lightcurve`、`spectrum`、`physics`、`lf` 已有领域模块；
+  模块存在不等于计算能力可用，`physics.GeneralRelativity` 的公开接口缺陷见 §19。
 - 【✅ 属实】已存在纯 Python FTOOLS 替代实现和可选 Rust 加速路径（`jinwurs` 独立发行）。
 - 【🔶 需更新表述】已有 HEASoft 环境管理、XSPEC 拟合、上限和红移外推等工作代码。
-  （BXA 依赖已移除，但其产生的 chain 文件仍可经 `UpperLimit.from_chain` 消费；
-  另新增：逐参数 profile 误差状态、AICc 多模型比较、flux curve 与微信快报产物）
+  （2026-09-05：BXA 已作为可选 extra，并有 `core.bxa_fit` 与拟合方法分发；
+  逐参数 profile 误差状态、模型比较、flux curve 与微信快报产物已有实现，
+  统一结果契约及各路径科学验收仍需推进）
 - 【✅ 属实且已扩充】已有覆盖 OGIP、时间、GTI、数据集、拟合、任务 I/O 和显著性的
-  测试资产（949 项测试，全绿；含端到端 fake 后端管线测试）。
+  测试资产（历史记录为 949 项通过，含 fake 后端管线测试；不能代表当前全套测试状态。
+  2026-09-05 定向回归及明确失败项见 §19.1）。
 
 当前结构也存在需要在 Phase 0 处理的债务（状态按 2026-08-30 复核标注）：
 
 - 【✅ 已解决】`bxa`、`pymc`、`swiftbat`、`batanalysis` 等仍是基础安装的强制依赖。
   （0.2.0：核心依赖仅 numpy/scipy/astropy/matplotlib/pillow；任务能力拆为独立发行包，
-  swiftbat 经 `jinwu-swift` 提供，零引用的 bxa/pymc/batanalysis 已彻底移除）
+  swiftbat 经 `jinwu-swift` 提供；2026-09-05：BXA 与 BatAnalysis 已有按需启用的
+  extra/适配路径，不能再表述为从项目彻底移除）
 - 【🔶 部分解决】XSPEC 调用和 HEASoft 初始化分散在 `core`、`lf` 和绘图代码中。
   （拟合入口已集中到 `core.fit` + `_require_xspec` 单点；`plotfit`/`upperlimit` 仍直接
   import xspec；`HeasoftEnvManager` 存在但无 CapabilityProbe 抽象）
@@ -65,8 +75,9 @@ Jinwu 已经具有可继续发展的基础，而不是从零开始（2026-08-30 
   WXT/FXT 扫描器与 FXTA/FXTB 合束逻辑）
 - 【🔶 部分解决】发布 CI 负责构建和上传，但当前没有测试、导入和依赖矩阵门禁。
   （publish workflow 已按 tag lockstep 构建 4 个发行包 + Rust wheel 矩阵，但仍不运行 pytest）
-- 【✅ 基本解决】文档、安装元数据和运行时版本存在漂移风险。
-  （`make sync` 统一版本号；版本取自 importlib.metadata；recipe 有 sha256 同步流程）
+- 【🔶 部分解决】`make sync` 与部分运行记录使用统一版本信息，但文档仍有漂移。
+  （2026-09-05：Quick Start 接口不匹配，Sphinx 仍引用旧 `src` 目录并从缺失的
+  `jinwu.__version__` 回退至旧版本；见 §19.2）
 - 【✅ 基本解决】部分模块导入会隐式要求交互环境或外部软件，不利于最小安装和自动化。
   （库代码 plt.show() 已清除；swiftbat/astroquery/plotly 等改为惰性导入 + 守卫报错；
   仪器 pipeline 经 entry point 懒发现）
@@ -525,7 +536,8 @@ abi3 wheel。
 ## 10. 依赖与发布策略
 
 目标基础安装只保留通用内核依赖，例如 NumPy、SciPy、Astropy 和必要的轻量基础设施。
-当前强制依赖中的 BXA、PyMC、Swift/BAT 工具和交互式可视化包应在 Phase 0 拆分。
+2026-09-05 核心依赖为 NumPy、SciPy、Astropy、Matplotlib 和 Pillow；任务工具已拆入
+插件，BXA 等按需安装。后续以最小安装测试维持此边界，不重新引入可选重依赖。
 
 规划中的 extras 按能力而不是按流行包命名：
 
@@ -624,6 +636,10 @@ AI benchmark 至少覆盖：
 
 路线图按能力门槛推进，不按日期强行切换生产路径。
 
+2026-09-05 执行顺序修订：以下 Phase 保留为能力分组，版本号不表示对应能力已经交付。
+实际排期采用 §19.5 的验收顺序。Phase 6 中的文档、治理、引用和插件规范前移至
+当前阶段；Phase 2 原生拟合可并行研发，不阻塞基于现有后端的外部采用与告警适配。
+
 ### Phase 0：EP 稳定期，0.0.x
 
 目标：保证当前科学生产流程可靠，并为新内核建立可信基线。
@@ -631,19 +647,20 @@ AI benchmark 至少覆盖：
 产物：
 
 - 【🔶】完成 EP WXT/FXT 的核心 reduction 和分析流程。
-  （WXT ✅：`jinwu-ep` 的 WXTPointingPipeline 端到端 16 阶段含拟合/流量曲线/中文快报，
-  有完整 e2e 测试；FXT ⬜：仅 config 与扫描器，无 pipeline）
+  （WXT 🔶：已有含拟合/通量曲线/中文快报的流水线及 fake 后端 e2e 测试，
+  仍需修复 §19 的缓存问题并形式化真实数据验收；FXT ⬜：仅 config 与扫描器，无 pipeline）
 - 【🔶】选择弱源、强源、复杂 GTI/响应各至少一个 golden observation。
   （有真实数据回归工作区如 EP260703a，但未形式化 golden 基准与重放记录）
 - 【🔶】记录 HEASoft、任务软件、CALDB、输入和输出校验和。
   （pipeline stage manifest 记录输入/输出 sha256 指纹；拟合产物含可回放 .xcm/.log 与
-  `collect_runtime_environment`；CALDB 版本尚未记录）
+  `collect_runtime_environment`；2026-09-01 BAT 验证记录已有 CALDB 配置校验和，
+  尚需将实际使用的校准文件身份与环境记录推广为各任务统一契约）
 - 【🔶】集中 HEASoft 环境检查和外部命令 provenance。
   （HeasoftEnvManager 见 §7.2；xselect 调用记录 .xco/.log）
 - 【✅】把 BXA、PyMC 和任务工具从基础依赖迁移到 extras。
-  （并超额完成：任务工具升级为独立发行包；emcee/bxa/pymc/batanalysis 彻底移除）
+  （任务工具升级为独立发行包；BXA、BatAnalysis 按需接入，保持核心安装轻量）
 - 【🔶】增加最小安装、完整安装、无 XSPEC 和 HEASoft 集成测试矩阵。
-  （测试套件 949 项，XSPEC 缺失自动跳过 + network marker；CI 尚无安装矩阵）
+  （已有测试与 network/heasoft/real_data markers；CI 尚无安装矩阵，当前定向结果见 §19.1）
 - 【⬜】发布前 CI 必须运行测试、导入检查和 wheel smoke tests。
   （publish workflow 目前只构建与发布）
 
@@ -681,8 +698,9 @@ AI benchmark 至少覆盖：
 
 ### Phase 2：Native OGIP 期，0.2
 
-【⬜ 2026-08-30 状态】未开始。注意 0.2.0 版本号对应的是 monorepo 打包重构，
-与本阶段（原生 OGIP 拟合）无关。
+【🔶 2026-09-05 状态】已有 `CallablePhotonModelPredictor`、Gaussian 净率对象和
+ON/OFF likelihood 等可复用组件，完整的通用原生谱拟合路径与公共契约尚未完成。
+0.2.0 版本号对应 monorepo 打包重构，不表示本阶段已验收。
 
 目标：完成第一条脱离 XSPEC 的端到端拟合路径。
 
@@ -763,6 +781,9 @@ AI benchmark 至少覆盖：
 - 合成联合案例可以共享时间、天空位置、距离和源参数。
 
 ### Phase 6：AI 与社区成熟期，1.0
+
+2026-09-05 修订：本阶段表示成熟度验收，不表示届时才启动社区建设。
+文档、贡献指南、科学审查、弃用政策、引用信息及插件规范从 Phase 0/1 开始交付。
 
 【⬜ 2026-08-30 状态】未开始。唯一相关的雏形是面向 AI 代理的
 `REUSABLE_FUNCTIONS.md` 公共 API 索引（非机器契约）。
@@ -942,3 +963,169 @@ AI benchmark 至少覆盖：
 Jinwu 当前采用 GPL-3.0-or-later，并已注明从 HEApy 修改代码的来源。未来复用任何第三方
 代码时，必须继续保存版权、许可证、修改记录和引用信息；只借鉴设计时也应在架构文档或
 ADR 中注明来源。
+
+## 19. 2026-09-05 基础设施建设审查与行动计划
+
+### 19.1 审查范围与验证证据
+
+本节来自对 Jinwu 0.2.0 当前工作区（包含未提交修改）的源码、公共接口、仪器插件、
+文档、发布流程和已有路线图的只读审查。审查未修改科学代码，也未重跑全部任务的
+HEASoft reduction、标定和真实数据流水线。本次只登记问题和计划，不将其标记为已修复。
+
+在 `hea` 环境中执行的核心定向回归：
+
+```bash
+conda run -n hea pytest \
+  test/test_base_time.py test/test_ogip.py test/test_writefits_roundtrip.py \
+  test/test_datasets.py test/test_config.py test/test_pipeline.py \
+  test/test_fit_settings.py test/test_model_comparison.py test/test_bxa_fit.py \
+  test/test_xray_model_comparison.py test/test_pipeline_products.py test/test_plotpanel.py \
+  -q -p no:cacheprovider -m 'not network and not heasoft and not real_data'
+```
+
+实际结果：**528 passed, 6 skipped, 1 deselected in 7.99s**。
+执行时使用 Agg 绘图后端、临时 matplotlib 缓存、禁写字节码，并将数学库线程数限制为 1。
+
+追加运行：
+
+```bash
+conda run -n hea pytest test/test_txx_iterbkg_validation.py -q -rs -p no:cacheprovider
+```
+
+实际结果：**1 failed, 1 passed in 0.91s**。有符号分位数测试通过；真实事件文件路径与
+对象等价性测试失败，错误为 `ValueError: Lightcurve HDU lacks RATE/COUNTS column`。
+该测试模块曾在 [Swift 验证记录](packages/jinwu-swift/VALIDATION.md) 的受影响回归中
+被排除；历史通过总数不得用作当前该路径已经通过验证的证据。
+
+上述结果是定向软件回归证据，不是全套测试通过或全部任务科学标定完成的声明。
+
+### 19.2 已确认问题：先修复并建立发布门禁
+
+审查时点所有条目均为**待修复/待验收**；六项已于 2026-09-05 实施修复
+（见下方"修复记录"），正式验收仍按各自退出门槛执行。源码位置使用文件与符号定位，避免行号随修改失效。
+
+| 编号 / 优先级 | 源码与本次证据 | 影响 | 修复方向与退出门槛 |
+|---|---|---|---|
+| AUD-01 / 高 | [WXT `stage_code_dependencies`](packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py) 使用 `Path(__file__).resolve().parents[2] / "core"`；拟合阶段列出的 `fit.py`、`products.py`、`plot.py` 全部位于不存在的 `packages/jinwu-ep/src/jinwu/core/` 下 | 核心算法变化可能未触发缓存失效，复用旧科学结果 | 按实际导入模块定位源码，复用 Swift GRB 的模块定位思路；检查依赖文件存在与声明完整性；验证核心辅助模块改变后仅相应依赖阶段重算，并覆盖 editable 与 wheel 安装 |
+| AUD-02 / 高 | [`txx_iterbkg._to_binned`](packages/jinwu/src/jinwu/core/timescale.py) 对路径直接使用 `read_lc`；[现有事件回归](test/test_txx_iterbkg_validation.py) 中对象调用完成、路径调用失败 | 相同数据通过不同入口行为不一致，影响批处理和复用 | 复用通用 FITS 类型发现/读取，统一事件与光变输入归一；路径/对象须在绝对时间、共同网格、曝光、BACKSCAL 和 Txx 上一致；修复后将该回归纳入适当的真实数据验收门禁 |
+| AUD-03 / 高 | [`GeneralRelativity`](packages/jinwu/src/jinwu/physics/gr.py) 已从 `jinwu.physics` 导出；`g.v = 1.0` 实测触发 `NameError: name 'u' is not defined`；源码也未导入 `np`，`beta` 固定返回占位值 `0.0` | 公开计算能力与实际实现不符 | 盘点公开导出；实验功能显式声明未支持，禁止返回占位科学结果；完成单位、解析解和适用边界测试后再声明可用 |
+| AUD-04 / 高 | [publish workflow](.github/workflows/publish.yml) 仅构建 Python/Rust 产物并发布，未运行 pytest；publish 只依赖构建任务 | 构建成功无法阻止接口或科学回归进入发布版本 | PR 与发布接入核心离线测试、插件契约、实际 wheel 安装/发现、支持版本与 extras 矩阵、示例执行；真实数据/HEASoft 验收使用具备相应能力的独立环境 |
+| AUD-05 / 中 | [Quick Start](docs/quickstart.rst) 的 `EnergyBand(..., unit="keV")` 实测 TypeError，`ChannelBand.from_energy_band` 不存在 | 新用户照文档操作即失败 | 统一公开能段接口和教程；带固定小样例执行文档，不能仅检查语法或用 mock 代替关键调用 |
+| AUD-06 / 中 | [Sphinx 配置](docs/conf.py) 仍指向旧 `src`；实查命名空间包无 `jinwu.__version__`，配置因此回退 `0.0.27`；[RTD 配置](.readthedocs.yaml) 仍从根目录安装，而发行项目已移入 `packages/` | 文档版本与安装路径漂移；RTD 干净环境安装尚需验证 | 使用发行元数据读取版本，按 monorepo 安装文档所需包；在干净环境完成文档构建和关键示例测试，发布版本与文档版本必须一致 |
+
+AUD-01 的修复不能止于路径拼接：还需审查如时标模块等实际算法依赖是否完整登记。
+AUD-02 的本次失败发生在读取阶段，后续时间与缩放断言尚未执行，不能视为已通过。
+AUD-06 的 RTD 安装失败未在本次远程构建中复现，应保留为明确配置风险和待验收项。
+
+#### 19.2.1 修复记录（2026-09-05）
+
+- **AUD-01 已修复**：WXT `stage_code_dependencies` 改为"导入真实模块 +
+  `inspect.getsourcefile`"定位（与 Swift GRB/BAT 一致，editable 与 wheel 均
+  正确）；补登 fit 阶段实际执行链 `spectrum_prep`/`bxa_fit`/`config`，以及
+  duration 阶段的 `timescale`（ops 仅为重导出垫片，正是本条补充告诫所指）。
+  基类 `_stage_code_fingerprint` 对声明了但不存在的文件显式报错（不再静默
+  `sha256=None`）；Swift 两处 `getsourcefile(x) or ""` 退化同样改为显式报错。
+  新增 `test/test_stage_code_deps.py`：三管线依赖存在性、声明完整性、指纹
+  内容敏感性与缺失报错。wheel 布局下的同一断言由发布门禁执行。
+- **AUD-02 已修复**：`_to_binned` 路径输入经 `guess_ogip_kind` 按内容判型
+  （evt→`read_evt`，lc→`read_lc`），与对象输入汇合到同一处理路径；
+  `rebin_events_to_lightcurve` 透传 `timezero`/`timezero_obj`；`_to_binned`
+  把 bin 几何平移回绝对时间框架，使 src/bkg（`TIMEZERO` 相差 2.6 s）在绝对
+  网格上投影对齐；返回 dict 补 `alpha` 与 `time_reference` 键。
+  `test_txx_iterbkg_validation.py` 标记 `real_data` 并实测通过（两分支
+  t100/t90/t50/peak 1e-9 一致、alpha=0.18796801885192388、绝对 MET）。
+- **AUD-03 已修复**：`gr.py` 补 `numpy`/`astropy.units`/光速导入，`beta`
+  改为解析 `v/c`，`v>=c` 报错；`physics/__init__` docstring 移除未实现的
+  redshift 宣称；IPython 改为可选（缺失时 show_* 纯文本回退），修正 show_*
+  raw-string 双反斜杠转义。新增 `test/test_gr.py`（单位、解析解、边界）。
+- **AUD-04 已修复**：新增 `.github/workflows/ci.yml`（PR/push，Python
+  3.11–3.13 矩阵，editable 安装四包后运行离线套件 `not network and not
+  heasoft and not real_data`，`--strict-markers`）；`publish.yml` 新增
+  `wheel-gate`（干净 venv 安装全部 Python wheel → 导入与
+  `jinwu.instruments` entry point 发现 → 离线门禁测试子集），publish 依赖
+  该门禁。真实数据/HEASoft 验收仍留在具备能力的独立环境。
+- **AUD-05 已修复**：quickstart/index 能段示例改为真实 API
+  （`EnergyBand` 四字段构造、`channel_mask_from_ebounds`、
+  `band_from_arf_bins`，并修正"ARF 转通道"的说法）；新增
+  `test/test_quickstart_examples.py` 以固定合成 OGIP 样例执行教程调用。
+  顺带发现并修复 `WXTPointingResult.display()` 无 IPython 分支输出契约
+  不一致（会中断 CI 环境的教程回归）。
+- **AUD-06 已修复**：`docs/conf.py` 删除指向不存在 `src/` 的死路径，版本改
+  由 `importlib.metadata.version("jinwu")` 读取（缺失时显式报错，不再回退
+  0.0.27），标题显示发布版本；`.readthedocs.yaml` 改为安装 monorepo 四个
+  发行包（根目录无 `[project]` 表不可安装）；docs extra 钉
+  `sphinx-automodapi>=0.21`（Sphinx 8.2+/9 兼容）。已在干净 venv 按新配置
+  完成文档构建（版本 v0.2.0 可见）；RTD 远程构建保留为待验收项。
+
+### 19.3 架构、基本功能与易用性调整
+
+以下是设计与开发计划，已有组件仅作为复用起点，不代表目标契约已经实现。
+
+| 方向 | 当前可复用起点与差距 | 计划与验收要求 |
+|---|---|---|
+| 数据的科学语义 | [OGIP 数据结构](packages/jinwu/src/jinwu/core/base.py)、时间、GTI 已存在；`SpectrumDataset`/`JointDataset` 主要为容器 | 明确原始计数、净率、通量及其转换来源，显式保存背景模型、曝光、协方差、能段和参考系；公共物理量使用 Quantity，EP 时间复用 `jinwu.core.time.Time(format="ep")`；统计方法根据数据契约验证兼容性 |
+| 最小推断内核 | [upperlimit](packages/jinwu/src/jinwu/core/upperlimit.py) 已有 `CountPredictor`、`CallablePhotonModelPredictor`、`GaussianNetRateObservation`；[model_comparison](packages/jinwu/src/jinwu/core/model_comparison.py) 已有 ON/OFF profile/marginal likelihood | 从真实调用路径提炼参数、响应、似然和结果协议，先迁移一个完整案例；保持 profile 与 marginal 的语义区别，避免新旧层复制统计实现 |
+| 联合推断 | 已有 XSPEC 分组与 prepared spectra，但通用模型/数据集契约未冻结 | 显式表达共享物理参数、标定 nuisance、共享背景/协方差和观测重叠；每项似然记录独立性假设，防止同一事件生成的谱和光变被重复计入 |
+| 一致结果接口 | [fit_spectral](packages/jinwu/src/jinwu/core/fit.py) 按方法返回 dict 或 `BXAFitResult` | 统一参数、区间类型、诊断、来源及序列化接口；分别记录执行、产品、收敛、边界和科学验证状态；保留后端细节但不要求消费者安装后端才能读结果 |
+| 插件边界 | 已拆分发行包并使用 entry points；[InstrumentConfig](packages/jinwu/src/jinwu/core/config.py) 仍承载 BAT/GBM 专用配置 | 通用协议留在核心，任务预设、发现、校准和特定配置归插件；按模型/统计/外部执行/诊断/报告拆分大模块；外部团队添加仪器无需修改核心源码，并通过 conformance suite |
+| 可复现分析包 | 已有阶段 manifest、schema version、文件指纹和部分环境记录 | 保存生效配置、选择条件、输入与实际校准文件身份、模型/先验、软件版本、随机种子、日志和结果；支持跨目录迁移、schema 升级、历史结果只读和独立复核，逐步向 IVOA Provenance 映射 |
+| 批处理与隔离 | 已有阶段恢复和外部命令超时；仍有进程级拟合设置、XSPEC 全局状态及 GBM 上限超时待办 | 将生效配置固化为每次执行上下文；以独立进程运行 PyXspec 拟合，统一中止、超时、CPU/内存预算、PFILES 与工作目录锁；中断不污染其他任务，恢复不误用部分产物 |
+| 用户入口 | 已有任务级 CLI、preflight、Notebook 展示与产物报告 | 建议新增统一 `jinwu doctor`、`jinwu run analysis.yaml`、`jinwu explain result`，这些命令当前是规划；全部复用同一 Python 服务层，明确可用能力、缺失条件及结果为何需要复查 |
+| 文档与交互 | 已有教程和绘图资产，但入门接口漂移 | 分别提供首次分析、批量分析、模型/插件开发路径；提供固定校验和的小样例；区域、时间窗、背景、残差和质量状态可检查，交互修改能保存为可重放配置；英文规范与中文教程同步维护 |
+| 科学验证 | 已有软件回归、部分真实数据与 sensitivity 验证资产 | 建立公开的弱源、强源、无源、复杂背景、间断 GTI、变化响应及仪器边缘基准；检查计数、曝光、背景缩放、参数偏差、区间覆盖率和误报率；为每项能力公布适用范围与验证等级 |
+
+### 19.4 优先开发的科学成果
+
+| 编号 | 方向与已有起点 | 下一步交付与科学边界 |
+|---|---|---|
+| DEV-01 | EP 发现—后随分析链：已有 WXT 流程与 FXT 配置/扫描 | 补齐 FXT pipeline，统一 WXT、FXT 与 Swift 后随产品组织，以公开真实观测形成完整可重放案例；参考任务软件完成产品及科学对照 |
+| DEV-02 | 按坐标和时间查询多任务观测与非检测：复用 BAT survey、GBM 连续数据及覆盖判断 | 返回可用数据、有效曝光、测量、上限及质量状态；明确区分无覆盖、无数据、质量不足和观测后未检测；几何覆盖不能代替有效曝光或通量约束 |
+| DEV-03 | 时间与能谱联合建模：复用分段能谱、响应和背景组件 | 逐步实现共享 `F(E,t)`，处理响应变化、GTI、曝光和背景不确定度；以共享参数、预测计数及模拟恢复验证联合模型，记录分段近似与数据依赖 |
+| DEV-04 | 注入恢复与选择函数：扩展现有 sensitivity、模拟和高红移可探测性工具 | 输出依赖物理参数、位置、时间和任务选择条件的检测概率及其不确定度；验证误报与恢复率，服务发生率、光度函数和高红移群体研究；单个事件的最大可探测红移不能替代调查选择函数 |
+| DEV-05 | 告警与定位适配：接入 GCN 与选定 broker 的相关子流 | 支持版本化 schema、更新、撤回、去重、关联历史和离线重放；区分定位概率图与时空覆盖，MOC 用于覆盖交换；优先复用现有事件分发生态 |
+
+DEV-02 与 DEV-04 是重点差异化方向：将弱信号、非检测及选择过程作为可复用科学产品。
+本节为建设判断，不承诺尚未测量的精度、吞吐量或调查完备性。
+
+### 19.5 实施顺序、维护与成功标准
+
+以下顺序以验收结果推进，不构成固定工期承诺：
+
+| 阶段 | 主要交付 | 退出门槛 |
+|---|---|---|
+| 下一次稳定发布 | 修复 AUD-01～06，建立发布门禁、可执行教程与能力验证清单 | 明确失败回归修复；缓存依赖可验证；实际 wheel 和文档在干净环境可用；每个公开功能标明支持范围，科学验证缺口不被“测试通过”掩盖 |
+| 外部可用闭环 | 公开真实观测基准，推进 EP 后随流程与可移植分析包 | 外部研究者无需作者手工调整即可完成声明支持的流程，独立复核输入、结果与质量状态 |
+| 公共接口与生态扩展 | 从已有组件提炼内核、交付插件规范，推进 DEV-02/03/05 | 一个真实工作流迁移完成；外部插件通过契约测试；同一分析规范可以由 Python、CLI 和后续 AI 适配层一致执行 |
+| 群体分析与性能扩展 | 推进 DEV-04，按实际瓶颈评估 JAX/GPU 和更大规模任务处理 | 检测概率及其误差经过注入恢复验证；优化具有性能测量与数值一致性证据；维护成本和适用范围明确 |
+
+原生拟合可与以上阶段并行研发；更大范围的任务处理、独立 broker 和高性能后端，
+以明确合作需求、有效基准和实际瓶颈作为启动条件。
+
+社区建设从现在开始：维护贡献指南、科学审查责任、弃用政策、引用信息与版本 DOI；
+逐步为关键模块培养第二位维护者，组织外部团队完成一次独立分析和一次插件开发。
+新可复用接口仍按项目约定登记到 `REUSABLE_FUNCTIONS.md` 并配套测试。
+
+长期追踪外部团队独立完成分析的比例、旧结果跨版本复现率、第三方插件数量、科学缺陷
+修复周期，以及能够独立维护和发布的贡献者数量。每项指标需定义样本、统计窗口和
+验证方式；本次未测量其基线值，不填入推测数值。
+
+### 19.6 本次规划的文献与标准依据
+
+以下来源在本次审查中查阅；用于方法学和互操作设计，不代表 Jinwu 已达到相同能力：
+
+- Vianello et al. (2015), *The Multi-Mission Maximum Likelihood framework (3ML)*,
+  [arXiv:1507.08343](https://arxiv.org/abs/1507.08343)：任务插件、响应折叠与联合推断。
+- Donath et al. (2023), *Gammapy: A Python package for gamma-ray astronomy*,
+  [arXiv:2308.13584](https://arxiv.org/abs/2308.13584)：科学分析体系与长期支持版本实践。
+- HEASARC, *XSPEC — Parameter Estimation*,
+  [官方文档](https://heasarc.gsfc.nasa.gov/docs/software/xspec/manual/node393.html)：Gaussian、Poisson 与背景统计语义。
+- Servillat et al. (2020), *IVOA Provenance Data Model 1.0*,
+  [IVOA Recommendation](https://www.ivoa.net/documents/ProvenanceDM/)：数据来源与处理活动交换。
+- Astropy Collaboration (2022), *The Astropy Project: Sustaining and Growing a Community-oriented Open-source Project and the Latest Major Release (v5.0) of the Core Package*,
+  [arXiv:2206.14220](https://arxiv.org/abs/2206.14220)：互操作生态与可持续维护。
+- Thrane & Talbot (2019), *An introduction to Bayesian inference in gravitational-wave astronomy: parameter estimation, model selection, and hierarchical models*,
+  [arXiv:1809.02293](https://arxiv.org/abs/1809.02293)：层次推断与选择效应；高能仪器仍需自身的检测与注入验证。
+- NASA GCN, [Schema Browser](https://gcn.nasa.gov/docs/schema)；Rubin Observatory,
+  [Alerts and brokers](https://rubinobservatory.org/for-scientists/data-products/alerts-and-brokers)：现有告警协议与分发生态。
+- Fernique et al. (2022), *MOC: Multi-Order Coverage map 2.0*,
+  [IVOA Recommendation](https://www.ivoa.net/documents/MOC/)：天空和时间覆盖的标准表示。

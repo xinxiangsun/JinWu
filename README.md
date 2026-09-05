@@ -39,7 +39,15 @@ git clone https://github.com/Charon0922/jinwu.git
 cd jinwu
 pip install -e packages/jinwu            # 核心（可编辑安装）
 pip install -e packages/jinwu-ep         # 按需安装仪器包
+pip install -e packages/jinwu-swift      # Swift/BAT（survey 适配器可选依赖）
 ```
+
+Swift/BAT 单目标 survey 管线位于 `jinwu.swift.bat.survey`，按“本地发现 →
+可选查询/下载 → survey 光变 → 可选 mosaic → PHA/响应与 Gaussian-χ²
+拟合/上限 → 报告”运行。BatAnalysis 和 HEASARC 查询只在明确启用相应选项时
+延迟加载或访问网络；参见
+[`packages/jinwu-swift/README.md`](packages/jinwu-swift/README.md) 的 Python
+示例和命令行用法。
 
 ### 必要依赖 / Required Dependencies
 

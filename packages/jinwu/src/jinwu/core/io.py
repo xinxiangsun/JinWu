@@ -416,7 +416,23 @@ class OgipRmfReader:
 
     def read(self) -> RmfData:
         with fits.open(self.path) as h:
-            hm = cast(Any, h["MATRIX"])
+            # OGIP RMF files produced by XSPEC/HEASoft commonly use the
+            # canonical ``SPECRESP MATRIX`` extension name, while some
+            # legacy JinWu products use the shorter ``MATRIX`` alias.  Both
+            # names describe the same response table; rejecting the former
+            # prevents deterministic ``fakeit`` templates from being read
+            # back for otherwise valid survey PHA files.
+            matrix_name = next(
+                (
+                    name
+                    for name in ("MATRIX", "SPECRESP MATRIX")
+                    if name in h
+                ),
+                None,
+            )
+            if matrix_name is None:
+                raise KeyError("RMF lacks MATRIX or SPECRESP MATRIX extension")
+            hm = cast(Any, h[matrix_name])
             dm = hm.data
             matrix_columns = tuple(getattr(dm.columns, 'names', ()) or ())
             energ_lo = np.asarray(dm["ENERG_LO"], float)

@@ -11,6 +11,7 @@ Modules:
     - ftselect: Simple expression filtering for event tables
     - region: DS9 region parsing and point-in-region filtering
     - grppha: Minimal grppha-like grouping
+    - grppha_hsp: HEASoft grppha wrapper (**deprecated** — use ftgrouppha)
     - teldef: Teldef parsing and coordinate transformations
     - rmf_mapping: RMF to energy mapping
 
@@ -29,7 +30,7 @@ from . import ftrbnrmf
 from . import ftselect
 from . import region
 from . import grppha
-from . import grppha_hsp
+from . import grppha_hsp  # deprecated: use ftgrouppha instead
 from . import teldef
 from . import rmf_mapping
 from . import teldef_helpers

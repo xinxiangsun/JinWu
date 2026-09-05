@@ -59,3 +59,29 @@ Notes
 - ``fitter.fit(model, ...)`` 接受注册表名称或 astropy 模型类；
   ``fitter_method`` 支持 ``"lm"``（默认）与 ``"trf"``。
 - ``FitResult`` 提供 ``summary()``、``evaluate(t)`` 与 ``to_dict()``。
+
+Multi-object plotting
+~~~~~~~~~~~~~~~~~~~~~
+
+:mod:`jinwu.core.plotpanel` adds lightcurve/spectrum overlay helpers that
+accept any lightcurve- or spectrum-like object (``LightcurveData``,
+``LightcurveDataset``, ``SpectrumDataset``, …).
+:func:`jinwu.core.overlay` stacks several objects into one axes and
+returns ``(fig, ax)``; :func:`jinwu.core.multi_panel` gives each object
+its own vertically stacked, shared-x panel and returns ``(fig, axes)``,
+optionally saving to ``out``:
+
+.. code-block:: python
+
+   from jinwu.core import multi_panel, overlay
+
+   # One axes, several objects
+   fig, ax = overlay([lc_a, lc_b], labels=["EP", "Swift/XRT"], xmode="relative")
+
+   # One shared-x panel per object
+   fig, axes = multi_panel([lc_a, lc_b], labels=["EP", "Swift/XRT"],
+                           out="comparison", formats=("png",))
+
+Panel appearance (height ratio, y-scale, colors, per-panel plot kwargs) is
+configured through :class:`jinwu.core.PanelSpec` objects passed via
+``multi_panel(..., panels=[...])``.

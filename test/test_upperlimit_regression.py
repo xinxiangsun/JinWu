@@ -207,6 +207,39 @@ def test_sensitivity_adapter_receives_raw_covariance_once():
     assert captured["policy"].fractional_background_systematic == pytest.approx(0.2)
 
 
+def test_sensitivity_uses_explicit_false_alarm_probability():
+    cfg = instrument("GBM")
+    cfg.upper_limit = replace(
+        cfg.upper_limit,
+        result_modes=("observed_upper_bound", "detection_sensitivity"),
+        calibration="asymptotic",
+        calibration_mode="conditional_model",
+        detection_false_alarm_probability=0.01,
+        detection_power=0.5,
+        signal_trials=8,
+    )
+    result = estimate_upper_limit(
+        UpperLimitObservation(
+            name="NAI1",
+            source_counts=np.array([6.0, 5.0]),
+            background_model=np.array([4.0, 4.0]),
+            background_sigma=np.array([1.0, 1.0]),
+            unit_source_counts=np.ones(2),
+        ),
+        model=CountTemplateModel(name="unit", flux_per_amplitude=1.0),
+        instrument_config=cfg,
+        interval=(0.0, 1.0),
+        energy_band=(8.0, 1000.0),
+        plots=False,
+    )
+    sensitivity = result.detection_sensitivity
+    assert sensitivity is not None
+    assert sensitivity.false_alarm_probability == pytest.approx(0.01)
+    assert sensitivity.false_alarm_confidence == pytest.approx(0.99)
+    expected_threshold = NormalDist().inv_cdf(0.99) ** 2
+    assert sensitivity.threshold == pytest.approx(expected_threshold)
+
+
 def test_energy_selection_uses_channel_overlap():
     observation = UpperLimitObservation(name="det", source_counts=np.ones(3))
     selected = upperlimit._select_template_channels(

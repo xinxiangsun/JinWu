@@ -89,12 +89,22 @@ _PIPELINES: dict[str, type["InstrumentPipeline[Any, Any]"]] = {}
 
 
 def register_pipeline(key: str):
-    """Register one concrete pipeline without importing it from config."""
+    """Register one concrete pipeline without importing it from config.
+
+    Registration is idempotent for one implementation: ``python -m
+    pkg.module`` executes the module code a second time under ``__main__``
+    after the package import, recreating the class from the same source
+    file.  The already-registered class is reused in that case; a different
+    implementation claiming the same key still raises.
+    """
 
     normalized = key.strip().lower()
 
     def decorator(cls):
-        if normalized in _PIPELINES and _PIPELINES[normalized] is not cls:
+        existing = _PIPELINES.get(normalized)
+        if existing is not None and existing is not cls:
+            if inspect.getsourcefile(existing) == inspect.getsourcefile(cls):
+                return existing
             raise ValueError(f"Pipeline key already registered: {key}")
         _PIPELINES[normalized] = cls
         return cls
@@ -111,6 +121,7 @@ def _discover_pipelines(key: str) -> None:
     nothing matches).
     """
     try:
+        from importlib import import_module
         from importlib.metadata import entry_points
     except ImportError:  # pragma: no cover - stdlib on all supported versions
         return
@@ -120,6 +131,27 @@ def _discover_pipelines(key: str) -> None:
     for ep in (matched or eps):
         try:
             ep.load()
+            # A plugin entry point commonly exposes its package rather than
+            # importing every optional sub-pipeline eagerly.  Once the
+            # package is loaded, ask for the module represented by the
+            # remaining dotted pipeline key (for example
+            # ``swift.bat.survey`` -> ``jinwu.swift.bat.survey``).  This keeps
+            # ``python -m`` entry points free from runpy double-import
+            # warnings while still allowing ``pipeline(config, input)`` to
+            # discover lazily registered sub-pipelines.
+            if key not in _PIPELINES:
+                module_name = getattr(ep, "module", "")
+                suffix = ".".join(key.split(".")[1:])
+                if module_name and suffix:
+                    try:
+                        import_module(f"{module_name}.{suffix}")
+                    except ModuleNotFoundError as exc:
+                        # Only suppress a missing derived submodule.  A
+                        # dependency imported by that module must still be
+                        # reported to the caller.
+                        expected = f"{module_name}.{suffix}"
+                        if exc.name != expected:
+                            raise
         except ImportError as exc:
             raise ImportError(
                 f"The {key!r} pipeline requires the {ep.name!r} instrument "
@@ -211,14 +243,43 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         implementation_hash = None
         if implementation is not None and Path(implementation).is_file():
             implementation_hash = _file_fingerprint(Path(implementation))
-        return _fingerprint(
-            {
-                "input": self.input,
-                "config": self.config,
-                "pipeline_class": f"{type(self).__module__}.{type(self).__qualname__}",
-                "implementation_sha256": implementation_hash,
-            }
-        )
+        payload: dict[str, Any] = {
+            "input": self.input,
+            "pipeline_class": f"{type(self).__module__}.{type(self).__qualname__}",
+            "implementation_sha256": implementation_hash,
+        }
+        # Older/general pipelines use the complete configuration as part of
+        # their immutable run identity.  Instrument adapters that can prove a
+        # stage-level configuration dependency override
+        # ``include_config_in_input_fingerprint`` and store the narrower
+        # fingerprint in each stage manifest below.
+        if self.include_config_in_input_fingerprint():
+            payload["config"] = self.config
+        return _fingerprint(payload)
+
+    def include_config_in_input_fingerprint(self) -> bool:
+        """Whether configuration belongs to the run-wide input identity.
+
+        The default preserves the historical cache contract.  Pipelines with
+        independent preparation and fit stages may return ``False`` and
+        implement :meth:`stage_config_dependencies` so changing a fitting
+        option invalidates the fit/report stages without re-running data
+        preparation.
+        """
+        return True
+
+    def stage_config_dependencies(self, stage: PipelineStage) -> Any:
+        """Return the configuration values consumed by ``stage``.
+
+        Returning the complete config is conservative and is the default for
+        existing pipelines.  The value is serialized by the same canonical
+        fingerprint helper as inputs and is persisted in the stage manifest.
+        """
+        del stage
+        return self.config
+
+    def _stage_config_fingerprint(self, stage: PipelineStage) -> str:
+        return _fingerprint(self.stage_config_dependencies(stage))
 
     def _dependency_fingerprint(
         self,
@@ -239,14 +300,61 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         """Additional source files whose changes invalidate a cached stage."""
         return ()
 
+    def stage_input_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
+        """External input files that determine one stage's cached result.
+
+        Pipelines commonly receive a directory or catalog path rather than the
+        file contents themselves.  Declaring those files here keeps a manifest
+        valid only while its scientific inputs are unchanged.
+        """
+        return ()
+
+    def _stage_input_fingerprint(self, stage: PipelineStage) -> str:
+        files = []
+        for path in self.stage_input_dependencies(stage):
+            resolved = Path(path).expanduser().resolve()
+            record: dict[str, Any] = {
+                "path": str(resolved),
+                "sha256": _file_fingerprint(resolved) if resolved.is_file() else None,
+            }
+            # A small number of optional adapters expose a calibration
+            # directory rather than one concrete file.  Preserve existence
+            # and directory metadata in that case without recursively hashing
+            # a potentially large CALDB tree; concrete config/response files
+            # should still be declared separately when their contents matter.
+            if resolved.is_dir():
+                try:
+                    stat = resolved.stat()
+                    record.update(
+                        {
+                            "kind": "directory",
+                            "mtime_ns": int(stat.st_mtime_ns),
+                        }
+                    )
+                except OSError:
+                    record["kind"] = "directory_unreadable"
+            elif resolved.exists():
+                record["kind"] = "file"
+            else:
+                record["kind"] = "missing"
+            files.append(record)
+        return _fingerprint(files)
+
     def _stage_code_fingerprint(self, stage: PipelineStage) -> str:
         files = []
         for path in self.stage_code_dependencies(stage):
             resolved = Path(path).expanduser().resolve()
+            if not resolved.is_file():
+                # 缺失时静默写 sha256=None 会让指纹退化为常量、代码改动
+                # 永不触发缓存失效（AUD-01 的潜伏机制），必须显式报错。
+                raise RuntimeError(
+                    f"stage {stage.name!r}: 声明的代码依赖不存在: {resolved}；"
+                    "请检查 stage_code_dependencies 的模块定位或包安装完整性"
+                )
             files.append(
                 {
                     "path": str(resolved),
-                    "sha256": _file_fingerprint(resolved) if resolved.is_file() else None,
+                    "sha256": _file_fingerprint(resolved),
                 }
             )
         return _fingerprint(files)
@@ -265,9 +373,17 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
             return None
         if payload.get("input_fingerprint") != self._input_fingerprint():
             return None
+        # Manifests written before stage-level configuration fingerprints were
+        # introduced are intentionally treated as stale.  Rebuilding once is
+        # safer than allowing a fit to reuse products made with another model
+        # or confidence convention.
+        if payload.get("stage_config_fingerprint") != self._stage_config_fingerprint(stage):
+            return None
         if payload.get("dependency_fingerprint") != self._dependency_fingerprint(stage, context):
             return None
         if payload.get("stage_code_fingerprint") != self._stage_code_fingerprint(stage):
+            return None
+        if payload.get("stage_input_fingerprint") != self._stage_input_fingerprint(stage):
             return None
         result_payload = payload.get("result", {})
         status = PipelineStatus(result_payload.get("status", PipelineStatus.FAILED.value))
@@ -295,11 +411,13 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
     ) -> None:
         self._manifest_dir.mkdir(parents=True, exist_ok=True)
         payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "stage": stage.name,
             "input_fingerprint": self._input_fingerprint(),
+            "stage_config_fingerprint": self._stage_config_fingerprint(stage),
             "dependency_fingerprint": self._dependency_fingerprint(stage, context),
             "stage_code_fingerprint": self._stage_code_fingerprint(stage),
+            "stage_input_fingerprint": self._stage_input_fingerprint(stage),
             "result": _jsonable(result),
             "output_fingerprints": _output_fingerprints(result.outputs),
             "runtime": {
@@ -324,7 +442,12 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         pfiles.mkdir(parents=True, exist_ok=True)
         headas = env.get("HEADAS")
         env["PFILES"] = f"{pfiles};{headas}/syspfiles" if headas else str(pfiles)
-        env["HEADASNOQUERY"] = ""
+        # Keep HEASoft tasks non-interactive when the caller prepared the
+        # environment that way (the Swift BAT pipeline sets this explicitly
+        # for its stage-local context).  An unset value also defaults to the
+        # safe batch behavior; callers that need prompts can override the
+        # returned mapping before launching a task.
+        env["HEADASNOQUERY"] = env.get("HEADASNOQUERY") or "1"
         env["HEADASPROMPT"] = "/dev/null"
         yield env
 

@@ -1,8 +1,8 @@
 # RedshiftExtrapolator 使用与原理说明
 
-本文档详细解释 `autohea.core.utils.RedshiftExtrapolator` 的物理推导、计算流程与使用方法，重点阐述“在给定信噪比阈值下可探测的最大红移”的计算原理。
+本文档详细解释 `jinwu.core.utils.RedshiftExtrapolator` 的物理推导、计算流程与使用方法，重点阐述“在给定信噪比阈值下可探测的最大红移”的计算原理。
 
-- 源码位置：`autohea/src/autohea/core/utils.py`
+- 源码位置：`packages/jinwu/src/jinwu/core/utils.py`
 - 相关函数：`compute()`、`find_redshift_for_snr()`、`snr_li_ma()`
 
 ---
@@ -131,7 +131,7 @@ SNR = sqrt{ 2 [ N_on ln((1+α)/α × N_on/(N_on+N_off)) + N_off ln((1+α) × N_o
 ## 5. 使用示例
 
 ```python
-from autohea.core.utils import RedshiftExtrapolator
+from jinwu.core.utils import RedshiftExtrapolator
 
 ex = RedshiftExtrapolator(
     z0=1.0,

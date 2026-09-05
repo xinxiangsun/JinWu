@@ -30,6 +30,17 @@ classifiers = [
     "Development Status :: 3 - Alpha"
 ]
 
+[project.optional-dependencies]
+# Pure-Python response generation stack (batteries-free alternative to the
+# official SA_GBM_RSP_Gen.pl).  Install from the xinxiangsun forks checked
+# out under external_sources/ or via git+https:
+#   pip install "jinwu-fermi[rsp]"
+rsp = [
+    "gbm_drm_gen",
+    "responsum",
+    "gbmgeometry",
+]
+
 [project.urls]
 Homepage = "https://github.com/xinxiangsun/jinwu"
 Repository = "https://github.com/xinxiangsun/jinwu"

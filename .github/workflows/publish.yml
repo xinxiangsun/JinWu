@@ -55,9 +55,54 @@ jobs:
           name: rust-wheels-${{ matrix.os }}-py${{ matrix.python-version }}
           path: dist/
 
+  # ── Wheel install / discovery / example gate (AUD-04) ──
+  wheel-gate:
+    needs: [build-python]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+      - name: Install wheels into a clean venv
+        run: |
+          python -m venv wheel-env
+          wheel-env/bin/pip install -q dist/*.whl pytest
+      - name: Smoke — imports, entry-point discovery, wheel-layout code deps
+        run: |
+          wheel-env/bin/python - <<'PY'
+          import inspect
+          from importlib.metadata import entry_points, version
+          from pathlib import Path
+
+          import jinwu.core
+          import jinwu.ep.wxt.pipeline
+          import jinwu.swift.bat.survey
+          import jinwu.swift.grb.pipeline
+          import jinwu.fermi
+
+          names = sorted(e.name for e in entry_points(group="jinwu.instruments"))
+          assert {"ep", "swift", "fermi"} <= set(names), f"missing entry points: {names}"
+
+          from jinwu.core import timescale
+          p = Path(inspect.getsourcefile(timescale))
+          assert p.is_file(), f"wheel layout lost module file: {p}"
+
+          print("wheel smoke ok:", version("jinwu"), names)
+          PY
+      - name: Run offline gate tests against installed wheels
+        run: |
+          wheel-env/bin/python -m pytest \
+            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py \
+            -p no:cacheprovider -m 'not network and not heasoft and not real_data' -ra
+
   # ── Publish + Release ──────────────────────────────
   publish:
-    needs: [build-python, build-rust]
+    needs: [build-python, build-rust, wheel-gate]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

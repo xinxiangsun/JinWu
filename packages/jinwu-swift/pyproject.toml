@@ -31,6 +31,10 @@ classifiers = [
 [project.optional-dependencies]
 # gdt-swift 提供 SAO/poshist 指向文件读取（bat_observation 可选导入）
 gdt = ["astro-gdt-swift>=2.2"]
+# swifttools 提供 UKSSDC 目录查询与 Burst Analyser 下载（grb.pipeline 下载档可选导入）
+ukssdc = ["swifttools>=3.0"]
+# BatAnalysis and HEASARC query support for the single-target survey pipeline.
+survey = ["batanalysis>=2.1", "astroquery>=0.4"]
 
 [project.urls]
 Homepage = "https://github.com/xinxiangsun/jinwu"

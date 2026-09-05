@@ -1257,6 +1257,91 @@ def iterative_bayesian_blocks(
     )
 
 
+def _signed_cumulative_curve(
+    left: np.ndarray,
+    right: np.ndarray,
+    counts: np.ndarray,
+    bkg_counts: np.ndarray,
+    signal_range: tuple[float, float],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build the piecewise-linear signed net-count cumulative curve.
+
+    Only the positive overlap of each bin with ``signal_range`` contributes.
+    A bin cut by either boundary contributes in proportion to its overlap,
+    equivalent to a uniform rate within that bin.  Gaps are represented by
+    horizontal segments rather than silently accumulating unavailable time.
+    """
+    left = np.asarray(left, dtype=float)
+    right = np.asarray(right, dtype=float)
+    counts = np.asarray(counts, dtype=float)
+    bkg_counts = np.asarray(bkg_counts, dtype=float)
+    if not (left.shape == right.shape == counts.shape == bkg_counts.shape):
+        raise ValueError("left/right/counts/bkg_counts 必须同形")
+    if np.any(~np.isfinite(left)) or np.any(~np.isfinite(right)):
+        raise ValueError("分箱边界必须有限")
+    if np.any(right <= left) or np.any(np.diff(left) < 0.0):
+        raise ValueError("分箱必须按时间排序且具有正宽度")
+
+    s0, s1 = sorted(float(x) for x in signal_range)
+    if not (np.isfinite(s0) and np.isfinite(s1) and s1 > s0):
+        raise ValueError("signal_range 必须是有限的正宽区间")
+
+    overlap_left = np.maximum(left, s0)
+    overlap_right = np.minimum(right, s1)
+    use = overlap_right > overlap_left
+    if not np.any(use):
+        raise ValueError("signal_range 与光变分箱没有正重叠")
+
+    curve_time = [s0]
+    cumulative = [0.0]
+    current_time = s0
+    current_counts = 0.0
+    net = counts - bkg_counts
+    for i in np.flatnonzero(use):
+        a = float(overlap_left[i])
+        b = float(overlap_right[i])
+        if a > current_time:
+            curve_time.append(a)
+            cumulative.append(current_counts)
+        width = float(right[i] - left[i])
+        current_counts += float(net[i]) * (b - a) / width
+        curve_time.append(b)
+        cumulative.append(current_counts)
+        current_time = b
+
+    if current_time < s1:
+        curve_time.append(s1)
+        cumulative.append(current_counts)
+    return np.asarray(curve_time, dtype=float), np.asarray(cumulative, dtype=float)
+
+
+def _crossing_midpoint(
+    curve_time: np.ndarray,
+    cumulative: np.ndarray,
+    target: float,
+) -> float:
+    """Return the midpoint of the earliest and latest target crossings."""
+    scale = max(1.0, float(np.max(np.abs(cumulative))), abs(float(target)))
+    atol = 32.0 * np.finfo(float).eps * scale
+    crossings: list[float] = []
+    for t0, t1, c0, c1 in zip(
+        curve_time[:-1], curve_time[1:], cumulative[:-1], cumulative[1:]
+    ):
+        d0 = float(c0 - target)
+        d1 = float(c1 - target)
+        if abs(d0) <= atol and abs(d1) <= atol:
+            crossings.extend((float(t0), float(t1)))
+            continue
+        if d0 * d1 > 0.0 or abs(float(c1 - c0)) <= atol:
+            continue
+        frac = float((target - c0) / (c1 - c0))
+        if -atol <= frac <= 1.0 + atol:
+            crossings.append(float(t0 + np.clip(frac, 0.0, 1.0) * (t1 - t0)))
+    if not crossings:
+        raise ValueError(f"有符号累计曲线未穿越目标计数 {target:g}")
+    return 0.5 * (min(crossings) + max(crossings))
+
+
 def _quantile_interval(
     left: np.ndarray,
     right: np.ndarray,
@@ -1265,32 +1350,26 @@ def _quantile_interval(
     signal_range: tuple[float, float],
     quantile: float,
 ) -> tuple[float, float]:
-    """背景扣除累积计数的对称分位区间（如 0.9 → 含 90% 净计数的区间）。
+    """Return a symmetric signed-net-count quantile interval.
 
-    与原实现一致用线性插值；逐箱净计数先截断为非负再累计（弱信号翼部可能出现
-    负净计数，避免累计曲线回落，也保证插值 ``xp`` 单调）。
+    Negative background-subtracted bins remain negative.  If a threshold is
+    crossed more than once, the reported crossing is the midpoint between the
+    earliest and latest solutions, matching the ``battblocks`` convention.
     """
-    s0, s1 = signal_range
-    # 窗口箱选择：i0 为左边界 ≤ s0 的最后一箱，i1 为右边界 ≥ s1 的第一箱之后。
-    # 不能用 digitize(s1, left)：当箱边界相对 s0 有小偏移时（如事件重分箱的 0.37s 相位），
-    # s1 恰好等于某个 left 值会被归入左侧，丢掉末尾一箱。
-    i0 = int(np.clip(np.searchsorted(right, s0, side='left'), 0, counts.size - 1))
-    i1 = int(np.clip(np.searchsorted(left, s1, side='right'), 1, counts.size))
-    net = counts[i0:i1] - bkg_counts[i0:i1]
-    if net.size == 0 or float(net.sum()) <= 0.0:
-        return (s0, s1)
-    # 同原实现：累积序列头部补 0；时间轴取窗口内各箱的右边界（相对窗口起点），
-    # 与累积序列（同样头部补 0）等长。注意不能对 i1 之后的箱做减法（会越界失真）。
-    cum = np.concatenate(([0.0], np.cumsum(np.maximum(net, 0.0))))
-    total = float(cum[-1])
-    if total <= 0.0:
-        return (s0, s1)
-    cumtime = np.concatenate(([0.0], right[i0:i1] - float(left[i0])))
-    half = 0.5 * (1.0 - float(quantile))
-    frac = cum / total
-    # cum 是非负净计数的累计（头部补 0），frac 必然非递减，满足 np.interp 对 xp 的要求。
-    t1 = float(np.interp(half, frac, cumtime)) + float(left[i0])
-    t2 = float(np.interp(1.0 - half, frac, cumtime)) + float(left[i0])
+    q = float(quantile)
+    if not 0.0 < q < 1.0:
+        raise ValueError("quantile 必须在 (0, 1) 内")
+    curve_time, cumulative = _signed_cumulative_curve(
+        left, right, counts, bkg_counts, signal_range
+    )
+    total = float(cumulative[-1])
+    if not np.isfinite(total) or total <= 0.0:
+        raise ValueError("signal_range 内有符号净计数总量必须为正")
+    half = 0.5 * (1.0 - q)
+    t1 = _crossing_midpoint(curve_time, cumulative, half * total)
+    t2 = _crossing_midpoint(curve_time, cumulative, (1.0 - half) * total)
+    if t2 < t1:
+        raise ValueError("有符号累计分位交点反序")
     return (t1, t2)
 
 
@@ -1354,7 +1433,10 @@ def txx_iterbkg(
     ----
     dict：键与 ``txx`` 兼容（``method/percent/txx/t50/t90/t100`` 及 ``*_err*``、
     ``*_tstart/_tstop`` 族），另含 ``peak``、``n_iterations``、``converged``、
-    ``bb_edges_time``、``background_rate``、``background_model_counts``。
+    ``bb_edges_time``、``background_rate``、``background_model_counts``；
+    以及 ``alpha``（源/背景缩放因子，无法推断或无背景时为 ``None``）和
+    ``time_reference``（``"absolute"`` 表示各 ``*_tstart/_tstop`` 与
+    ``peak`` 为绝对 MET——输入 timezero 非零；``"relative"`` 表示相对秒）。
     """
     from .ops import _effective_exposure_from_lc, _infer_bin_geometry, _resolve_alpha_for_src_bkg
 
@@ -1363,14 +1445,33 @@ def txx_iterbkg(
         from .data import EventDataBase, LightcurveDataBase
 
         if isinstance(obj, (str,)) or hasattr(obj, '__fspath__'):
-            from .io import read_lc
-            obj = read_lc(str(obj))
+            # 按内容判型分发（guess_ogip_kind 区分事件/光变），
+            # 与对象输入汇合到同一处理路径（AUD-02）
+            from .io import guess_ogip_kind, read_evt, read_lc
+            kind = guess_ogip_kind(str(obj))
+            if kind == 'evt':
+                obj = read_evt(str(obj))
+            elif kind == 'lc':
+                obj = read_lc(str(obj))
+            else:
+                raise TypeError(
+                    f"txx_iterbkg: 输入文件 {obj} 被识别为 {kind!r}，"
+                    "需要事件文件或光变文件"
+                )
         if isinstance(obj, EventDataBase):
             from .ops import rebin_events_to_lightcurve
             obj = rebin_events_to_lightcurve(obj, binsize=float(evt_binsize))
         if not isinstance(obj, LightcurveDataBase):
             raise TypeError(f"txx_iterbkg: 不支持的输入类型 {type(obj)!r}")
         left, right, width = _infer_bin_geometry(obj)
+        # 绝对时间框架：读取器把 time 重定基到 0，绝对量保存在 timezero
+        # （absolute_time = time + timezero）。把 bin 几何平移回绝对框架，
+        # 使 src/bkg 共同网格按绝对时刻对齐（各自 timezero 可能不同），
+        # 且返回的 tstart/tstop 与 txx 一样是绝对 MET（AUD-02）。
+        tz = float(getattr(obj, 'timezero', 0.0) or 0.0)
+        if tz != 0.0:
+            left = left + tz
+            right = right + tz
         expo = _effective_exposure_from_lc(obj, width)
         vals = np.asarray(obj.value, dtype=float)
         if obj.is_rate:
@@ -1383,6 +1484,7 @@ def txx_iterbkg(
 
     # ---- 背景：投影到源网格并按 alpha 缩放 ----
     bkg_counts_fixed = None
+    alpha_val = None
     if background is not None:
         b_left, b_right, b_counts, _b_expo, bkg_obj = _to_binned(background)
         alpha_val = _resolve_alpha_for_src_bkg(alpha, lc_obj, bkg_obj, context="txx_iterbkg")
@@ -1497,8 +1599,15 @@ def txx_iterbkg(
         return arr[i] if np.all(np.isfinite(arr[i])) else nan_pair
 
     seg_width = np.maximum(right - left, 1e-12)
+    time_reference = (
+        "absolute"
+        if float(getattr(lc_obj, 'timezero', 0.0) or 0.0) != 0.0
+        else "relative"
+    )
     return {
         "method": "iterbkg_bblocks_burstcube",
+        "alpha": (float(alpha_val) if alpha_val is not None else None),
+        "time_reference": time_reference,
         "percent": user_percent,
         "txx": _pick(dur_nom),
         "txx_err": _pick(dur_err_tot_all),

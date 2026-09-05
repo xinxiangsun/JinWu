@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+      - beta
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Offline core + plugin-contract tests across supported Python versions ──
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install monorepo packages (editable) + pytest
+        run: |
+          pip install -e packages/jinwu -e packages/jinwu-ep -e packages/jinwu-swift -e packages/jinwu-fermi pytest
+          pip list
+      - name: Run offline test suite
+        # 离线门禁：核心回归 + 插件契约 + 教程示例（AUD-05）+ 缓存依赖声明
+        # （AUD-01）。真实数据/HEASoft 验收在具备相应能力的独立环境执行。
+        run: |
+          python -m pytest test/ -p no:cacheprovider \
+            -m 'not network and not heasoft and not real_data' \
+            -ra --strict-markers

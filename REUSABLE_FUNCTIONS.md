@@ -81,3 +81,22 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `PhaWriter`/`RmfWriter`/`ArfWriter`（关键字对齐） | `jinwu.core.io` | 写出对齐 HEASoft 6.37 heasp 约定：PHA 补 `TLMIN1/TLMAX1/DETCHANS`；RMF 补 `DETCHANS/NUMGRP/NUMELT/TLMIN4` + header 透传；ARF 补 `HDUVERS` | 2026-08-30 |
 | 读端结构化解析 + 通道校验 | `jinwu.core.io` / `jinwu.core.data` | `PhaData.tlmin/tlmax/det_chans`、`RmfData.tlmin/det_chans`、`ArfData.hduvers` 读入即解析（缺失时回退推断）；`RmfData.validate()` 新增 `INCONSISTENT_CHANNELS` 校验（F_CHAN+N_CHAN vs TLMIN+DETCHANS，同 6.37 heasp） | 2026-08-30 |
 | `check_response_compatibility` + validate 对齐 ftverify/heasp | `jinwu.core.ogip` | 谱↔响应通道兼容性检查；`validate()` 全面对齐 HEASoft 6.37 校验：HDUCLAS1/HDUCLAS2/HDUVERS、PHA 通道三件套自洽、RMF DETCHANS↔EBOUNDS、GTI 自洽（BAD_GTI/UNSORTED_GTI）；均从 `jinwu.core` 懒加载导出 | 2026-08-30 |
+| `SwiftGRB` / `SwiftGRBDataConfig` / `SwiftGRBSegmentationConfig` | `jinwu.core.config` | 单 GRB Swift BAT+XRT 的公共产品、分段、拟合和执行预设（插件保持惰性导入） | 2026-08-31 |
+| `safe_extract_tar` | `jinwu.swift.grb.pipeline` | UKSSDC 外部产品归档的路径遍历与链接防护解包 | 2026-08-31 |
+| `InstrumentPipeline.stage_input_dependencies` | `jinwu.core.pipeline` | 声明外部科学输入并纳入阶段缓存哈希，输入变化自动失效相关阶段 | 2026-08-31 |
+| `BATSurvey` / `BATSurveyInput` / `BATSurveyPipeline` | `jinwu.swift.bat.survey` | 通用 Swift/BAT survey 单目标观测发现、survey、光变、谱/上限、可选 mosaic 与报告流程 | 2026-08-31 |
+| `read_bat_survey_rates` / `select_overlapping_pointings` | `jinwu.swift.bat.survey` | 保留 BAT survey 有符号净率、BKG_VAR 误差语义并按完整指向与 GTI 重叠选择 | 2026-08-31 |
+| `parse_area_table` / `calculate_background_scale` | `jinwu.swift.bat.survey` | 解析压缩面积表并用带单位的源/背景面积计算 alpha，缺失信息明确失败 | 2026-08-31 |
+| `read_gti_intervals` / `gti_overlap_duration` | `jinwu.swift.bat.survey` | 读取 Swift GTI 的 START/STOP 并按请求窗口计算真实 GTI 重叠曝光（不缩放完整指向谱） | 2026-08-31 |
+| `validate_survey_pha` / `profile_survey_upper_limit` | `jinwu.swift.bat.survey` | 校验 survey PHA/响应并以 Gaussian chi 固定光子指数 profile 上限 | 2026-08-31 |
+| `ensure_headas_env` | `jinwu.core.ops` | 为 HEASoft/Perl 任务构造可写、阶段隔离的运行环境变量（含 Conda `heainit.sh` 运行时路径） | 2026-08-31 |
+| `EmpiricalTailResult` / `empirical_tail_probability` / `p_to_sigma` / `sigma_to_p` | `jinwu.core.model_comparison` | 非规则嵌套模型的经验尾概率、Clopper--Pearson 区间及单/双侧 Gaussian-equivalent sigma 换算 | 2026-09-01 |
+| `GaussianNetRateObservation` / `profile_gaussian_upper_bound` | `jinwu.core.upperlimit` | 带单位的有符号 Gaussian 净率、完整协方差和 `A>=0` profile 上限；保留 signed MLE 与物理边界状态 | 2026-09-01 |
+| `BATSurveySensitivityAdapter` / `estimate_bat_survey_sensitivity` | `jinwu.swift.bat.survey` | 使用 BAT 原生八能道 TOTSNR、空白控制和固定位置注入估计独立 detection sensitivity | 2026-09-01 |
+| `integrate_background_interval` / `validate_background_residuals` | `jinwu.fermi.gbm.pipeline` | GBM 背景精确区间积分与连续留出块残差/预测覆盖诊断 | 2026-09-01 |
+| `gti_intervals_for_paths` / `single_response` | `jinwu.fermi.gbm.pipeline` | 用真实 TTE GTI 选择 RSP2 加权区间并安全写出单矩阵响应，保留输入文件只读 | 2026-09-01 |
+| `BayesFactorResult` / `summarize_bayes_factor` | `jinwu.core.model_comparison` | Numerically stable log-evidence and Bayes-factor intervals | 2026-09-02 |
+| `model_posterior_probability` / `model_averaged_direction_probabilities` | `jinwu.core.model_comparison` | Convert Bayes factors and prior odds to posterior model and directional probabilities | 2026-09-02 |
+| `onoff_log_marginal_likelihood` | `jinwu.core.model_comparison` | Analytic Poisson ON/OFF background marginal likelihood with a proper Gamma prior | 2026-09-02 |
+| `model_averaged_direction_probability_interval` / `onoff_log_profile_likelihood` | `jinwu.core.model_comparison` | Propagate evidence/q numerical intervals and provide a normalized ON/OFF profile diagnostic for W-stat cross-checks | 2026-09-02 |
+| `recover_raw_off_counts` | `jinwu.core.model_comparison` | Recover raw OFF PHA counts from PyXspec source-scaled background rates with fail-closed integer validation | 2026-09-04 |

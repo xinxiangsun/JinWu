@@ -17,6 +17,55 @@ Datasets & Net Data
    :no-inheritance-diagram:
    :include-all-objects:
 
+Pipeline Framework
+------------------
+
+.. automodapi:: jinwu.core.pipeline
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Pipeline & Instrument Configuration
+-----------------------------------
+
+.. automodapi:: jinwu.core.config
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Spectral Fitting
+----------------
+
+.. automodapi:: jinwu.core.fit
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Bayesian (BXA) Fitting
+----------------------
+
+.. automodapi:: jinwu.core.bxa_fit
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Model Comparison
+----------------
+
+.. automodapi:: jinwu.core.model_comparison
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Upper Limits
+------------
+
+.. automodapi:: jinwu.core.upperlimit
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+HEASoft Environment
+-------------------
+
+.. automodapi:: jinwu.core.heasoft
+   :no-inheritance-diagram:
+   :include-all-objects:
+
 Lightcurve Analysis
 -------------------
 
@@ -73,23 +122,37 @@ ftools (Pure-Python HEASOFT Equivalents)
    :no-inheritance-diagram:
    :include-all-objects:
 
-Einstein Probe
---------------
+Einstein Probe (WXT)
+--------------------
 
-.. automodapi:: jinwu.ep
+.. automodapi:: jinwu.ep.wxt
    :no-inheritance-diagram:
    :include-all-objects:
 
 Fermi/GBM
 ---------
 
-.. automodapi:: jinwu.fermi
+.. automodapi:: jinwu.fermi.gbm
    :no-inheritance-diagram:
    :include-all-objects:
 
-Swift
------
+Swift/BAT Observations
+----------------------
 
-.. automodapi:: jinwu.swift
+.. automodapi:: jinwu.swift.bat
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Swift GRB Pipeline
+------------------
+
+.. automodapi:: jinwu.swift.grb
+   :no-inheritance-diagram:
+   :include-all-objects:
+
+Swift BAT Survey Pipeline
+-------------------------
+
+.. automodapi:: jinwu.swift.bat.survey
    :no-inheritance-diagram:
    :include-all-objects:

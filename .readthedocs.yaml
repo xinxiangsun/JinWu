@@ -9,9 +9,19 @@ sphinx:
   configuration: docs/conf.py
   fail_on_warning: false
 
+# Monorepo: the distributions live under packages/ (the repo root itself is
+# NOT installable — no [project] table).  docs/api.rst references modules from
+# all four Python distributions, so install each of them; the docs extra on
+# the core package provides Sphinx and the theme.
 python:
   install:
     - method: pip
-      path: .
+      path: packages/jinwu
       extra_requirements:
         - docs
+    - method: pip
+      path: packages/jinwu-ep
+    - method: pip
+      path: packages/jinwu-fermi
+    - method: pip
+      path: packages/jinwu-swift

@@ -4,4 +4,6 @@ members = ["packages/*"]
 [tool.pytest.ini_options]
 markers = [
     "network: tests that require internet access (hits live Swift UKSSDC APIs)",
+    "heasoft: tests that require an initialized HEASoft/XSPEC runtime",
+    "real_data: tests that use local mission products rather than synthetic fixtures",
 ]

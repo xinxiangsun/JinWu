@@ -910,6 +910,10 @@ def rebin_events_to_lightcurve(
         bin_lo=edges[:-1], bin_hi=edges[1:],
         bin_width=np.diff(edges),
         binning='uniform',
+        # 透传绝对时间零点：evt.time 已重定基，绝对时刻保存在 timezero
+        # （absolute_time = time + timezero），下游据此还原绝对 MET
+        timezero=getattr(evt, 'timezero', 0.0) or 0.0,
+        timezero_obj=getattr(evt, 'timezero_obj', None),
     )
 
 
@@ -1588,6 +1592,18 @@ def _resolve_alpha_for_src_bkg(
 
     bs_src = _alpha_scalar_or_none(getattr(lc_src, 'backscal', None))
     bs_bkg = _alpha_scalar_or_none(getattr(lc_bkg, 'backscal', None))
+    if bs_src is None:
+        bs_src = _alpha_scalar_or_none(
+            getattr(lc_src, 'get_keyword_ci', lambda *_args, **_kwargs: None)(
+                'BACKSCAL', None
+            )
+        )
+    if bs_bkg is None:
+        bs_bkg = _alpha_scalar_or_none(
+            getattr(lc_bkg, 'get_keyword_ci', lambda *_args, **_kwargs: None)(
+                'BACKSCAL', None
+            )
+        )
     if bs_src is not None and bs_bkg is not None and bs_bkg > 0.0:
         return float(bs_src / bs_bkg)
 
@@ -2032,10 +2048,11 @@ def ensure_headas_env(
 ) -> dict[str, str]:
     """Return an environment dictionary suitable for HEASoft commands.
 
-    The function does not source ``headas-init.sh``. Instead it sets stable
-    command-line variables: ``HEADAS``, ``PATH``, ``PFILES`` and
-    ``HEADASNOQUERY``. This keeps non-interactive/sandboxed runs from failing
-    because the user's real HOME or PFILES directory is not writable.
+    The function does not source ``headas-init.sh``. Instead it sets the
+    stable runtime variables exported by the Conda ``heainit.sh`` wrapper,
+    including the Perl task runtime used by ``batsurvey``.  This keeps
+    non-interactive/sandboxed runs from failing because the user's real HOME
+    or PFILES directory is not writable.
     """
 
     out = dict(_os.environ if env is None else env)
@@ -2045,6 +2062,39 @@ def ensure_headas_env(
     syspfiles = headas_path / "syspfiles"
 
     out["HEADAS"] = str(headas_path)
+    # ``headas-init.sh`` supplies these paths before any of the Perl-driver
+    # tasks can run.  In particular, ``batsurvey`` exits immediately when
+    # LHEAPERL is missing even though the executable itself is on PATH.  Fill
+    # them from the selected HEADAS tree only when the caller has not already
+    # supplied an explicit value.
+    headas_lib = headas_path / "lib"
+    conda_prefix = headas_path.parent
+    perl_executable = conda_prefix / "bin" / "perl"
+    environment_defaults = {
+        "LHEASOFT": str(headas_path),
+        "FTOOLS": str(headas_path),
+        "XANADU": str(headas_path),
+        "XANBIN": str(headas_path),
+        "LHEA_DATA": str(headas_path / "refdata"),
+        "LHEA_HELP": str(headas_path / "help"),
+        "XRDEFAULTS": str(headas_path / "xrdefaults"),
+        "PERL5LIB": str(headas_lib / "perl"),
+        "PERLLIB": str(headas_lib / "perl"),
+        "PGPLOT_DIR": str(headas_lib),
+        "PGPLOT_FONT": str(headas_lib / "grfont.dat"),
+        "PGPLOT_RGB": str(headas_lib / "rgb.txt"),
+        "POW_LIBRARY": str(headas_lib / "pow"),
+        "TCLRL_LIBDIR": str(headas_lib),
+    }
+    if perl_executable.is_file():
+        environment_defaults["LHEAPERL"] = str(perl_executable)
+    for name, value in environment_defaults.items():
+        # Empty variables are what ``headas-init.sh`` leaves for some
+        # installations (notably LHEAPERL before the wrapper is sourced),
+        # but they are not usable runtime values.  Preserve a non-empty
+        # caller override while filling only missing/empty entries.
+        if not out.get(name):
+            out[name] = value
     out["HEADASNOQUERY"] = "1"
     out["PATH"] = _prepend_env_path(out.get("PATH"), headas_bin)
     if headas_python.exists():

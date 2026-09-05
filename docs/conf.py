@@ -1,6 +1,6 @@
 """JinWu Sphinx config."""
+import importlib
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 # -- Mock environment-specific modules BEFORE any jinwu import ----------------
@@ -9,37 +9,69 @@ from unittest.mock import MagicMock
 if "xspec" not in sys.modules:
     sys.modules["xspec"] = MagicMock()
 
-# GDT submodules (astro-gdt may be installed but sub-path varies by version;
-# our mock must sit in sys.modules before the real gdt.missions parent prevents
-# traversal into non-existent .fermi child.)
-_gdt_mocks = [
+
+def _use_or_mock(name: str) -> None:
+    """Import *name* for real when possible; mock it when unavailable.
+
+    Unconditionally mocking a package whose real parents import cleanly
+    breaks submodule imports: a MagicMock has no usable ``__path__``, so
+    ``import parent.child`` fails with "is not a package".  Try the real
+    import first and only fall back to a sys.modules mock.  Local builds
+    with a working GDT keep the real modules (better docstrings); Read the
+    Docs, which has no GDT, ends up with everything mocked as before.
+    """
+    if name in sys.modules:
+        return
+    try:
+        importlib.import_module(name)
+    except Exception:
+        sys.modules[name] = MagicMock()
+
+
+# Every dotted GDT path imported (directly or lazily) by jinwu.fermi.gbm;
+# parents are listed before children so the mock chain stays importable.
+_gdt_modules = [
+    "gdt",
+    "gdt.core",
+    "gdt.core.data_primitives",
+    "gdt.core.plot",
+    "gdt.core.plot.sky",
+    "gdt.core.plot.plot",
+    "gdt.missions",
     "gdt.missions.fermi",
+    "gdt.missions.fermi.plot",
     "gdt.missions.fermi.gbm",
     "gdt.missions.fermi.gbm.detectors",
+    "gdt.missions.fermi.gbm.finders",
+    "gdt.missions.fermi.gbm.poshist",
+    "gdt.missions.fermi.gbm.localization",
+    "gdt.missions.fermi.gbm.saa",
 ]
-for _mod in _gdt_mocks:
-    if _mod not in sys.modules:
-        sys.modules[_mod] = MagicMock()
-
-# If gdt itself isn't installed at all, also mock it (belt and suspenders)
-if "gdt" not in sys.modules:
-    sys.modules["gdt"] = MagicMock()
+for _mod in _gdt_modules:
+    _use_or_mock(_mod)
 
 # -- Path setup ----------------------------------------------------------------
-# Add the src/ directory so Sphinx can import jinwu
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# No sys.path hack: the docs build requires the monorepo distributions to be
+# installed (see docs/index.rst "For development" and .readthedocs.yaml).
+# The repo root has no src/ and the root pyproject is not installable.
 
 # -- Project information -------------------------------------------------------
 project = "JinWu"
 copyright = "2025-2026, Xinxiang Sun (孙新翔)"
 author = "Xinxiang Sun"
 
-# Read version from jinwu itself (works for both editable and installed)
+# Read version from the installed distribution metadata (single source of truth:
+# packages/jinwu/pyproject.toml).  Fail loudly instead of silently drifting.
 try:
-    import jinwu
-    release = jinwu.__version__
-except Exception:
-    release = "0.0.27"
+    from importlib.metadata import version as _dist_version
+
+    release = _dist_version("jinwu")
+except Exception as exc:
+    raise RuntimeError(
+        "Cannot determine JinWu version: the 'jinwu' distribution is not "
+        "installed in this environment. Install the monorepo packages first "
+        "(see docs/index.rst → Installation → For development)."
+    ) from exc
 version = release.rsplit(".", 1)[0] if "." in release else release
 
 # -- General configuration -----------------------------------------------------
@@ -86,7 +118,8 @@ automodapi_inheritance_diagram = False
 
 # -- Options for HTML output ---------------------------------------------------
 html_theme = "pydata_sphinx_theme"
-html_title = "JinWu Documentation"
+# 版本来自发行元数据（见上方 release），与发布的 jinwu 包保持一致且可见
+html_title = f"JinWu Documentation (v{release})"
 html_short_title = "JinWu"
 
 html_theme_options = {

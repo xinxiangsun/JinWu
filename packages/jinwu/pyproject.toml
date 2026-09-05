@@ -40,7 +40,8 @@ Documentation = "https://jinwu.readthedocs.io"
 docs = [
     "sphinx>=7",
     "pydata-sphinx-theme>=0.15",
-    "sphinx-automodapi>=0.17",
+    # 0.21+ 才兼容 Sphinx 8.2+/9（autosummary.get_documenter 已移除）
+    "sphinx-automodapi>=0.21",
     "myst-parser>=3",
 ]
 rust = ["jinwurs"]
@@ -61,6 +62,8 @@ cluster = [
     "seaborn",
     "scikit-learn",
 ]
+# BXA (Bayesian X-ray Analysis) 贝叶斯拟合后端; xspec 由 HEASoft 环境提供(非 pip 可装), 故不在此列
+bxa = ["bxa>=5", "ultranest>=3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

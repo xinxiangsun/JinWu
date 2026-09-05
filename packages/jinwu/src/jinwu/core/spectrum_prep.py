@@ -9,7 +9,7 @@ from typing import Iterable
 
 from .config import instrument
 from .instruments import Catalog, Manifest, SpectrumBundle
-from ..ftools.grppha_hsp import grppha_hsp
+from ..ftools.grppha_hsp import grppha_hsp  # TODO: migrate to ftgrouppha (deprecated)
 
 __all__ = [
     "PreparedSpectrum",

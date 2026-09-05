@@ -2,5 +2,6 @@
 # Swift 模块
 
 from . import bat
+from . import grb
 
-__all__ = ['bat']
+__all__ = ['bat', 'grb']

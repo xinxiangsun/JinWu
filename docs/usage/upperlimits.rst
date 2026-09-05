@@ -82,6 +82,50 @@ photon model and Jinwu's RMF/ARF readers.  Supply ``flux_per_amplitude`` or
 ``fluence_per_amplitude`` to report physical units in addition to model
 normalization.
 
+Gaussian net-rate profile
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Instruments that publish background-subtracted rates with Gaussian errors
+(such as the Swift/BAT survey products and GBM background spectra) use the
+signed net-rate profile API.  A measurement is described by
+:class:`~jinwu.core.upperlimit.GaussianNetRateObservation` — the
+``net_rate`` and response-folded ``unit_source_rate`` are
+:class:`~astropy.units.Quantity` vectors, with either ``rate_error`` for
+independent channels or a full channel ``covariance``:
+
+.. code-block:: python
+
+   from jinwu.core.upperlimit import (
+       GaussianNetRateObservation,
+       profile_gaussian_upper_bound,
+   )
+
+   obs = GaussianNetRateObservation(
+       name="BAT 14-195 keV",
+       net_rate=net_rate,               # Quantity, count rate (may be negative)
+       unit_source_rate=rate_per_norm,  # response-folded rate for amplitude 1
+       rate_error=rate_error,           # or covariance=... in rate^2 units
+       exposure=exposure,
+       energy_band_keV=(14.0, 195.0),
+   )
+   result = profile_gaussian_upper_bound(obs, sigma=3.0)
+   print(result.upper_bound_quantity)
+
+The statistic :math:`q(A) = (r - A\,t)^T C^{-1} (r - A\,t)` is profiled
+while the source amplitude :math:`A` is constrained to be non-negative.
+Signed input rates are intentional: a downward background fluctuation is
+data, not a zero-flux replacement, and the resulting crossing is an
+*observed, conditional* profile bound.
+
+Detection sensitivity for these instruments is never folded into the same
+number.  An :class:`~jinwu.core.upperlimit.EmpiricalCalibrationAdapter`
+supplies blank-sky control samples plus fixed-position signal injections,
+and the pipelines report ``observed_upper_bound`` and
+``detection_sensitivity`` as separate results; without adequate control
+trials the sensitivity is reported as ``calibration_status=unavailable``.
+The BAT survey (:doc:`bat_survey`) and GBM (:doc:`fermi_gbm`) pipelines
+build on exactly this contract.
+
 Confidence semantics
 ~~~~~~~~~~~~~~~~~~~~
 

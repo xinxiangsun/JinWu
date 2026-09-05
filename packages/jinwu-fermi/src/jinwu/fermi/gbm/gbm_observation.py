@@ -32,11 +32,11 @@ class GBMObservation:
     GBM（伽马射线暴监测器）观测处理类。
     """
 
-    def __init__(self, 
-                 srcname: str = None, 
-                 ra: float = None, dec: float = None, 
+    def __init__(self,
+                 srcname: str = None,
+                 ra: float = None, dec: float = None,
                  utc_start: str | Time = None, tstart_offset: float = -400, tstop_offset: float = 400,
-                 filepath: str | Path = Path('/Users/xinxiang/research/'), 
+                 filepath: str | Path | None = None,
                  ):
         """
         Initialize a GBMObservation instance.
@@ -56,13 +56,17 @@ class GBMObservation:
         self._utc_TSTART = utc_start
         self._ra = ra
         self._dec = dec
-        self._filepath = Path(filepath) if filepath else None
+        # FIX(M7): remove hardcoded macOS path; use environment variable or cwd
+        if filepath is None:
+            self._filepath = Path(os.environ.get("GBM_POSHIST_DIR", Path.cwd()))
+        else:
+            self._filepath = Path(filepath) if filepath else None
         self._tstart_offset = tstart_offset
         self._tstop_offset = tstop_offset
 
         # Initialize dependent properties
         # 初始化依赖属性
-        if all([srcname, utc_start, ra, dec, filepath]):
+        if all([srcname, utc_start, ra, dec]):
             self._update_time_and_coordinates()
             self._create_directory_structure()
             self._initialize_observation()
@@ -506,7 +510,6 @@ class GBMObservation:
             print("Observation process completed successfully. 观测过程成功完成。")
         except Exception as e:
             print(f"Error during observation process: {e} 观测过程中发生错误：{e}")
-
 
 
 

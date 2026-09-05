@@ -1,7 +1,9 @@
 """Physics models and utilities for astrophysics.
 
 This module provides:
-- GeneralRelativity: GR effects (redshift, Doppler, etc.)
+- GeneralRelativity: special-relativistic Doppler/boost kinematics
+  (experimental; cosmological redshift and GR metric effects are
+  NOT implemented)
 - Radiation: Radiation transfer and related utilities
 
 Example:

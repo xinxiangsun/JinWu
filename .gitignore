@@ -70,4 +70,7 @@ external_sources/
 test/
 tests/
 
+# Keep the maintained Swift survey contracts visible to version control.
+!packages/jinwu-swift/tests/
+!packages/jinwu-swift/tests/test_bat_survey.py
 

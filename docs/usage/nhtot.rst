@@ -20,7 +20,7 @@ Why nhtot?
 ~~~~~~~~~~
 
 HEASoft's ``nh`` tool returns NHI **only** (from the HI4PI map).
-At low Galactic latitudes (|b| < 20°), molecular hydrogen contributes
+At low Galactic latitudes (\|b\| < 20°), molecular hydrogen contributes
 significantly, and using NHI-only values in ``tbabs`` (which assumes
 20% molecular fraction) systematically underestimates Galactic absorption.
 

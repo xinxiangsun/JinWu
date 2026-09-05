@@ -21,6 +21,7 @@ from statistics import NormalDist
 import tempfile
 from typing import Any, Literal, Protocol, runtime_checkable
 
+from astropy import units as u
 from astropy.io import fits
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
@@ -48,10 +49,13 @@ __all__ = [
     "XspecCountPredictor",
     "CallablePhotonModelPredictor",
     "UpperLimitObservation",
+    "GaussianNetRateObservation",
     "ObservedUpperBound",
+    "GaussianNetRateProfileResult",
     "ProfileAmplitudeResult",
     "DetectionSensitivity",
     "DetectionSensitivityAdapter",
+    "EmpiricalCalibrationAdapter",
     "ResponseAwareUpperLimitResult",
     "UpperLimitStrategy",
     "register_upper_limit_strategy",
@@ -71,6 +75,11 @@ DEFAULT_CHAIN_LEVELS = {
     "3sigma": 0.9973002039367398,
 }
 
+# 方法：chain 后验样本的单侧上限分位（Gaussian-equivalent）：upper = 样本的 Phi(sigma) 分位数；
+#       与中心覆盖约定 2*Phi(sigma)-1 区分（legacy DEFAULT_CHAIN_LEVELS 直接把中心覆盖值当分位数，
+#       from_chain 已用 warning 显式标记该历史行为）；关键式：P(N <= N_up) = Phi(sigma)
+# 参考：Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(55)(62)；
+#       XSPEC 12 Manual, "error (and rerror)"（chain 模式按中心百分比排序取值）
 DEFAULT_ONE_SIDED_CHAIN_LEVELS = {
     "1sigma": NormalDist().cdf(1.0),
     "90%": 0.9,
@@ -78,6 +87,11 @@ DEFAULT_ONE_SIDED_CHAIN_LEVELS = {
     "3sigma": NormalDist().cdf(3.0),
 }
 
+# 方法：XSPEC error 命令的 delta 惯例：置信区间边界为拟合统计量上升 delta 处（单参数 DeltaChi^2）；
+#       默认 2.706 = chi^2(df=1) 的 90% 分位数（中心 90% 区间，其上端即 95% 单侧界）；
+#       关键式：delta = chi2.ppf(confidence, df=1)，即 1.0/2.706/4.0/9.0 对应 1sigma/90%/2sigma/3sigma
+# 参考：XSPEC 12 Manual, "error (and rerror)" 命令（heasarc.gsfc.nasa.gov/xanadu/xspec/manual/node107.html）；
+#       Wilks, 1938, Ann. Math. Statist. 9, 60
 DEFAULT_ERROR_DELTAS = {
     "1sigma": 1.0,
     # Legacy XSPEC central 90% profile interval.  The new response-aware API
@@ -89,7 +103,22 @@ DEFAULT_ERROR_DELTAS = {
 
 _CHAIN_INDEX_RE = re.compile(r"__(\d+)$")
 
+_CALIBRATION_STATUSES = frozenset(
+    {
+        "conditional_model",
+        "empirical_fixed_position",
+        "empirical_global_search",
+        "needs_review",
+        "unavailable",
+    }
+)
 
+
+# 方法：单侧 profile-likelihood 置信水平的高斯等效换算：振幅约束在物理边界（A >= 0）时，似然比
+#       统计量 DeltaC 服从 0.5*delta_0 + 0.5*chi^2_1（Chernoff 混合分布），故置信水平 CL 对应的
+#       临界值恰为 z^2，z = Phi^-1(CL)；关键式：confidence = Phi(sigma)，delta_stat = sigma^2
+# 参考：Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(53)(60)(61)；
+#       Chernoff, 1954, Ann. Math. Statist. 25, 573
 @dataclass(frozen=True, slots=True)
 class OneSidedLevel:
     """One-sided Gaussian-equivalent profile-likelihood level."""
@@ -266,6 +295,11 @@ class XspecCountPredictor:
             xspec.AllModels.clear()
 
 
+# 方法：OGIP 响应折叠：单位振幅光子谱经 ARF(有效面积) x RMF(重分布矩阵) 得到每道期望计数，
+#       每 RMF 能量 bin 内做 Gauss-Legendre 数值积分；
+#       关键式：C_i = sum_j R_ij * A_eff(E_j) * f_ph(E_j) * dE_j * T_exposure
+# 参考：OGIP Calibration Memo CAL/GEN/92-002, George & Arnaud et al., 1992,
+#       "The Calibration Requirements for Spectral Analysis (Definition of RMF and ARF file formats)"
 @dataclass(frozen=True, slots=True)
 class CallablePhotonModelPredictor:
     """Fold a callable photon-density model through Jinwu RMF/ARF readers.
@@ -404,6 +438,207 @@ class UpperLimitObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class GaussianNetRateObservation:
+    """One signed, background-subtracted Gaussian rate measurement.
+
+    ``net_rate`` and ``unit_source_rate`` are :class:`~astropy.units.Quantity`
+    vectors in rate units.  The latter is the response-folded rate predicted
+    for amplitude one (for example, a power-law normalization of one).  Use
+    either ``rate_error`` for independent channels or ``covariance`` for a
+    complete channel covariance in squared rate units.  Signed rates are
+    intentionally accepted: a downward background fluctuation is data, not a
+    zero-flux replacement.
+    """
+
+    name: str
+    net_rate: u.Quantity
+    unit_source_rate: u.Quantity
+    rate_error: u.Quantity | None = None
+    covariance: u.Quantity | None = None
+    exposure: u.Quantity | None = None
+    energy_band_keV: tuple[float, float] | None = None
+    detector_normalization: str | None = None
+    provenance: Mapping[str, Any] = field(default_factory=dict)
+    # ``STAT_ERR`` is the OGIP name used by BAT survey PHA products.  Keep a
+    # keyword-compatible alias while retaining ``rate_error`` as the
+    # instrument-neutral name used by the core implementation.
+    stat_err: u.Quantity | None = None
+
+    def __post_init__(self) -> None:
+        if not str(self.name).strip():
+            raise ValueError("Gaussian net-rate observation name must not be empty")
+        if not isinstance(self.net_rate, u.Quantity):
+            raise TypeError("net_rate must be an astropy Quantity")
+        if not isinstance(self.unit_source_rate, u.Quantity):
+            raise TypeError("unit_source_rate must be an astropy Quantity")
+        net = np.asarray(self.net_rate.value, dtype=float)
+        template = np.asarray(self.unit_source_rate.value, dtype=float)
+        if net.ndim != 1 or net.size == 0:
+            raise ValueError("net_rate must be a non-empty one-dimensional quantity")
+        if template.shape != net.shape:
+            raise ValueError("unit_source_rate must have the same shape as net_rate")
+        if np.any(~np.isfinite(net)) or np.any(~np.isfinite(template)):
+            raise ValueError("net_rate and unit_source_rate must be finite")
+        if np.any(template < 0) or not np.any(template > 0):
+            raise ValueError("unit_source_rate must be non-negative and non-zero")
+        try:
+            self.unit_source_rate.to(self.net_rate.unit)
+        except Exception as exc:
+            raise ValueError("net_rate and unit_source_rate must have compatible units") from exc
+
+        if self.rate_error is not None and self.stat_err is not None:
+            raise ValueError("provide rate_error or stat_err, not both")
+        if self.rate_error is None and self.stat_err is not None:
+            object.__setattr__(self, "rate_error", self.stat_err)
+        if self.rate_error is None and self.covariance is None:
+            raise ValueError("provide rate_error or covariance for a Gaussian observation")
+        if self.rate_error is not None and self.covariance is not None:
+            raise ValueError("provide either rate_error or covariance, not both")
+        if self.rate_error is not None:
+            if not isinstance(self.rate_error, u.Quantity):
+                raise TypeError("rate_error must be an astropy Quantity")
+            try:
+                error = np.asarray(self.rate_error.to(self.net_rate.unit).value, dtype=float)
+            except Exception as exc:
+                raise ValueError("rate_error must have units compatible with net_rate") from exc
+            if error.shape != net.shape or np.any(~np.isfinite(error)) or np.any(error <= 0):
+                raise ValueError("rate_error must be finite, positive and match net_rate")
+        if self.covariance is not None:
+            if not isinstance(self.covariance, u.Quantity):
+                raise TypeError("covariance must be an astropy Quantity")
+            try:
+                covariance = np.asarray(
+                    self.covariance.to(self.net_rate.unit**2).value,
+                    dtype=float,
+                )
+            except Exception as exc:
+                raise ValueError("covariance must have squared net_rate units") from exc
+            if covariance.shape != (net.size, net.size):
+                raise ValueError("covariance must be a square matrix matching net_rate")
+            if np.any(~np.isfinite(covariance)) or not np.allclose(
+                covariance, covariance.T, rtol=1e-10, atol=1e-14
+            ):
+                raise ValueError("covariance must be finite and symmetric")
+            try:
+                np.linalg.cholesky(covariance)
+            except np.linalg.LinAlgError as exc:
+                raise ValueError("covariance must be positive definite") from exc
+        if self.exposure is not None:
+            if not isinstance(self.exposure, u.Quantity):
+                raise TypeError("exposure must be an astropy Quantity")
+            try:
+                exposure_s = float(self.exposure.to_value(u.s))
+            except Exception as exc:
+                raise ValueError("exposure must have time units") from exc
+            if not math.isfinite(exposure_s) or exposure_s <= 0:
+                raise ValueError("exposure must be finite and positive")
+        if self.energy_band_keV is not None:
+            emin, emax = (float(value) for value in self.energy_band_keV)
+            if not math.isfinite(emin) or not math.isfinite(emax) or not 0 < emin < emax:
+                raise ValueError("energy_band_keV must be finite, positive and increasing")
+            object.__setattr__(self, "energy_band_keV", (emin, emax))
+
+    @property
+    def stat_err_quantity(self) -> u.Quantity | None:
+        """Return the OGIP ``STAT_ERR`` alias as a rate quantity."""
+        return self.rate_error
+
+
+@dataclass(frozen=True, slots=True)
+class GaussianNetRateProfileResult:
+    """Generalized-least-squares profile result for a non-negative amplitude."""
+
+    signed_mle: float
+    constrained_mle: float
+    upper_bound: float | None
+    amplitude_unit: str
+    rate_unit: str
+    delta_stat: float
+    fit_statistic: float
+    null_statistic: float
+    profile_amplitudes: np.ndarray
+    profile_delta_stat: np.ndarray
+    boundary: Literal["interior", "lower_bound"]
+    converged: bool
+    status: Literal["ready", "failed"]
+    construction: str = "gaussian_profile"
+    calibration_status: str = "conditional_model"
+    confidence_level: float = 0.9986501019683699
+    confidence_convention: str = "one_sided_gaussian_equivalent"
+    # Statistic evaluated at the returned upper crossing.  Keeping this
+    # separately from the requested ``delta_stat`` lets instrument adapters
+    # verify the numerical root rather than serializing the target level as
+    # if it were an independent recheck.
+    profile_delta_at_upper: float | None = None
+    flux_upper: float | None = None
+    flux_unit: str | None = None
+    diagnostics: tuple[str, ...] = ()
+    provenance: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def signed_mle_quantity(self) -> u.Quantity:
+        return self.signed_mle * _amplitude_unit(self.amplitude_unit)
+
+    @property
+    def constrained_mle_quantity(self) -> u.Quantity:
+        return self.constrained_mle * _amplitude_unit(self.amplitude_unit)
+
+    @property
+    def upper_bound_quantity(self) -> u.Quantity | None:
+        return None if self.upper_bound is None else self.upper_bound * _amplitude_unit(self.amplitude_unit)
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return the stable observed-upper-bound result contract.
+
+        Arrays are converted to ordinary lists so the payload can be written
+        directly to JSON.  The ``background`` block deliberately keeps the
+        likelihood and covariance provenance separate from the numerical
+        profile result.
+        """
+        return {
+            "observed_upper_bound": {
+                "value": self.upper_bound,
+                "unit": self.amplitude_unit,
+                "energy_band": (
+                    None
+                    if self.provenance.get("energy_band_keV") is None
+                    else list(self.provenance["energy_band_keV"])
+                ),
+                "confidence_level": self.confidence_level,
+                "confidence_convention": self.confidence_convention,
+                "spectral_model": self.provenance.get("spectral_model"),
+                "signed_mle": self.signed_mle,
+                "constrained_mle": self.constrained_mle,
+                "construction": self.construction,
+                "calibration_status": self.calibration_status,
+                "profile_status": self.status,
+                "delta_stat": self.delta_stat,
+                "profile_delta_at_upper": self.profile_delta_at_upper,
+                "fit_statistic": self.fit_statistic,
+                "null_statistic": self.null_statistic,
+                "flux": self.flux_upper,
+                "flux_unit": self.flux_unit,
+                "diagnostics": list(self.diagnostics),
+            },
+            "background": {
+                "likelihood": self.provenance.get("background_likelihood", "gaussian_net_rate"),
+                "provenance": self.provenance,
+                "covariance_source": self.provenance.get("covariance_sources"),
+                "residual_validation": self.provenance.get("residual_validation"),
+            },
+            # Keep the primitive payload schema stable even though a generic
+            # Gaussian profile does not calibrate a detection threshold by
+            # itself.  Instrument adapters fill this object at the pipeline
+            # boundary when controls and injection tests are available.
+            "detection_sensitivity": None,
+            "profile": {
+                "amplitudes": self.profile_amplitudes.tolist(),
+                "delta_stat": self.profile_delta_stat.tolist(),
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ObservedUpperBound:
     """Observed-data profile-likelihood bound for a non-negative amplitude."""
 
@@ -418,6 +653,20 @@ class ObservedUpperBound:
     fit_statistic: float
     null_statistic: float
     status: str = "ready"
+    construction: str = "profile_likelihood"
+    calibration_status: str = "conditional_model"
+    signed_mle: float | None = None
+    constrained_mle: float | None = None
+    profile_status: str = "ready"
+    confidence_convention: str = "one_sided_gaussian_equivalent"
+
+    def __post_init__(self) -> None:
+        if self.calibration_status not in _CALIBRATION_STATUSES:
+            raise ValueError(
+                f"unknown upper-bound calibration_status: {self.calibration_status!r}"
+            )
+        if not str(self.profile_status).strip():
+            raise ValueError("profile_status must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,6 +709,29 @@ class DetectionSensitivity:
     status: Literal["ready", "unavailable", "failed"]
     empirical_false_alarm_probability: float | None = None
     reason: str | None = None
+    calibration_status: Literal[
+        "conditional_model",
+        "empirical_fixed_position",
+        "empirical_global_search",
+        "needs_review",
+        "unavailable",
+    ] = "conditional_model"
+    false_alarm_probability: float | None = None
+    search_scope: str = "fixed_position"
+    trial_count: int = 0
+
+    def __post_init__(self) -> None:
+        if self.calibration_status not in _CALIBRATION_STATUSES:
+            raise ValueError(
+                f"unknown sensitivity calibration_status: {self.calibration_status!r}"
+            )
+        if self.false_alarm_probability is not None and not (
+            math.isfinite(float(self.false_alarm_probability))
+            and 0.0 < float(self.false_alarm_probability) < 1.0
+        ):
+            raise ValueError("false_alarm_probability must be between 0 and 1")
+        if int(self.trial_count) < 0:
+            raise ValueError("trial_count must be non-negative")
 
 
 @runtime_checkable
@@ -484,6 +756,254 @@ class DetectionSensitivityAdapter(Protocol):
         energy_band: tuple[float, float],
         seed: int,
     ) -> DetectionSensitivity | tuple[DetectionSensitivity, Mapping[str, np.ndarray]]: ...
+
+
+@runtime_checkable
+class EmpiricalCalibrationAdapter(Protocol):
+    """Protocol for instrument-native null and injection calibration.
+
+    Implementations must run the same production detection statistic on null
+    control data and on source injections.  The returned mapping is persisted
+    as provenance; a caller must set ``calibration_status`` explicitly rather
+    than treating a model-only simulation as empirical calibration.
+    """
+
+    def calibrate(
+        self,
+        observations: Sequence[GaussianNetRateObservation],
+        *,
+        level: OneSidedLevel,
+        target_power: float,
+        seed: int,
+    ) -> Mapping[str, Any]: ...
+
+
+# 方法：多观测合并的 GLS（广义最小二乘）chi-square 似然 profile（固定形状、非负振幅）：
+#       解析 MLE 与上界交叉点均可闭式求解，上界即 statistic(A) 升至 fit_statistic + delta_stat 处；
+#       关键式：q(A) = (r - A t)^T C^-1 (r - A t)；A_mle = (t^T C^-1 r)/(t^T C^-1 t)；
+#       q(A) - q(A_mle) = (t^T C^-1 t)(A - A_mle)^2；A_up = A_mle + z*sqrt(1/(t^T C^-1 t))，z = Phi^-1(CL)
+# 参考：Wilks, 1938, Ann. Math. Statist. 9, 60（DeltaC ~ chi^2_1）；
+#       Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(61)
+#       （已数值验证：解析根与 scipy brentq 根一致到 1e-14）
+def profile_gaussian_upper_bound(
+    observations: GaussianNetRateObservation | Sequence[GaussianNetRateObservation],
+    *,
+    level: OneSidedLevel | None = None,
+    sigma: float = 3.0,
+    delta_stat: float | None = None,
+    amplitude_unit: str = "model normalization",
+    flux_per_amplitude: u.Quantity | float | None = None,
+    flux_unit: u.Unit | str | None = None,
+    profile_points: int = 240,
+) -> GaussianNetRateProfileResult:
+    """Profile a signed Gaussian rate measurement with ``A >= 0``.
+
+    For each observation, ``net_rate`` is the measured background-subtracted
+    rate and ``unit_source_rate`` is the response-folded rate for unit
+    amplitude.  The combined statistic is
+
+    .. math::
+
+       q(A) = (r-A t)^T C^{-1}(r-A t),
+
+    with a diagonal ``C`` from ``rate_error`` or the supplied full covariance.
+    The unconstrained GLS estimate is retained even when negative; only the
+    physical source amplitude is constrained to be non-negative.  The upper
+    crossing is therefore an observed, conditional profile bound.  It does not
+    claim empirical coverage unless an instrument calibration adapter supplies
+    that calibration separately.
+    """
+    if isinstance(observations, GaussianNetRateObservation):
+        items = [observations]
+    else:
+        items = list(observations)
+    if not items:
+        raise ValueError("at least one Gaussian net-rate observation is required")
+    if level is not None and delta_stat is not None:
+        raise ValueError("provide either level or delta_stat, not both")
+    if level is None:
+        if delta_stat is None:
+            level = OneSidedLevel.from_sigma(sigma)
+        else:
+            requested_delta = float(delta_stat)
+            if not math.isfinite(requested_delta) or requested_delta <= 0:
+                raise ValueError("delta_stat must be finite and positive")
+            # Keep the serialized confidence metadata consistent with an
+            # explicitly supplied profile level rather than retaining the
+            # default 3-sigma label.
+            level = OneSidedLevel.from_sigma(math.sqrt(requested_delta))
+    delta = float(level.delta_stat if delta_stat is None else delta_stat)
+    if not math.isfinite(delta) or delta <= 0:
+        raise ValueError("delta_stat must be finite and positive")
+    if int(profile_points) < 2:
+        raise ValueError("profile_points must be at least two")
+
+    rate_unit = items[0].net_rate.unit
+    rates: list[np.ndarray] = []
+    templates: list[np.ndarray] = []
+    covariances: list[np.ndarray] = []
+    covariance_sources: list[str] = []
+    for item in items:
+        try:
+            rate = np.asarray(item.net_rate.to(rate_unit).value, dtype=float)
+            template = np.asarray(item.unit_source_rate.to(rate_unit).value, dtype=float)
+        except Exception as exc:
+            raise ValueError("all observations must use mutually compatible rate units") from exc
+        if item.covariance is not None:
+            covariance = np.asarray(item.covariance.to(rate_unit**2).value, dtype=float)
+            covariance_sources.append("full_covariance")
+        else:
+            assert item.rate_error is not None
+            errors = np.asarray(item.rate_error.to(rate_unit).value, dtype=float)
+            covariance = np.diag(errors**2)
+            covariance_sources.append("rate_error_diagonal")
+        rates.append(rate)
+        templates.append(template)
+        covariances.append(covariance)
+
+    rate_vector = np.concatenate(rates)
+    template_vector = np.concatenate(templates)
+    covariance = _block_diag(covariances)
+    try:
+        chol = cho_factor(covariance, lower=True, check_finite=False)
+        solved_template = cho_solve(chol, template_vector, check_finite=False)
+        solved_rate = cho_solve(chol, rate_vector, check_finite=False)
+    except (np.linalg.LinAlgError, ValueError) as exc:
+        raise ValueError("Gaussian rate covariance is not positive definite") from exc
+    curvature = float(template_vector @ solved_template)
+    score = float(template_vector @ solved_rate)
+    if not math.isfinite(curvature) or curvature <= 0 or not math.isfinite(score):
+        raise ValueError("Gaussian rate profile has non-positive information")
+    signed_mle = score / curvature
+    constrained_mle = max(0.0, signed_mle)
+
+    def statistic(amplitude: float) -> float:
+        residual = rate_vector - float(amplitude) * template_vector
+        solved = cho_solve(chol, residual, check_finite=False)
+        return float(residual @ solved)
+
+    fit_statistic = statistic(constrained_mle)
+    null_statistic = max(0.0, statistic(0.0) - fit_statistic)
+    scale = 1.0 / math.sqrt(curvature)
+    target = fit_statistic + delta
+
+    def crossing(amplitude: float) -> float:
+        return statistic(amplitude) - target
+
+    upper_bound: float | None = None
+    diagnostics: list[str] = []
+    bracket = max(constrained_mle + scale, scale, 1e-12)
+    for _ in range(100):
+        value = crossing(bracket)
+        if math.isfinite(value) and value >= 0:
+            break
+        bracket *= 2.0
+    else:
+        diagnostics.append("upper_profile_did_not_cross")
+    if not diagnostics:
+        try:
+            upper_bound = float(
+                brentq(crossing, constrained_mle, bracket, xtol=1e-12, rtol=1e-11)
+            )
+        except (ValueError, RuntimeError) as exc:
+            diagnostics.append(f"upper_profile_root_failed:{type(exc).__name__}:{exc}")
+
+    if upper_bound is None:
+        amplitudes = np.linspace(0.0, bracket, int(profile_points))
+        status: Literal["ready", "failed"] = "failed"
+        converged = False
+    else:
+        amplitudes = np.linspace(0.0, max(1.25 * upper_bound, 1e-12), int(profile_points))
+        status = "ready"
+        converged = True
+    profile_delta_at_upper = (
+        None
+        if upper_bound is None
+        else max(0.0, float(statistic(upper_bound) - fit_statistic))
+    )
+    profile = np.asarray(
+        [max(0.0, statistic(value) - fit_statistic) for value in amplitudes],
+        dtype=float,
+    )
+
+    flux_upper: float | None = None
+    resolved_flux_unit: str | None = None
+    if flux_per_amplitude is not None and upper_bound is not None:
+        if isinstance(flux_per_amplitude, u.Quantity):
+            quantity = flux_per_amplitude
+            if flux_unit is not None:
+                quantity = quantity.to(u.Unit(flux_unit))
+            flux_upper = float(upper_bound * quantity.value)
+            resolved_flux_unit = str(quantity.unit)
+        else:
+            if flux_unit is None:
+                raise ValueError("flux_unit is required when flux_per_amplitude is a scalar")
+            factor = float(flux_per_amplitude)
+            if not math.isfinite(factor) or factor <= 0:
+                raise ValueError("flux_per_amplitude must be finite and positive")
+            flux_upper = float(upper_bound * factor)
+            resolved_flux_unit = str(u.Unit(flux_unit))
+
+    provenance = {
+        "rate_unit": str(rate_unit),
+        "covariance_sources": covariance_sources,
+        "observation_names": [item.name for item in items],
+        "construction": "gaussian_net_rate_gls_profile",
+        "physical_boundary": "amplitude >= 0",
+        "energy_band_keV": (
+            list(items[0].energy_band_keV)
+            if items[0].energy_band_keV is not None
+            else None
+        ),
+        "spectral_model": items[0].provenance.get("spectral_model"),
+        "background_likelihood": items[0].provenance.get(
+            "background_likelihood", "gaussian_net_rate"
+        ),
+        "residual_validation": items[0].provenance.get("residual_validation"),
+    }
+    bands = {
+        tuple(item.energy_band_keV)
+        for item in items
+        if item.energy_band_keV is not None
+    }
+    if len(bands) > 1 or (bands and any(item.energy_band_keV is None for item in items)):
+        raise ValueError("all Gaussian observations must use the same energy band")
+    return GaussianNetRateProfileResult(
+        signed_mle=float(signed_mle),
+        constrained_mle=float(constrained_mle),
+        upper_bound=upper_bound,
+        amplitude_unit=str(amplitude_unit),
+        rate_unit=str(rate_unit),
+        delta_stat=delta,
+        fit_statistic=float(fit_statistic),
+        null_statistic=float(null_statistic),
+        profile_amplitudes=amplitudes,
+        profile_delta_stat=profile,
+        boundary="lower_bound" if signed_mle <= 0 else "interior",
+        converged=converged,
+        status=status,
+        confidence_level=float(level.confidence),
+        confidence_convention="one_sided_gaussian_equivalent",
+        profile_delta_at_upper=profile_delta_at_upper,
+        flux_upper=flux_upper,
+        flux_unit=resolved_flux_unit,
+        diagnostics=tuple(diagnostics),
+        provenance=provenance,
+    )
+
+
+def _block_diag(blocks: Sequence[np.ndarray]) -> np.ndarray:
+    """Build a dense block-diagonal covariance for independent observations."""
+    size = sum(int(block.shape[0]) for block in blocks)
+    result = np.zeros((size, size), dtype=float)
+    offset = 0
+    for block in blocks:
+        width = int(block.shape[0])
+        if block.shape != (width, width):
+            raise ValueError("each covariance block must be square")
+        result[offset : offset + width, offset : offset + width] = block
+        offset += width
+    return result
 
 
 @dataclass(slots=True)
@@ -568,10 +1088,24 @@ def register_upper_limit_strategy(strategy: UpperLimitStrategy) -> UpperLimitStr
 for _strategy in (
     UpperLimitStrategy("spatial_onoff", ("poisson_onoff",), True),
     UpperLimitStrategy(
-        "modeled_count_spectrum", ("gaussian_model", "known_background"), True
+        "modeled_count_spectrum",
+        (
+            "gaussian_model",
+            "gaussian_net_rate",
+            "poisson_gaussian_profile",
+            "known_background",
+        ),
+        True,
     ),
     UpperLimitStrategy(
-        "coded_mask_spectrum", ("gaussian_model", "known_background"), False
+        "coded_mask_spectrum",
+        (
+            "gaussian_model",
+            "gaussian_net_rate",
+            "poisson_gaussian_profile",
+            "known_background",
+        ),
+        False,
     ),
 ):
     register_upper_limit_strategy(_strategy)
@@ -579,6 +1113,12 @@ for _strategy in (
 
 # ============================================================================
 # Poisson TS 归一化快速拟合（移植自 HEASoft burstcube 的 FastNormFit）
+# 方法：固定背景的 Poisson 似然比（Cash C-stat 差分）快速拟合；欠涨分支按 Taylor 展开
+#       修正原实现的 TS 符号（parabola 极大值处 TS = -dts0^2/(2*ddts0) > 0，原版为负、已验证错误）；
+#       upper_limit 解 TS(N_up) = TS_best - DeltaTS，DeltaTS 取 chi^2(1) 分位数（XSPEC 惯例，90% -> 2.7055）
+# 关键式：TS(N) = 2 * sum_i [ d_i * ln((b_i + N e_i)/b_i) - N e_i ]
+# 参考：Cash, 1979, ApJ 228, 939 (doi:10.1086/156922)；HEASoft 6.37 burstcube/lib/fast_norm_fit.py；
+#       XSPEC 12 Manual "error"（delta=2.706 = chi2.ppf(0.90,1)）；Wilks, 1938, Ann. Math. Statist. 9, 60
 # ============================================================================
 
 
@@ -703,7 +1243,9 @@ class FastNormFit:
                 if ddts0 == 0.0:
                     norm_err = -1.0 / dts0
                 else:
-                    # 由 TS(N)=1 的抛物线方程解出单侧误差（同原实现）
+                    # 由 DeltaTS=1 的抛物线方程解出单侧 1sigma 误差：欠涨时 TS_best=TS(0)=0
+                    # 且 TS(N) 随 N 单调下降，故方程为 TS(N) = TS_best - 1 = -1（非 TS(N)=1；
+                    # 同原实现；已数值验证 parabola TS(err) = -1.000000）
                     norm_err = -(math.sqrt(dts0 * dts0 - 2.0 * ddts0) + dts0) / ddts0
             return (ts, norm, norm_err, False)  # 解析结果，永不失败
 
@@ -799,10 +1341,27 @@ class _ProfileFitState:
     null_statistic: float
 
 
+def _canonical_background_likelihood(name: str) -> str:
+    """Map public likelihood labels to the internal likelihood engine.
+
+    ``gaussian_net_rate`` is the semantic label used by the BAT survey rate
+    product, while ``poisson_gaussian_profile`` describes a source-Poisson,
+    Gaussian-background nuisance profile used by GBM/GECAM.  The generic
+    count-spectrum engine historically called both paths ``gaussian_model``;
+    retaining that internal key keeps older callers and serialized configs
+    compatible while preserving the explicit public provenance label.
+    """
+    aliases = {
+        "gaussian_net_rate": "gaussian_model",
+        "poisson_gaussian_profile": "gaussian_model",
+    }
+    return aliases.get(str(name), str(name))
+
+
 class _ProfileLikelihood:
     def __init__(self, observations: Sequence[_PreparedObservation], likelihood: str):
         self.observations = tuple(observations)
-        self.likelihood = likelihood
+        self.likelihood = _canonical_background_likelihood(likelihood)
 
     def loglike(self, amplitude: float) -> float:
         amplitude = float(amplitude)
@@ -825,6 +1384,11 @@ class _ProfileLikelihood:
                 raise ValueError(f"Unsupported background likelihood: {self.likelihood}")
         return float(total)
 
+    # 方法：Cash C-stat 与似然比检验统计量：fit_statistic = 2*(lnL_saturated - lnL_max)（C-stat 定义），
+    #       null_statistic = 2*(lnL_max - lnL(0)) = TS（振幅边界 0 处的似然比；sqrt(TS) 即单侧显著度）；
+    #       关键式：C = 2*(lnL_sat - lnL_max)；TS = DeltaC(A=0)
+    # 参考：Cash, 1979, ApJ 228, 939 (doi:10.1086/156922)；
+    #       Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(55)：Z = sqrt(q0)
     def fit(self) -> _ProfileFitState:
         scale = _amplitude_scale(self.observations, self.likelihood)
         high = max(4.0 * scale, 1e-8)
@@ -874,6 +1438,11 @@ class _ProfileLikelihood:
             )
         return max(0.0, float(value))
 
+    # 方法：profile-likelihood 单侧观测上限：解 DeltaC(A_up) = level.delta_stat（brentq 在单调下降段求根）；
+    #       关键式：DeltaC(A_up) = 2*(lnL_max - lnL(A_up)) = z^2，z = Phi^-1(CL_one_sided)；
+    #       边界（A >= 0）下 DeltaC ~ 0.5*delta_0 + 0.5*chi^2_1（Chernoff），临界值仍为 z^2
+    # 参考：Wilks, 1938, Ann. Math. Statist. 9, 60；Chernoff, 1954, Ann. Math. Statist. 25, 573；
+    #       Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(61)
     def upper_bound(
         self,
         level: OneSidedLevel,
@@ -990,6 +1559,18 @@ def estimate_upper_limit(
     ]
     likelihood = _ProfileLikelihood(prepared, policy.background_likelihood)
     level = OneSidedLevel.from_sigma(policy.default_sigma)
+    configured_false_alarm_probability = (
+        1.0 - float(level.confidence)
+        if policy.detection_false_alarm_probability is None
+        else float(policy.detection_false_alarm_probability)
+    )
+    if not math.isfinite(configured_false_alarm_probability) or not (
+        0.0 < configured_false_alarm_probability < 1.0
+    ):
+        raise ValueError(
+            "detection_false_alarm_probability must be finite and between 0 and 1"
+        )
+    configured_false_alarm_confidence = 1.0 - configured_false_alarm_probability
 
     observed = None
     scan: dict[str, np.ndarray] = {
@@ -1014,6 +1595,11 @@ def estimate_upper_limit(
             level=level,
             fit_statistic=fit_statistic,
             null_statistic=null_statistic,
+            construction="profile_likelihood",
+            calibration_status="conditional_model",
+            signed_mle=amplitude_mle,
+            constrained_mle=amplitude_mle,
+            profile_status="ready",
         )
         scan_amplitudes = np.linspace(0.0, max(1e-12, 1.25 * amplitude_upper), 240)
         scan = {
@@ -1053,6 +1639,39 @@ def estimate_upper_limit(
                     "sensitivity_adapter must return DetectionSensitivity or "
                     "(DetectionSensitivity, diagnostics)"
                 )
+        elif (
+            policy.calibration_mode
+            in {"empirical_if_available", "empirical_fixed_position", "empirical_global_search"}
+            and sensitivity_adapter is None
+        ):
+            sensitivity = DetectionSensitivity(
+                amplitude=None,
+                amplitude_unit=model_info["amplitude_unit"],
+                flux=None,
+                flux_unit=model_info["flux_unit"],
+                fluence=None,
+                fluence_unit=model_info["fluence_unit"],
+                threshold=None,
+                false_alarm_confidence=configured_false_alarm_confidence,
+                target_power=policy.detection_power,
+                achieved_power=None,
+                null_trials=0,
+                signal_trials=0,
+                status="unavailable",
+                empirical_false_alarm_probability=None,
+                reason=(
+                    "Empirical sensitivity calibration was requested, but no "
+                    "instrument-native control/injection adapter was supplied."
+                ),
+                calibration_status="unavailable",
+                false_alarm_probability=configured_false_alarm_probability,
+                search_scope=(
+                    "global_search"
+                    if policy.calibration_mode == "empirical_global_search"
+                    else "fixed_position"
+                ),
+                trial_count=0,
+            )
         elif not strategy.supports_sensitivity:
             sensitivity = DetectionSensitivity(
                 amplitude=None,
@@ -1062,7 +1681,7 @@ def estimate_upper_limit(
                 fluence=None,
                 fluence_unit=model_info["fluence_unit"],
                 threshold=None,
-                false_alarm_confidence=level.confidence,
+                false_alarm_confidence=configured_false_alarm_confidence,
                 target_power=policy.detection_power,
                 achieved_power=None,
                 null_trials=0,
@@ -1073,6 +1692,10 @@ def estimate_upper_limit(
                     "This strategy requires an instrument-specific search-statistic "
                     "adapter; a count-spectrum likelihood ratio is not a valid substitute."
                 ),
+                calibration_status="unavailable",
+                false_alarm_probability=configured_false_alarm_probability,
+                search_scope="fixed_position",
+                trial_count=0,
             )
         else:
             sensitivity, sensitivity_diagnostics = _estimate_sensitivity(
@@ -1091,6 +1714,15 @@ def estimate_upper_limit(
     result_status = "upper_limits_ready"
     if sensitivity is not None and sensitivity.status != "ready":
         result_status = "partial"
+    background_likelihood = next(
+        (
+            str(item.metadata["background_likelihood"])
+            for item in prepared
+            if isinstance(item.metadata, Mapping)
+            and item.metadata.get("background_likelihood")
+        ),
+        policy.background_likelihood,
+    )
     result = ResponseAwareUpperLimitResult(
         instrument=instrument_config.name,
         strategy=policy.strategy,
@@ -1106,7 +1738,30 @@ def estimate_upper_limit(
             "random_seed": int(seed),
             "model": _json_safe(model_info["metadata"]),
             "response_folding": policy.response_folding,
-            "background_likelihood": policy.background_likelihood,
+            "background_likelihood": background_likelihood,
+            "background_provenance": [
+                _json_safe(dict(item.metadata)) for item in prepared
+            ],
+            "covariance_source": [
+                "background_covariance"
+                if item.background_covariance is not None
+                else "background_sigma"
+                if item.background_sigma is not None
+                else "poisson_profile"
+                for item in prepared
+            ],
+            "residual_validation": (
+                None
+                if not any(
+                    isinstance(item.metadata, Mapping)
+                    and item.metadata.get("residual_validation") is not None
+                    for item in prepared
+                )
+                else [
+                    _json_safe(item.metadata.get("residual_validation"))
+                    for item in prepared
+                ]
+            ),
             "combine": policy.combine,
             "numerical_policy": {
                 "covariance_condition_warning": 1e8,
@@ -1191,6 +1846,9 @@ def profile_source_amplitude(
     ]
     state = _ProfileLikelihood(prepared, policy.background_likelihood).fit()
     model_info = _model_information(model)
+    # 方法：单侧渐近显著度 Z = sqrt(TS)：TS = 2*(lnL_max - lnL(A=0)) 为 A=0 边界处的似然比，
+    #       p = 0.5*p(chi^2_1, TS)（半卡方，A>=0 边界），Z = Phi^-1(1 - p) = sqrt(TS)
+    # 参考：Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(55)
     return ProfileAmplitudeResult(
         amplitude_mle=state.amplitude_mle,
         amplitude_unit=str(model_info["amplitude_unit"]),
@@ -1213,6 +1871,7 @@ def _prepare_observation(
     policy: UpperLimitConfig,
     warnings_list: list[str],
 ) -> _PreparedObservation:
+    likelihood_name = _canonical_background_likelihood(policy.background_likelihood)
     source = _one_dimensional_array(observation.source_counts, "source_counts", nonnegative=True)
     if observation.unit_source_counts is not None:
         template = _one_dimensional_array(
@@ -1258,7 +1917,7 @@ def _prepare_observation(
     background_cholesky = None
     background_covariance_condition = None
 
-    if policy.background_likelihood == "poisson_onoff":
+    if likelihood_name == "poisson_onoff":
         if observation.background_counts is None or observation.alpha is None:
             raise ValueError(
                 f"Observation {observation.name!r} requires background_counts and alpha"
@@ -1284,12 +1943,12 @@ def _prepare_observation(
         background_model = _one_dimensional_array(
             observation.background_model,
             "background_model",
-            nonnegative=(policy.background_likelihood == "known_background"),
+            nonnegative=(likelihood_name == "known_background"),
         )
         if background_model.shape != source.shape:
             raise ValueError(f"Observation {observation.name!r} background shape mismatch")
 
-        if policy.background_likelihood == "gaussian_model":
+        if likelihood_name == "gaussian_model":
             if observation.background_covariance is not None:
                 covariance = np.asarray(observation.background_covariance, dtype=float)
                 if covariance.shape != (source.size, source.size):
@@ -1382,6 +2041,9 @@ def _prepare_observation(
     )
 
 
+# 方法：Poisson 对数似然核（略去仅依赖数据的 ln d! 常数项，即 Cash 约定）；
+#       关键式：lnL = sum_i [ d_i*ln(mu_i) - mu_i ]，等价于 C = 2*sum_i [ mu_i - d_i + d_i*ln(d_i/mu_i) ]
+# 参考：Cash, 1979, ApJ 228, 939 (doi:10.1086/156922) Eq.(5)；Chandra/Sherpa statistics 文档同式
 def _poisson_loglike(counts: np.ndarray, expectation: np.ndarray) -> float:
     if np.any(expectation < 0) or np.any(~np.isfinite(expectation)):
         return -math.inf
@@ -1390,6 +2052,11 @@ def _poisson_loglike(counts: np.ndarray, expectation: np.ndarray) -> float:
     return float(np.sum(xlogy(counts, expectation) - expectation))
 
 
+# 方法：ON/OFF 双 Poisson 似然对背景 nuisance 的解析 profile（即 wstat 解析解，取二次方程正根）；
+#       关键式：alpha*(1+alpha)*b^2 + [(1+alpha)*s - alpha*(d_on+d_off)]*b - d_off*s = 0
+#       的正根 b = [-b_coef + sqrt(b_coef^2 + 4*alpha*(1+alpha)*d_off*s)] / (2*alpha*(1+alpha))
+# 参考：XSPEC 12 Manual, 统计附录 wstat（Wachter 解析 profile）；
+#       gammapy.stats.get_wstat_mu_bkg 同式（已数值验证：与直接数值极值化一致到 1e-8）
 def _onoff_profile_background(
     source_counts: np.ndarray,
     background_counts: np.ndarray,
@@ -1418,6 +2085,13 @@ def _onoff_profile_loglike(observation: _PreparedObservation, signal: np.ndarray
     ) + _poisson_loglike(observation.background_counts, background)
 
 
+# 方法：Poisson 源 x Gaussian 背景 nuisance 的联合似然解析 profile（对角情形闭式求根、
+#       协方差情形数值极小化；背景约束 b >= 0 时截断为 max(T, s)）；
+#       关键式：T^2 - (b_meas + s - sigma^2)*T - d*sigma^2 = 0 的正根
+#       T = [b_meas + s - sigma^2 + sqrt((sigma^2 - b_meas - s)^2 + 4*d*sigma^2)] / 2（T = s + b 为 ON 期望）
+# 参考：Rolke, Lopez & Conrad, 2005, Nucl. Instrum. Meth. A 551, 493 (arXiv:physics/0403059)
+#       （Poisson x Gaussian nuisance 的 profile-likelihood 构造，ROOT TRolke 同类实现；
+#        已数值验证：闭式解与约束极值化结果一致）
 def _gaussian_background_profile_loglike(
     observation: _PreparedObservation,
     signal: np.ndarray,
@@ -1465,6 +2139,7 @@ def _amplitude_scale(
     observations: Sequence[_PreparedObservation],
     likelihood_name: str,
 ) -> float:
+    likelihood_name = _canonical_background_likelihood(likelihood_name)
     template_total = sum(float(np.sum(item.unit_source_counts)) for item in observations)
     if template_total <= 0:
         raise ValueError("The combined source count template is zero")
@@ -1499,6 +2174,18 @@ def _estimate_sensitivity(
     warnings_list: list[str],
 ) -> tuple[DetectionSensitivity, dict[str, np.ndarray]]:
     rng = np.random.default_rng(seed)
+    configured_false_alarm_probability = (
+        1.0 - float(level.confidence)
+        if policy.detection_false_alarm_probability is None
+        else float(policy.detection_false_alarm_probability)
+    )
+    if not math.isfinite(configured_false_alarm_probability) or not (
+        0.0 < configured_false_alarm_probability < 1.0
+    ):
+        raise ValueError(
+            "detection_false_alarm_probability must be finite and between 0 and 1"
+        )
+    configured_false_alarm_confidence = 1.0 - configured_false_alarm_probability
     if policy.calibration == "bootstrap":
         null_statistics = _simulate_detection_statistics(
             observations,
@@ -1507,16 +2194,27 @@ def _estimate_sensitivity(
             trials=policy.null_trials,
             rng=rng,
         )
-        threshold = _empirical_detection_threshold(null_statistics, level.confidence)
+        threshold = _empirical_detection_threshold(
+            null_statistics,
+            configured_false_alarm_confidence,
+        )
         false_alarm_probability = float(np.mean(null_statistics >= threshold))
     else:
         null_statistics = np.asarray([], dtype=float)
-        threshold = level.delta_stat
+        # The observed profile level and the detection false-alarm policy are
+        # separate controls.  With no empirical null, use the same Gaussian-
+        # equivalent chi-square mapping at the explicitly configured FAP
+        # rather than silently reusing the observed-bound sigma.
+        # 方法：无经验 null 时的条件模型探测阈值：边界似然比的 Gaussian-equivalent 换算
+        #       （与 OneSidedLevel 一致）；关键式：threshold = sigma^2，sigma = Phi^-1(1 - FAP)
+        # 参考：Cowan, Cranmer, Gross & Vitells, 2011, Eur. Phys. J. C 71, 1554 (arXiv:1007.1727) Eq.(61)
+        threshold_sigma = NormalDist().inv_cdf(configured_false_alarm_confidence)
+        threshold = float(threshold_sigma * threshold_sigma)
         false_alarm_probability = None
         warnings_list.append(
-            "Detection threshold used the asymptotic likelihood-ratio approximation."
+            "Detection sensitivity uses a conditional model calibration; no empirical "
+            "fixed-position control sample was supplied."
         )
-
     tested_amplitudes: list[float] = []
     tested_powers: list[float] = []
 
@@ -1555,7 +2253,7 @@ def _estimate_sensitivity(
             fluence=None,
             fluence_unit=model_info["fluence_unit"],
             threshold=threshold,
-            false_alarm_confidence=level.confidence,
+            false_alarm_confidence=configured_false_alarm_confidence,
             target_power=policy.detection_power,
             achieved_power=high_power,
             null_trials=int(null_statistics.size),
@@ -1563,6 +2261,10 @@ def _estimate_sensitivity(
             status="failed",
             empirical_false_alarm_probability=false_alarm_probability,
             reason="Could not bracket the requested detection power.",
+            calibration_status="conditional_model",
+            false_alarm_probability=configured_false_alarm_probability,
+            search_scope="fixed_position",
+            trial_count=int(null_statistics.size + policy.signal_trials),
         )
         return result, {
             "null_statistics": null_statistics,
@@ -1588,13 +2290,17 @@ def _estimate_sensitivity(
         fluence=_scaled_value(amplitude, model_info["fluence_per_amplitude"]),
         fluence_unit=model_info["fluence_unit"],
         threshold=threshold,
-        false_alarm_confidence=level.confidence,
+        false_alarm_confidence=configured_false_alarm_confidence,
         target_power=policy.detection_power,
         achieved_power=high_power,
         null_trials=int(null_statistics.size),
         signal_trials=policy.signal_trials,
         status="ready",
         empirical_false_alarm_probability=false_alarm_probability,
+        calibration_status="conditional_model",
+        false_alarm_probability=configured_false_alarm_probability,
+        search_scope="fixed_position",
+        trial_count=int(null_statistics.size + policy.signal_trials),
     )
     diagnostics = {
         "null_statistics": null_statistics,
@@ -1649,6 +2355,7 @@ def _simulate_observation(
     amplitude: float,
     rng: np.random.Generator,
 ) -> _PreparedObservation:
+    likelihood_name = _canonical_background_likelihood(likelihood_name)
     signal = amplitude * observation.unit_source_counts
     if likelihood_name == "poisson_onoff":
         assert observation.background_counts is not None and observation.alpha is not None
@@ -1823,9 +2530,17 @@ def _validate_instrument_policy(
         raise ValueError(
             "modeled_count_spectrum requires an instrument with temporal background"
         )
-    if policy.strategy == "coded_mask_spectrum" and instrument_config.background_type != "detector_shadow":
+    if policy.strategy == "coded_mask_spectrum" and instrument_config.background_type not in {
+        "detector_shadow",
+        # BAT survey products are already background-subtracted coded-mask
+        # rates.  They use the same response-aware coded-mask strategy as the
+        # detector-shadow config, but expose their product contract under a
+        # distinct background_type so it is not mistaken for an aperture
+        # measurement.
+        "coded_mask_survey_rate",
+    }:
         raise ValueError(
-            "coded_mask_spectrum requires an instrument with detector_shadow background"
+            "coded_mask_spectrum requires a detector-shadow or coded-mask survey-rate instrument"
         )
     if policy.response_folding == "rsp" and instrument_config.response_type != "rsp":
         raise ValueError("rsp upper-limit folding requires InstrumentConfig.response_type='rsp'")
@@ -1965,6 +2680,14 @@ def _optional_positive(value: float | None) -> float | None:
     return numeric
 
 
+def _amplitude_unit(value: str) -> u.UnitBase:
+    """Return a parsable amplitude unit, treating named normalizations as dimensionless."""
+    try:
+        return u.Unit(value)
+    except ValueError:
+        return u.dimensionless_unscaled
+
+
 def _scaled_value(amplitude: float, factor: float | None) -> float | None:
     return None if factor is None else float(amplitude * factor)
 
@@ -1989,18 +2712,42 @@ def _path_provenance(value: str | None) -> dict[str, Any] | None:
 
 
 def _result_to_json(result: ResponseAwareUpperLimitResult) -> dict[str, Any]:
+    observed_payload = None
+    if result.observed_upper_bound is not None:
+        observed_payload = asdict(result.observed_upper_bound)
+        observed_payload.update(
+            {
+                "value": result.observed_upper_bound.amplitude_upper,
+                "unit": result.observed_upper_bound.amplitude_unit,
+                "energy_band": list(result.energy_band_keV),
+                "confidence_level": result.observed_upper_bound.level.confidence,
+                "spectral_model": result.model_name,
+            }
+        )
+    sensitivity_payload = None
+    if result.detection_sensitivity is not None:
+        sensitivity_payload = asdict(result.detection_sensitivity)
+        sensitivity_payload.update(
+            {
+                "value": result.detection_sensitivity.amplitude,
+                "unit": result.detection_sensitivity.amplitude_unit,
+                "energy_band": list(result.energy_band_keV),
+            }
+        )
     return {
         "instrument": result.instrument,
         "strategy": result.strategy,
         "interval": list(result.interval),
         "energy_band_keV": list(result.energy_band_keV),
         "model_name": result.model_name,
-        "observed_upper_bound": _json_safe(
-            None if result.observed_upper_bound is None else asdict(result.observed_upper_bound)
-        ),
-        "detection_sensitivity": _json_safe(
-            None if result.detection_sensitivity is None else asdict(result.detection_sensitivity)
-        ),
+        "observed_upper_bound": _json_safe(observed_payload),
+        "detection_sensitivity": _json_safe(sensitivity_payload),
+        "background": {
+            "likelihood": result.provenance.get("background_likelihood"),
+            "provenance": result.provenance.get("background_provenance"),
+            "covariance_source": result.provenance.get("covariance_source"),
+            "residual_validation": result.provenance.get("residual_validation"),
+        },
         "config": result.config,
         "observations": result.observations,
         "provenance": result.provenance,
@@ -2417,6 +3164,10 @@ def _chain_limit_point(
     )
 
 
+# 方法：delta 统计量与覆盖水平的换算（Wilks 定理的单参数情形）：sqrt(delta) 即高斯等效 sigma；
+#       中心覆盖 = 2*Phi(sqrt(delta)) - 1，单侧概率 = Phi(sqrt(delta))；数值上
+#       chi2.ppf(2*Phi(z)-1, 1) = z^2 与 DEFAULT_ERROR_DELTAS 一致
+# 参考：Wilks, 1938, Ann. Math. Statist. 9, 60；XSPEC 12 Manual, "error (and rerror)"
 def _profile_central_coverage(delta_stat: float) -> float:
     sigma = math.sqrt(float(delta_stat))
     return float(2.0 * NormalDist().cdf(sigma) - 1.0)

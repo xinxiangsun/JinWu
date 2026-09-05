@@ -31,6 +31,7 @@ from astropy.modeling import Fittable1DModel, Parameter
 from astropy.modeling.fitting import LMLSQFitter, TRFLSQFitter
 
 from jinwu.core.data import LightcurveData
+from jinwu.core.config import FitConfig, get_fit_settings
 
 if TYPE_CHECKING:
     from jinwu.core.datasets import LightcurveDataset
@@ -44,9 +45,11 @@ __all__ = [
     "XspecChainResult",
     "fit",
     "fit_prepared",
+    "fit_spectral",
     "fit_xray_models",
     "resolve_xray_model_specs",
     "calculate_model_fit_metrics",
+    "calculate_bayesian_model_metrics",
     "XRayModelSpec",
     "ModelFitMetrics",
     "XRayModelComparisonResult",
@@ -210,7 +213,13 @@ class XRayModelSpec:
 
 @dataclass(frozen=True, slots=True)
 class ModelFitMetrics:
-    """Information criteria for one fit to one fixed dataset."""
+    """Information criteria for one fit to one fixed dataset.
+
+    ``logz`` / ``logzerr`` carry the Bayesian log-evidence produced by the BXA
+    nested-sampling path; they stay ``None`` for maximum-likelihood fits so the
+    existing AIC/AICc/BIC surface is unchanged.  ``ranking_metric`` may be
+    ``"logz"`` when candidates are ordered by evidence.
+    """
 
     statistic: float
     dof: int
@@ -224,6 +233,8 @@ class ModelFitMetrics:
     delta_aicc: float | None = None
     delta_bic: float | None = None
     akaike_weight: float | None = None
+    logz: float | None = None
+    logzerr: float | None = None
     ranking_metric: str = "aicc"
 
 
@@ -384,6 +395,46 @@ def calculate_model_fit_metrics(
         aic=aic,
         aicc=aicc,
         bic=bic,
+    )
+
+
+def calculate_bayesian_model_metrics(
+    logz: float,
+    logzerr: float | None,
+    free_parameters: int,
+    dof: int,
+) -> ModelFitMetrics:
+    """Build :class:`ModelFitMetrics` from a Bayesian log-evidence.
+
+    Used by the BXA nested-sampling path where model comparison ranks by
+    ``logz`` rather than AIC/AICc/BIC.  The information criteria are left
+    ``None`` because they are undefined without a maximum-likelihood statistic;
+    ``statistic`` mirrors ``dof``-agnostic placeholders set to ``nan``-free
+    values so downstream serialization stays JSON safe.
+    """
+    logz_value = float(logz)
+    if not math.isfinite(logz_value):
+        raise ValueError("logz must be finite")
+    logzerr_value = None if logzerr is None else float(logzerr)
+    if logzerr_value is not None and (
+        not math.isfinite(logzerr_value) or logzerr_value < 0
+    ):
+        raise ValueError("logzerr must be finite and non-negative")
+    free_parameters = int(free_parameters)
+    dof = int(dof)
+    if free_parameters < 0 or dof < 0:
+        raise ValueError("dof and free_parameters must be non-negative")
+    return ModelFitMetrics(
+        statistic=logz_value,
+        dof=dof,
+        free_parameters=free_parameters,
+        effective_bins=dof + free_parameters,
+        aic=None,
+        aicc=None,
+        bic=None,
+        logz=logz_value,
+        logzerr=logzerr_value,
+        ranking_metric="logz",
     )
 
 
@@ -2419,6 +2470,48 @@ def _set_prepared_parameter_bounds(parameter, value: float, lower: float, upper:
         parameter.values = f"{value},,{lower},{lower},{upper},{upper}"
 
 
+def _freeze_prepared_parameters(model, frozen_parameters: Mapping[str, float] | None) -> None:
+    """Set and freeze named XSPEC parameters on a prepared model.
+
+    Keys use the stable ``component.parameter`` spelling exposed by
+    :func:`_xspec_chain_parameters`, for example ``powerlaw.PhoIndex``.  The
+    helper deliberately rejects unknown or ambiguous names so an upper-limit
+    calculation cannot silently profile the wrong parameter.
+    """
+    if not frozen_parameters:
+        return
+    components = {
+        str(component_name).lower(): getattr(model, component_name)
+        for component_name in getattr(model, "componentNames", ())
+    }
+    for key, value in frozen_parameters.items():
+        name = str(key).strip()
+        if "." not in name:
+            raise ValueError(
+                f"frozen parameter {name!r} must use 'component.parameter' spelling"
+            )
+        component_name, parameter_name = (part.strip() for part in name.split(".", 1))
+        component = components.get(component_name.lower())
+        if component is None:
+            raise ValueError(f"unknown XSPEC model component in frozen parameter {name!r}")
+        parameter_names = {
+            str(candidate).lower(): str(candidate)
+            for candidate in getattr(component, "parameterNames", ())
+        }
+        actual_name = parameter_names.get(parameter_name.lower())
+        if actual_name is None or not hasattr(component, actual_name):
+            raise ValueError(f"unknown XSPEC model parameter {name!r}")
+        try:
+            resolved = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"frozen parameter {name!r} must be finite") from exc
+        if not math.isfinite(resolved):
+            raise ValueError(f"frozen parameter {name!r} must be finite")
+        parameter = getattr(component, actual_name)
+        parameter.values = resolved
+        parameter.frozen = True
+
+
 def _prepared_ztbabs_components(model) -> list[tuple[str, Any]]:
     """Return every zTBabs component, including XSPEC's suffixed duplicates."""
     names = [
@@ -2832,11 +2925,12 @@ def fit_prepared(
     emax: float | None = None,
     energy_ranges: Mapping[str, tuple[float, float]] | None = None,
     model_name: str = "tbabs*ztbabs*cflux*powerlaw",
+    frozen_parameters: Mapping[str, float] | None = None,
     redshift: float = 0.0,
     redshift_absorbers: Sequence[float] | None = None,
-    stat_method: str = "cstat",
-    abundance: str = "wilm",
-    cross_section: str = "vern",
+    stat_method: str | None = None,
+    abundance: str | None = None,
+    cross_section: str | None = None,
     galactic_nh_1e22: float | None = None,
     freeze_galactic_nh: bool = True,
     intrinsic_nh_mode: Literal["free", "zero"] = "free",
@@ -2854,6 +2948,18 @@ def fit_prepared(
     """Fit one prepared spectrum or multiple prepared spectra with XSPEC."""
     from jinwu.core.plot import plotfit
     from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum
+
+    # Resolve None sentinels against the process-wide fit settings.  The
+    # packaged FitConfig defaults (statistic="cstat", abundance="wilm",
+    # cross_section="vern") match the historical hardcoded defaults exactly, so
+    # a bare call behaves identically unless the user changed global settings.
+    # ``model_name`` deliberately keeps its own hardcoded default (see plan).
+    _settings = get_fit_settings()
+    stat_method = stat_method if stat_method is not None else _settings.statistic
+    abundance = abundance if abundance is not None else _settings.abundance
+    cross_section = (
+        cross_section if cross_section is not None else _settings.cross_section
+    )
 
     error_metadata = _profile_error_metadata(error_delta_stat)
     if isinstance(prepared, PreparedSpectrum):
@@ -2937,6 +3043,7 @@ def fit_prepared(
             freeze_galactic_nh=freeze_galactic_nh,
             intrinsic_nh_mode=intrinsic_nh_mode,
         )
+        _freeze_prepared_parameters(group_model, frozen_parameters)
     _link_default_prepared_model_groups(group_models, model_name)
     perform_text = _capture_xspec_log(
         xspec,
@@ -3080,6 +3187,11 @@ def fit_prepared(
         ),
         **error_metadata,
         "calculate_errors": calculate_errors,
+        "frozen_parameters": (
+            {str(key): float(value) for key, value in frozen_parameters.items()}
+            if frozen_parameters
+            else {}
+        ),
         "error_command": command if calculate_errors else None,
         "profile_errors_succeeded": profile_errors_succeeded,
     }
@@ -3164,6 +3276,75 @@ def fit_prepared(
         "replay_cwd": str(products.replay_cwd),
     }
     return results
+
+
+def fit_spectral(
+    prepared,
+    *,
+    outdir: str | Path,
+    method: Literal["mle", "chain", "bxa"] | None = None,
+    settings: FitConfig | None = None,
+    chain_path: str | Path | None = None,
+    chain_kwargs: Mapping[str, Any] | None = None,
+    **kwargs: Any,
+):
+    """Unified entry point that routes a prepared fit to the selected method.
+
+    The effective ``method`` resolves, from highest to lowest priority, as:
+    explicit ``method`` argument > ``settings.method`` >
+    :func:`jinwu.core.config.get_fit_settings`.  Routing:
+
+    - ``"mle"``   -> :func:`fit_prepared` (returns its result ``dict``).
+    - ``"chain"`` -> :func:`fit_prepared` then :func:`run_xspec_chain` on the
+      still-loaded XSPEC session; the :class:`XspecChainResult` is attached under
+      ``result["xspec_chain"]`` and the ``dict`` is returned.
+    - ``"bxa"``   -> :func:`jinwu.core.bxa_fit.fit_prepared_bxa` (imported lazily
+      inside the body to avoid a circular import, since ``bxa_fit`` reuses this
+      module's private helpers); returns a ``BXAFitResult``.
+
+    ``kwargs`` are forwarded to the underlying fit function.  Chain-specific
+    options are supplied via ``chain_path`` / ``chain_kwargs`` so they never
+    collide with ``fit_prepared`` arguments.
+    """
+    if settings is not None and not isinstance(settings, FitConfig):
+        raise TypeError("settings must be a FitConfig instance or None")
+    if method is None:
+        method = settings.method if settings is not None else get_fit_settings().method
+    resolved_method = str(method).lower()
+    if resolved_method not in {"mle", "chain", "bxa"}:
+        raise ValueError(
+            f"Unknown fit method: {method!r}; expected 'mle', 'chain' or 'bxa'"
+        )
+
+    output = Path(outdir).expanduser().resolve()
+    fit_kwargs: dict[str, Any] = dict(kwargs)
+    if settings is not None:
+        # An explicit per-call ``settings`` supplies defaults for the three
+        # sentinel parameters, but never overrides values the caller passed.
+        fit_kwargs.setdefault("stat_method", settings.statistic)
+        fit_kwargs.setdefault("abundance", settings.abundance)
+        fit_kwargs.setdefault("cross_section", settings.cross_section)
+
+    if resolved_method == "bxa":
+        from jinwu.core.bxa_fit import fit_prepared_bxa
+
+        return fit_prepared_bxa(prepared, outdir=output, **fit_kwargs)
+
+    result = fit_prepared(prepared, outdir=output, **fit_kwargs)
+    if resolved_method == "mle":
+        return result
+
+    resolved_chain_path = (
+        Path(chain_path).expanduser().resolve()
+        if chain_path is not None
+        else output / "chain.fits"
+    )
+    chain_result = run_xspec_chain(
+        chain_path=resolved_chain_path,
+        **(dict(chain_kwargs) if chain_kwargs else {}),
+    )
+    result["xspec_chain"] = chain_result
+    return result
 
 
 def _compact_xray_fit(result: Mapping[str, Any]) -> dict[str, Any]:

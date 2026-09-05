@@ -54,16 +54,24 @@ Working with Energy Bands
 
 .. code-block:: python
 
-   from jinwu.core import EnergyBand, ChannelBand
+   from jinwu.core import EnergyBand, ChannelBand, channel_mask_from_ebounds
 
-   # Define an energy band
-   soft_band = EnergyBand(0.3, 2.0, unit="keV")
-   hard_band = EnergyBand(2.0, 10.0, unit="keV")
+   # Define an energy band (emin/emax each carry their own unit string)
+   soft_band = EnergyBand(emin=0.3, emin_unit="keV", emax=2.0, emax_unit="keV")
+   hard_band = EnergyBand(emin=2.0, emin_unit="keV", emax=10.0, emax_unit="keV")
 
-   # Convert to channel indices from an ARF
-   arf = jw.read_arf("source.arf")
-   ch_soft = ChannelBand.from_energy_band(soft_band, arf)
-   ch_hard = ChannelBand.from_energy_band(hard_band, arf)
+   # Map an energy band onto detector channels via the EBOUNDS extension of
+   # a PHA/RMF file (channels are defined by the response, not the ARF)
+   pha = jw.read_pha("source.pha")
+   mask_soft = channel_mask_from_ebounds(pha.ebounds, soft_band)
+   mask_hard = channel_mask_from_ebounds(pha.ebounds, hard_band)
+
+   # Restrict to a channel range on top of the energy selection
+   ch_band = ChannelBand(ch_lo=0, ch_hi=100)
+   mask_soft_ch = channel_mask_from_ebounds(pha.ebounds, soft_band, ch_band)
+
+   # Reverse direction: the energy range covered by ARF bin indices
+   band = jw.band_from_arf_bins("source.arf", bin_lo=81, bin_hi=780)
 
 Computing Net Data
 ------------------
@@ -117,6 +125,10 @@ Next Steps
 ----------
 
 * See :doc:`api` for the complete API reference.
-* See :doc:`usage/spectral` and :doc:`usage/lightcurve` for fitting details.
+* See :doc:`usage/spectral` and :doc:`usage/lightcurve` for fitting details,
+  and :doc:`usage/bxa_fitting` for BXA/UltraNest Bayesian spectral fitting.
+* For instrument pipelines, see :doc:`usage/swift_grb` (Swift BAT+XRT GRB),
+  :doc:`usage/bat_survey` (Swift/BAT survey targets) and
+  :doc:`usage/fermi_gbm` (Fermi/GBM continuous data).
 * Check the `GitHub repository <https://github.com/xinxiangsun/jinwu>`_
   for examples and issue tracking.
