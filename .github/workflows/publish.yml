@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Python (jinwu, jinwu-ep, jinwu-swift, jinwu-fermi) ──
+  # ── Python (jinwu, jinwu-ep, jinwu-swift, jinwu-fermi, jinwu-gw) ──
   build-python:
     runs-on: ubuntu-latest
     steps:
@@ -18,7 +18,7 @@ jobs:
       - name: Build all Python distributions
         run: |
           pip install build
-          for pkg in packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi; do
+          for pkg in packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw; do
             echo "::group::build $pkg"
             python -m build "$pkg" --outdir dist/
             echo "::endgroup::"
@@ -84,9 +84,10 @@ jobs:
           import jinwu.swift.bat.survey
           import jinwu.swift.grb.pipeline
           import jinwu.fermi
+          import jinwu.gw
 
           names = sorted(e.name for e in entry_points(group="jinwu.instruments"))
-          assert {"ep", "swift", "fermi"} <= set(names), f"missing entry points: {names}"
+          assert {"ep", "swift", "fermi", "gw"} <= set(names), f"missing entry points: {names}"
 
           from jinwu.core import timescale
           p = Path(inspect.getsourcefile(timescale))

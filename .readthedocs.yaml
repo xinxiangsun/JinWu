@@ -25,3 +25,7 @@ python:
       path: packages/jinwu-fermi
     - method: pip
       path: packages/jinwu-swift
+    # jinwu.gw is referenced by docs/api.rst (automodapi); without the package
+    # RTD would either fail to import it or document MagicMock shims.
+    - method: pip
+      path: packages/jinwu-gw

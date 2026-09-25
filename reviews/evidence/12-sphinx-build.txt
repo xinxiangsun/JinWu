@@ -1,0 +1,1683 @@
+nohup: ignoring input
+Running Sphinx v9.1.0
+loading translations [en]... done
+making output directory... done
+loading intersphinx inventory 'numpy' from https://numpy.org/doc/stable/objects.inv ...
+loading intersphinx inventory 'python' from https://docs.python.org/3/objects.inv ...
+loading intersphinx inventory 'scipy' from https://docs.scipy.org/doc/scipy/objects.inv ...
+loading intersphinx inventory 'astropy' from https://docs.astropy.org/en/stable/objects.inv ...
+loading intersphinx inventory 'matplotlib' from https://matplotlib.org/stable/objects.inv ...
+[autosummary] generating autosummary for: RedshiftExtrapolator.md, api.rst, api/jinwu.background.BackgroundCountsPosterior.rst, api/jinwu.background.BackgroundPrior.rst, api/jinwu.background.BackgroundSpectralPrior.rst, api/jinwu.core.ArfBase.rst, api/jinwu.core.ArfData.rst, api/jinwu.core.ArfReader.rst, api/jinwu.core.ArfWriter.rst, api/jinwu.core.BXAFitResult.rst, ..., usage/bat_survey.rst, usage/bxa_fitting.rst, usage/fermi_gbm.rst, usage/gbm_subthreshold.rst, usage/gw_coverage.rst, usage/lightcurve.rst, usage/nhtot.rst, usage/spectral.rst, usage/swift_grb.rst, usage/upperlimits.rst
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+[automodsumm] api.rst: found 358 automodsumm entries to generate
+myst v5.1.0: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'deflist', 'colon_fence'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=3, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, strikethrough_single_tilde=False, colon_fence_exact_match=False, suppress_warnings=[], highlight_code_blocks=True)
+building [mo]: targets for 0 po files that are out of date
+writing output... 
+building [html]: targets for 370 source files that are out of date
+updating environment: [new config] 375 added, 0 changed, 0 removed
+reading sources... [  0%] RedshiftExtrapolator
+reading sources... [  1%] api
+reading sources... [  1%] api/jinwu.background.BackgroundCountsPosterior
+reading sources... [  1%] api/jinwu.background.BackgroundPrior
+reading sources... [  1%] api/jinwu.background.BackgroundSpectralPrior
+reading sources... [  2%] api/jinwu.core.ArfBase
+reading sources... [  2%] api/jinwu.core.ArfData
+reading sources... [  2%] api/jinwu.core.ArfReader
+reading sources... [  2%] api/jinwu.core.ArfWriter
+reading sources... [  3%] api/jinwu.core.BXAFitResult
+reading sources... [  3%] api/jinwu.core.BXAPriorSpec
+reading sources... [  3%] api/jinwu.core.ChannelBand
+reading sources... [  3%] api/jinwu.core.EmpiricalCalibrationAdapter
+reading sources... [  4%] api/jinwu.core.EnergyBand
+reading sources... [  4%] api/jinwu.core.EventData
+reading sources... [  4%] api/jinwu.core.EventDataBase
+reading sources... [  5%] api/jinwu.core.EventWriter
+reading sources... [  5%] api/jinwu.core.FitsHeaderDump
+reading sources... [  5%] api/jinwu.core.GaussianNetRateObservation
+reading sources... [  5%] api/jinwu.core.GaussianNetRateProfileResult
+reading sources... [  6%] api/jinwu.core.HduHeader
+reading sources... [  6%] api/jinwu.core.JointDataset
+reading sources... [  6%] api/jinwu.core.LightcurveData
+reading sources... [  6%] api/jinwu.core.LightcurveDataBase
+reading sources... [  7%] api/jinwu.core.LightcurveDataset
+reading sources... [  7%] api/jinwu.core.LightcurveLike
+reading sources... [  7%] api/jinwu.core.LightcurveReader
+reading sources... [  7%] api/jinwu.core.LightcurveWriter
+reading sources... [  8%] api/jinwu.core.OgipArfReader
+reading sources... [  8%] api/jinwu.core.OgipData
+reading sources... [  8%] api/jinwu.core.OgipEventReader
+reading sources... [  9%] api/jinwu.core.OgipFitsBase
+reading sources... [  9%] api/jinwu.core.OgipLightcurveReader
+reading sources... [  9%] api/jinwu.core.OgipMeta
+reading sources... [  9%] api/jinwu.core.OgipPhaReader
+reading sources... [ 10%] api/jinwu.core.OgipRmfReader
+reading sources... [ 10%] api/jinwu.core.PanelSpec
+reading sources... [ 10%] api/jinwu.core.PhaBase
+reading sources... [ 10%] api/jinwu.core.PhaData
+reading sources... [ 11%] api/jinwu.core.PhaWriter
+reading sources... [ 11%] api/jinwu.core.RegionArea
+reading sources... [ 11%] api/jinwu.core.RegionAreaSet
+reading sources... [ 11%] api/jinwu.core.RmfBase
+reading sources... [ 12%] api/jinwu.core.RmfData
+reading sources... [ 12%] api/jinwu.core.RmfReader
+reading sources... [ 12%] api/jinwu.core.RmfWriter
+reading sources... [ 13%] api/jinwu.core.RspReader
+reading sources... [ 13%] api/jinwu.core.SpectrumDataset
+reading sources... [ 13%] api/jinwu.core.SpectrumLike
+reading sources... [ 13%] api/jinwu.core.Time
+reading sources... [ 14%] api/jinwu.core.TimeDelta
+reading sources... [ 14%] api/jinwu.core.ValidationMessage
+reading sources... [ 14%] api/jinwu.core.ValidationReport
+reading sources... [ 14%] api/jinwu.core.__version__
+reading sources... [ 15%] api/jinwu.core.band_from_arf_bins
+reading sources... [ 15%] api/jinwu.core.bxa_fit.BXAFitResult
+reading sources... [ 15%] api/jinwu.core.bxa_fit.BXAPriorSpec
+reading sources... [ 15%] api/jinwu.core.bxa_fit.fit_prepared_bxa
+reading sources... [ 16%] api/jinwu.core.bxa_fit.fit_xray_models_bxa
+reading sources... [ 16%] api/jinwu.core.bxa_fit.resolve_priors
+reading sources... [ 16%] api/jinwu.core.bxa_fit.run_bxa_pipeline
+reading sources... [ 17%] api/jinwu.core.channel_mask_from_ebounds
+reading sources... [ 17%] api/jinwu.core.check_response_compatibility
+reading sources... [ 17%] api/jinwu.core.config.BAT
+reading sources... [ 17%] api/jinwu.core.config.BATSurvey
+reading sources... [ 18%] api/jinwu.core.config.BATSurveyConfig
+reading sources... [ 18%] api/jinwu.core.config.BATSurveyDownloadConfig
+reading sources... [ 18%] api/jinwu.core.config.BATSurveyMosaicConfig
+reading sources... [ 18%] api/jinwu.core.config.BATSurveySelectionConfig
+reading sources... [ 19%] api/jinwu.core.config.BXAConfig
+reading sources... [ 19%] api/jinwu.core.config.BackgroundScalingConfig
+reading sources... [ 19%] api/jinwu.core.config.BayesianBlockSpectrumConfig
+reading sources... [ 19%] api/jinwu.core.config.DurationConfig
+reading sources... [ 20%] api/jinwu.core.config.EnergyBandConfig
+reading sources... [ 20%] api/jinwu.core.config.ExecutionConfig
+reading sources... [ 20%] api/jinwu.core.config.ExtractionConfig
+reading sources... [ 21%] api/jinwu.core.config.FXT
+reading sources... [ 21%] api/jinwu.core.config.FitConfig
+reading sources... [ 21%] api/jinwu.core.config.FluxCurveConfig
+reading sources... [ 21%] api/jinwu.core.config.GBM
+reading sources... [ 22%] api/jinwu.core.config.GBMAnalysisConfig
+reading sources... [ 22%] api/jinwu.core.config.GBMContinuous
+reading sources... [ 22%] api/jinwu.core.config.GECAM
+reading sources... [ 22%] api/jinwu.core.config.GalacticAbsorptionConfig
+reading sources... [ 23%] api/jinwu.core.config.InstrumentConfig
+reading sources... [ 23%] api/jinwu.core.config.PlotConfig
+reading sources... [ 23%] api/jinwu.core.config.RegionConfig
+reading sources... [ 23%] api/jinwu.core.config.ReportConfig
+reading sources... [ 24%] api/jinwu.core.config.SpectrumConfig
+reading sources... [ 24%] api/jinwu.core.config.SwiftBATSurveyConfig
+reading sources... [ 24%] api/jinwu.core.config.SwiftBATSurveyDownloadConfig
+reading sources... [ 25%] api/jinwu.core.config.SwiftBATSurveyMosaicConfig
+reading sources... [ 25%] api/jinwu.core.config.SwiftBATSurveySelectionConfig
+reading sources... [ 25%] api/jinwu.core.config.SwiftGRB
+reading sources... [ 25%] api/jinwu.core.config.SwiftGRBDataConfig
+reading sources... [ 26%] api/jinwu.core.config.SwiftGRBSegmentationConfig
+reading sources... [ 26%] api/jinwu.core.config.SwiftXRTRequestConfig
+reading sources... [ 26%] api/jinwu.core.config.UVOT
+reading sources... [ 26%] api/jinwu.core.config.UpperLimitConfig
+reading sources... [ 27%] api/jinwu.core.config.WXT
+reading sources... [ 27%] api/jinwu.core.config.XSPEC_COSMO_PLANCK18
+reading sources... [ 27%] api/jinwu.core.config.fit_settings
+reading sources... [ 27%] api/jinwu.core.config.get_fit_method
+reading sources... [ 28%] api/jinwu.core.config.get_fit_settings
+reading sources... [ 28%] api/jinwu.core.config.instrument
+reading sources... [ 28%] api/jinwu.core.config.register_instrument
+reading sources... [ 29%] api/jinwu.core.config.reset_fit_settings
+reading sources... [ 29%] api/jinwu.core.config.set_fit_method
+reading sources... [ 29%] api/jinwu.core.config.set_fit_settings
+reading sources... [ 29%] api/jinwu.core.datasets.JointDataset
+reading sources... [ 30%] api/jinwu.core.datasets.LightcurveDataset
+reading sources... [ 30%] api/jinwu.core.datasets.SpectrumDataset
+reading sources... [ 30%] api/jinwu.core.datasets.netdata
+reading sources... [ 30%] api/jinwu.core.fit.FitResult
+reading sources... [ 31%] api/jinwu.core.fit.LightcurveFitter
+reading sources... [ 31%] api/jinwu.core.fit.ModelFitMetrics
+reading sources... [ 31%] api/jinwu.core.fit.ModelRegistry
+reading sources... [ 31%] api/jinwu.core.fit.XRayModelComparisonResult
+reading sources... [ 32%] api/jinwu.core.fit.XRayModelSpec
+reading sources... [ 32%] api/jinwu.core.fit.XspecChainParameter
+reading sources... [ 32%] api/jinwu.core.fit.XspecChainResult
+reading sources... [ 33%] api/jinwu.core.fit.calculate_bayesian_model_metrics
+reading sources... [ 33%] api/jinwu.core.fit.calculate_model_fit_metrics
+reading sources... [ 33%] api/jinwu.core.fit.fit
+reading sources... [ 33%] api/jinwu.core.fit.fit_prepared
+reading sources... [ 34%] api/jinwu.core.fit.fit_spectral
+reading sources... [ 34%] api/jinwu.core.fit.fit_xray_models
+reading sources... [ 34%] api/jinwu.core.fit.resolve_xray_model_specs
+reading sources... [ 34%] api/jinwu.core.fit.run_xspec_chain
+reading sources... [ 35%] api/jinwu.core.fit_prepared_bxa
+reading sources... [ 35%] api/jinwu.core.fit_settings
+reading sources... [ 35%] api/jinwu.core.fit_spectral
+reading sources... [ 35%] api/jinwu.core.fit_xray_models_bxa
+reading sources... [ 36%] api/jinwu.core.get_fit_method
+reading sources... [ 36%] api/jinwu.core.get_fit_settings
+reading sources... [ 36%] api/jinwu.core.guess_ogip_kind
+reading sources... [ 37%] api/jinwu.core.heasoft.HeasoftEnvManager
+reading sources... [ 37%] api/jinwu.core.model_comparison.BayesFactorResult
+reading sources... [ 37%] api/jinwu.core.model_comparison.EmpiricalTailResult
+reading sources... [ 37%] api/jinwu.core.model_comparison.PreparedOnOffMarginalLikelihood
+reading sources... [ 38%] api/jinwu.core.model_comparison.empirical_tail_probability
+reading sources... [ 38%] api/jinwu.core.model_comparison.model_averaged_direction_probabilities
+reading sources... [ 38%] api/jinwu.core.model_comparison.model_averaged_direction_probability_interval
+reading sources... [ 38%] api/jinwu.core.model_comparison.model_posterior_probability
+reading sources... [ 39%] api/jinwu.core.model_comparison.onoff_log_marginal_likelihood
+reading sources... [ 39%] api/jinwu.core.model_comparison.onoff_log_profile_likelihood
+reading sources... [ 39%] api/jinwu.core.model_comparison.p_to_sigma
+reading sources... [ 39%] api/jinwu.core.model_comparison.recover_raw_off_counts
+reading sources... [ 40%] api/jinwu.core.model_comparison.sigma_to_p
+reading sources... [ 40%] api/jinwu.core.model_comparison.summarize_bayes_factor
+reading sources... [ 40%] api/jinwu.core.multi_panel
+reading sources... [ 41%] api/jinwu.core.netdata
+reading sources... [ 41%] api/jinwu.core.overlay
+reading sources... [ 41%] api/jinwu.core.pipeline.InstrumentPipeline
+reading sources... [ 41%] api/jinwu.core.pipeline.PipelineConfigProtocol
+reading sources... [ 42%] api/jinwu.core.pipeline.PipelineInput
+reading sources... [ 42%] api/jinwu.core.pipeline.PipelineRunState
+reading sources... [ 42%] api/jinwu.core.pipeline.PipelineStage
+reading sources... [ 42%] api/jinwu.core.pipeline.PipelineStatus
+reading sources... [ 43%] api/jinwu.core.pipeline.StageResult
+reading sources... [ 43%] api/jinwu.core.pipeline.pipeline
+reading sources... [ 43%] api/jinwu.core.pipeline.register_pipeline
+reading sources... [ 43%] api/jinwu.core.profile_gaussian_upper_bound
+reading sources... [ 44%] api/jinwu.core.read_arf
+reading sources... [ 44%] api/jinwu.core.read_evt
+reading sources... [ 44%] api/jinwu.core.read_lc
+reading sources... [ 45%] api/jinwu.core.read_pha
+reading sources... [ 45%] api/jinwu.core.read_rmf
+reading sources... [ 45%] api/jinwu.core.readfits
+reading sources... [ 45%] api/jinwu.core.rebin_events_to_lightcurve
+reading sources... [ 46%] api/jinwu.core.rebin_lightcurve
+reading sources... [ 46%] api/jinwu.core.rebin_pha
+reading sources... [ 46%] api/jinwu.core.reset_fit_settings
+reading sources... [ 46%] api/jinwu.core.resolve_priors
+reading sources... [ 47%] api/jinwu.core.run_bxa_pipeline
+reading sources... [ 47%] api/jinwu.core.set_fit_method
+reading sources... [ 47%] api/jinwu.core.set_fit_settings
+reading sources... [ 47%] api/jinwu.core.slice_events
+reading sources... [ 48%] api/jinwu.core.slice_lightcurve
+reading sources... [ 48%] api/jinwu.core.slice_pha
+reading sources... [ 48%] api/jinwu.core.upperlimit.CallablePhotonModelPredictor
+reading sources... [ 49%] api/jinwu.core.upperlimit.CountPredictor
+reading sources... [ 49%] api/jinwu.core.upperlimit.CountTemplateModel
+reading sources... [ 49%] api/jinwu.core.upperlimit.DEFAULT_CHAIN_LEVELS
+reading sources... [ 49%] api/jinwu.core.upperlimit.DEFAULT_ERROR_DELTAS
+reading sources... [ 50%] api/jinwu.core.upperlimit.DEFAULT_ONE_SIDED_CHAIN_LEVELS
+reading sources... [ 50%] api/jinwu.core.upperlimit.DetectionSensitivity
+reading sources... [ 50%] api/jinwu.core.upperlimit.DetectionSensitivityAdapter
+reading sources... [ 50%] api/jinwu.core.upperlimit.EmpiricalCalibrationAdapter
+reading sources... [ 51%] api/jinwu.core.upperlimit.FastNormFit
+reading sources... [ 51%] api/jinwu.core.upperlimit.GaussianNetRateObservation
+reading sources... [ 51%] api/jinwu.core.upperlimit.GaussianNetRateProfileResult
+reading sources... [ 51%] api/jinwu.core.upperlimit.ObservedUpperBound
+reading sources... [ 52%] api/jinwu.core.upperlimit.OneSidedLevel
+reading sources... [ 52%] api/jinwu.core.upperlimit.ProfileAmplitudeResult
+reading sources... [ 52%] api/jinwu.core.upperlimit.ResponseAwareUpperLimitResult
+reading sources... [ 53%] api/jinwu.core.upperlimit.UpperLimit
+reading sources... [ 53%] api/jinwu.core.upperlimit.UpperLimitObservation
+reading sources... [ 53%] api/jinwu.core.upperlimit.UpperLimitPoint
+reading sources... [ 53%] api/jinwu.core.upperlimit.UpperLimitResult
+reading sources... [ 54%] api/jinwu.core.upperlimit.UpperLimitStrategy
+reading sources... [ 54%] api/jinwu.core.upperlimit.XspecCountPredictor
+reading sources... [ 54%] api/jinwu.core.upperlimit.estimate_upper_limit
+reading sources... [ 54%] api/jinwu.core.upperlimit.profile_source_amplitude
+reading sources... [ 55%] api/jinwu.core.upperlimit.register_upper_limit_strategy
+reading sources... [ 55%] api/jinwu.core.write_arf
+reading sources... [ 55%] api/jinwu.core.write_evt
+reading sources... [ 55%] api/jinwu.core.write_lc
+reading sources... [ 56%] api/jinwu.core.write_pha
+reading sources... [ 56%] api/jinwu.core.write_rmf
+reading sources... [ 56%] api/jinwu.core.writefits
+reading sources... [ 57%] api/jinwu.ep.wxt.BackgroundScalingResult
+reading sources... [ 57%] api/jinwu.ep.wxt.ExposureMeasure
+reading sources... [ 57%] api/jinwu.ep.wxt.TimeResolvedSegment
+reading sources... [ 57%] api/jinwu.ep.wxt.WXTObservationFiles
+reading sources... [ 58%] api/jinwu.ep.wxt.WXTPointingInput
+reading sources... [ 58%] api/jinwu.ep.wxt.WXTPointingPipeline
+reading sources... [ 58%] api/jinwu.ep.wxt.WXTPointingResult
+reading sources... [ 58%] api/jinwu.fermi.gbm.GBMBackgroundSummary
+reading sources... [ 59%] api/jinwu.fermi.gbm.GBMCoverageResult
+reading sources... [ 59%] api/jinwu.fermi.gbm.GBMDataManifest
+reading sources... [ 59%] api/jinwu.fermi.gbm.GBMDetectorSelection
+reading sources... [ 59%] api/jinwu.fermi.gbm.GBMFlareInterval
+reading sources... [ 60%] api/jinwu.fermi.gbm.GBMGeometryState
+reading sources... [ 60%] api/jinwu.fermi.gbm.GBMObservation
+<frozen importlib.util>:91: DeprecationWarning: The jinwu.fermi.gbm.GBMObservation module is deprecated; import GBMObservation from jinwu.fermi.gbm or jinwu.fermi.gbm.gbm_observation
+reading sources... [ 60%] api/jinwu.fermi.gbm.GBMPipeline
+reading sources... [ 61%] api/jinwu.fermi.gbm.GBMPipelineInput
+reading sources... [ 61%] api/jinwu.fermi.gbm.GBMPipelineResult
+reading sources... [ 61%] api/jinwu.fermi.gbm.GBMPosHistSelection
+reading sources... [ 61%] api/jinwu.fermi.gbm.GBMSpectralProducts
+reading sources... [ 62%] api/jinwu.fermi.gbm.background_windows
+reading sources... [ 62%] api/jinwu.fermi.gbm.check_gbm_coverage
+reading sources... [ 62%] api/jinwu.fermi.gbm.estimate_gbm_orbit_period
+reading sources... [ 62%] api/jinwu.fermi.gbm.extract_gbm_spectral_products
+reading sources... [ 63%] api/jinwu.fermi.gbm.fetch_gbm_continuous_products
+reading sources... [ 63%] api/jinwu.fermi.gbm.fetch_gbm_products_for_interval
+reading sources... [ 63%] api/jinwu.fermi.gbm.fetch_poshist_for_time
+reading sources... [ 63%] api/jinwu.fermi.gbm.find_gbm_poshist
+reading sources... [ 64%] api/jinwu.fermi.gbm.generate_download_url
+reading sources... [ 64%] api/jinwu.fermi.gbm.gti_intervals_for_paths
+reading sources... [ 64%] api/jinwu.fermi.gbm.integrate_background_interval
+reading sources... [ 65%] api/jinwu.fermi.gbm.main
+reading sources... [ 65%] api/jinwu.fermi.gbm.powerlaw_energy_flux_per_norm
+reading sources... [ 65%] api/jinwu.fermi.gbm.read_gbm_geometry
+reading sources... [ 65%] api/jinwu.fermi.gbm.read_ogip_products
+reading sources... [ 66%] api/jinwu.fermi.gbm.response.GBMResponseCommand
+reading sources... [ 66%] api/jinwu.fermi.gbm.response.GBMResponseRun
+reading sources... [ 66%] api/jinwu.fermi.gbm.response.build_gbm_response_command
+reading sources... [ 66%] api/jinwu.fermi.gbm.response.contgbmrsp
+reading sources... [ 67%] api/jinwu.fermi.gbm.response.generate_gbm_response
+reading sources... [ 67%] api/jinwu.fermi.gbm.select_gbm_detectors
+reading sources... [ 67%] api/jinwu.fermi.gbm.single_response
+reading sources... [ 67%] api/jinwu.fermi.gbm.tte_coverage
+reading sources... [ 68%] api/jinwu.fermi.gbm.validate_background_residuals
+reading sources... [ 68%] api/jinwu.gw.CoverageResult
+reading sources... [ 68%] api/jinwu.gw.GWConfig
+reading sources... [ 69%] api/jinwu.gw.GWEvent
+reading sources... [ 69%] api/jinwu.gw.GWPipeline
+reading sources... [ 69%] api/jinwu.gw.GWPipelineInput
+reading sources... [ 69%] api/jinwu.gw.GWRunResult
+reading sources... [ 70%] api/jinwu.gw.GraceDBClient
+reading sources... [ 70%] api/jinwu.gw.GraceDBNotice
+reading sources... [ 70%] api/jinwu.gw.Localization
+reading sources... [ 70%] api/jinwu.gw.ProbabilityIntegral
+reading sources... [ 71%] api/jinwu.gw.SkyFootprint
+reading sources... [ 71%] api/jinwu.gw.SkyMap
+reading sources... [ 71%] api/jinwu.gw.credible_region
+reading sources... [ 71%] api/jinwu.gw.credible_region_stats
+reading sources... [ 72%] api/jinwu.gw.fetch_skymap_url
+reading sources... [ 72%] api/jinwu.gw.fetch_superevent
+reading sources... [ 72%] api/jinwu.gw.footprint_from_circle
+reading sources... [ 73%] api/jinwu.gw.footprint_from_polygon
+reading sources... [ 73%] api/jinwu.gw.gbm_coverage_for_skymap
+reading sources... [ 73%] api/jinwu.gw.load_layers
+reading sources... [ 73%] api/jinwu.gw.load_skymap
+reading sources... [ 74%] api/jinwu.gw.normalize_superevent_id
+reading sources... [ 74%] api/jinwu.gw.plot_allsky
+reading sources... [ 74%] api/jinwu.gw.plot_gbm_diagnostic
+reading sources... [ 74%] api/jinwu.gw.probability_in_footprint
+reading sources... [ 75%] api/jinwu.gw.read_notice
+reading sources... [ 75%] api/jinwu.gw.refined_probability
+reading sources... [ 75%] api/jinwu.gw.run_gw_pipeline
+reading sources... [ 75%] api/jinwu.gw.sky_map_footprint
+reading sources... [ 76%] api/jinwu.gw.skymap_from_notice
+reading sources... [ 76%] api/jinwu.lightcurve.BackgroundSimple
+reading sources... [ 76%] api/jinwu.lightcurve.LightcurveFaker
+reading sources... [ 77%] api/jinwu.lightcurve.LightcurveSNREvaluator
+reading sources... [ 77%] api/jinwu.lightcurve.TriggerDecider
+reading sources... [ 77%] api/jinwu.lightcurve.li_ma_snr
+reading sources... [ 77%] api/jinwu.model.AdditiveModel
+reading sources... [ 78%] api/jinwu.model.ConvolutionModel
+reading sources... [ 78%] api/jinwu.model.ModelBase
+reading sources... [ 78%] api/jinwu.model.MultiplicativeModel
+reading sources... [ 78%] api/jinwu.physics.GeneralRelativity
+reading sources... [ 79%] api/jinwu.spectrum.KConfig
+reading sources... [ 79%] api/jinwu.spectrum.XspecKFactory
+reading sources... [ 79%] api/jinwu.spectrum.XspecSession
+reading sources... [ 79%] api/jinwu.spectrum.prepare_background_for_fakeit
+reading sources... [ 80%] api/jinwu.swift.bat.AreaRow
+reading sources... [ 80%] api/jinwu.swift.bat.Attitude
+reading sources... [ 80%] api/jinwu.swift.bat.BATObservation
+<frozen importlib.util>:91: DeprecationWarning: The jinwu.swift.bat.BATObservation module is deprecated; import BATObservation from jinwu.swift.bat or jinwu.swift.bat.bat_observation
+reading sources... [ 81%] api/jinwu.swift.bat.BATSurveyInput
+reading sources... [ 81%] api/jinwu.swift.bat.BATSurveyPipeline
+reading sources... [ 81%] api/jinwu.swift.bat.BATSurveyResult
+reading sources... [ 81%] api/jinwu.swift.bat.BATSurveySensitivityAdapter
+reading sources... [ 82%] api/jinwu.swift.bat.BatAnalysisSurveyBackend
+reading sources... [ 82%] api/jinwu.swift.bat.SurveyPhaValidation
+reading sources... [ 82%] api/jinwu.swift.bat.SurveyRatePoint
+reading sources... [ 82%] api/jinwu.swift.bat.SurveyUpperLimitResult
+reading sources... [ 83%] api/jinwu.swift.bat.build_source_catalog
+reading sources... [ 83%] api/jinwu.swift.bat.calculate_background_scale
+reading sources... [ 83%] api/jinwu.swift.bat.estimate_bat_survey_sensitivity
+reading sources... [ 83%] api/jinwu.swift.bat.gti_overlap_duration
+reading sources... [ 84%] api/jinwu.swift.bat.parse_area_table
+reading sources... [ 84%] api/jinwu.swift.bat.profile_survey_upper_limit
+reading sources... [ 84%] api/jinwu.swift.bat.read_bat_survey_rates
+reading sources... [ 85%] api/jinwu.swift.bat.read_gti_intervals
+reading sources... [ 85%] api/jinwu.swift.bat.safe_extract_archive
+reading sources... [ 85%] api/jinwu.swift.bat.select_overlapping_pointings
+reading sources... [ 85%] api/jinwu.swift.bat.signed_snr
+reading sources... [ 86%] api/jinwu.swift.bat.survey.AreaRow
+reading sources... [ 86%] api/jinwu.swift.bat.survey.BATSurveyInput
+reading sources... [ 86%] api/jinwu.swift.bat.survey.BATSurveyPipeline
+reading sources... [ 86%] api/jinwu.swift.bat.survey.BATSurveyResult
+reading sources... [ 87%] api/jinwu.swift.bat.survey.BATSurveySensitivityAdapter
+reading sources... [ 87%] api/jinwu.swift.bat.survey.BatAnalysisSurveyBackend
+reading sources... [ 87%] api/jinwu.swift.bat.survey.SurveyPhaValidation
+reading sources... [ 87%] api/jinwu.swift.bat.survey.SurveyRatePoint
+reading sources... [ 88%] api/jinwu.swift.bat.survey.SurveyUpperLimitResult
+reading sources... [ 88%] api/jinwu.swift.bat.survey.build_source_catalog
+reading sources... [ 88%] api/jinwu.swift.bat.survey.calculate_background_scale
+reading sources... [ 89%] api/jinwu.swift.bat.survey.estimate_bat_survey_sensitivity
+reading sources... [ 89%] api/jinwu.swift.bat.survey.gti_overlap_duration
+reading sources... [ 89%] api/jinwu.swift.bat.survey.parse_area_table
+reading sources... [ 89%] api/jinwu.swift.bat.survey.profile_survey_upper_limit
+reading sources... [ 90%] api/jinwu.swift.bat.survey.read_bat_survey_rates
+reading sources... [ 90%] api/jinwu.swift.bat.survey.read_gti_intervals
+reading sources... [ 90%] api/jinwu.swift.bat.survey.safe_extract_archive
+reading sources... [ 90%] api/jinwu.swift.bat.survey.select_overlapping_pointings
+reading sources... [ 91%] api/jinwu.swift.bat.survey.signed_snr
+reading sources... [ 91%] api/jinwu.swift.bat.survey.validate_observation_directory
+reading sources... [ 91%] api/jinwu.swift.bat.survey.validate_survey_pha
+reading sources... [ 91%] api/jinwu.swift.bat.validate_observation_directory
+reading sources... [ 92%] api/jinwu.swift.bat.validate_survey_pha
+reading sources... [ 92%] api/jinwu.swift.grb.GRBRecord
+reading sources... [ 92%] api/jinwu.swift.grb.RedshiftCandidate
+reading sources... [ 93%] api/jinwu.swift.grb.SwiftBurstAnalyserFetcher
+reading sources... [ 93%] api/jinwu.swift.grb.SwiftGRBInput
+reading sources... [ 93%] api/jinwu.swift.grb.SwiftGRBPipeline
+reading sources... [ 93%] api/jinwu.swift.grb.SwiftGRBResult
+reading sources... [ 94%] api/jinwu.swift.grb.build_grb_record
+reading sources... [ 94%] api/jinwu.swift.grb.merge_low_snr_segments
+reading sources... [ 94%] api/jinwu.swift.grb.normalize_grb_name
+reading sources... [ 94%] api/jinwu.swift.grb.parse_bat_burst_durations
+reading sources... [ 95%] api/jinwu.swift.grb.parse_redshift_candidates
+reading sources... [ 95%] api/jinwu.swift.grb.preferred_redshift
+reading sources... [ 95%] api/jinwu.swift.grb.prompt_classification
+reading sources... [ 95%] api/jinwu.swift.grb.read_badbin_table
+reading sources... [ 96%] api/jinwu.swift.grb.read_burst_analyser_dat
+reading sources... [ 96%] api/jinwu.swift.grb.segment_from_payload
+reading sources... [ 96%] changelog
+reading sources... [ 97%] index
+reading sources... [ 97%] lf_redshift_transform
+reading sources... [ 97%] quickstart
+reading sources... [ 97%] usage/absorption_budget
+reading sources... [ 98%] usage/bat_survey
+reading sources... [ 98%] usage/bxa_fitting
+reading sources... [ 98%] usage/fermi_gbm
+reading sources... [ 98%] usage/gbm_subthreshold
+reading sources... [ 99%] usage/gw_coverage
+reading sources... [ 99%] usage/lightcurve
+reading sources... [ 99%] usage/nhtot
+reading sources... [ 99%] usage/spectral
+reading sources... [100%] usage/swift_grb
+reading sources... [100%] usage/upperlimits
+
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/__init__.py:docstring of jinwu.core:9: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/docs/api.rst:218:<autosummary>:1: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/docs/api.rst:218:<autosummary>:1: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/docs/api.rst:218:<autosummary>:1: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/physics/__init__.py:docstring of jinwu.physics:5: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/physics/__init__.py:docstring of jinwu.physics:7: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/docs/api.rst:476:<autosummary>:1: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/background/backprior.py:docstring of jinwu.background.backprior.BackgroundCountsPosterior:7: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/background/backprior.py:docstring of jinwu.background.backprior.BackgroundSpectralPrior.update_with_off_spectrum:5: WARNING: Bullet list ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ogip.py:docstring of jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:9: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ogip.py:docstring of jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:9: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ogip.py:docstring of jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:9: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ogip.py:docstring of jinwu.core.ogip.OgipTimeSeriesBase.extract_gti:9: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/datasets.py:docstring of jinwu.core.datasets.LightcurveDataset.plot:9: WARNING: Definition list ends without a blank line; unexpected unindent. [docutils]
+WARNING: don't know which module to import for autodocumenting 'catalog_name' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'channel_edges_keV' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'detthresh' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'detthresh2' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'energy_range_keV' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'internal_threads' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'min_pcode' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'processes' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'source_snr_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'strong_snr_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'task_timeout_s' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'upper_limit_delta_stat' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'upper_limit_photon_index' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: :1: (WARNING/2) Explicit markup ends without a blank line; unexpected unindent. [docutils]
+WARNING: don't know which module to import for autodocumenting 'download_enabled' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'query_enabled' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'query_margin_s' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'retries' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'retry_wait_s' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'timeout_s' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: :1: (WARNING/2) Explicit markup ends without a blank line; unexpected unindent. [docutils]
+WARNING: don't know which module to import for autodocumenting 'detection_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'enabled' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'min_pcode' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'overlap_selection' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: :1: (WARNING/2) Explicit markup ends without a blank line; unexpected unindent. [docutils]
+WARNING: don't know which module to import for autodocumenting 'catalog_name' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'channel_edges_keV' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'detthresh' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'detthresh2' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'energy_range_keV' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'internal_threads' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'min_pcode' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'processes' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'source_snr_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'strong_snr_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'task_timeout_s' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'upper_limit_delta_stat' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'upper_limit_photon_index' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: :1: (WARNING/2) Explicit markup ends without a blank line; unexpected unindent. [docutils]
+WARNING: don't know which module to import for autodocumenting 'catalog_name' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'channel_edges_keV' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'detthresh' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'detthresh2' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'energy_range_keV' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'internal_threads' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'min_pcode' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'processes' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'source_snr_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'strong_snr_threshold' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'task_timeout_s' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'upper_limit_delta_stat' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: don't know which module to import for autodocumenting 'upper_limit_photon_index' (try placing a "module" or "currentmodule" directive in the document, or giving an explicit module name) [autodoc]
+WARNING: :1: (WARNING/2) Explicit markup ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/datasets.py:docstring of jinwu.core.datasets.LightcurveDataset.plot:9: WARNING: Definition list ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py:docstring of jinwu.core.fit.FitResult:40: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py:docstring of jinwu.core.fit.FitResult.evaluate:8: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py:docstring of jinwu.core.fit.LightcurveFitter.fit:21: WARNING: Definition list ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py:docstring of jinwu.core.fit.LightcurveFitter.fit:21: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py:docstring of jinwu.core.fit.LightcurveFitter.plot_fit:21: WARNING: Definition list ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py:docstring of jinwu.core.fit.LightcurveFitter.plot_fit:21: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_events_to_lightcurve:6: WARNING: Title underline too short.
+
+参数 (Parameters)
+---------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_events_to_lightcurve:15: WARNING: Title underline too short.
+
+返回 (Returns)
+------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_events_to_lightcurve:20: WARNING: Title underline too short.
+
+原理 (Principle)
+--------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_events_to_lightcurve:26: WARNING: Title underline too short.
+
+示例 (Example)
+------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_lightcurve:6: WARNING: Title underline too short.
+
+参数 (Parameters)
+---------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_lightcurve:18: WARNING: Title underline too short.
+
+返回 (Returns)
+------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_lightcurve:23: WARNING: Title underline too short.
+
+原理 (Principle)
+--------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_lightcurve:32: WARNING: Title underline too short.
+
+示例 (Example)
+------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.rebin_pha:7: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.slice_events:4: WARNING: Title underline too short.
+
+参数 (Parameters)
+---------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.slice_events:15: WARNING: Title underline too short.
+
+返回 (Returns)
+------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/ops.py:docstring of jinwu.core.ops.slice_events:20: WARNING: Title underline too short.
+
+示例 (Example)
+------------- [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_CHAIN_LEVELS:3: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_CHAIN_LEVELS:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_CHAIN_LEVELS:7: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_CHAIN_LEVELS:8: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ERROR_DELTAS:3: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ERROR_DELTAS:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ERROR_DELTAS:7: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ERROR_DELTAS:8: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ONE_SIDED_CHAIN_LEVELS:3: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ONE_SIDED_CHAIN_LEVELS:4: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ONE_SIDED_CHAIN_LEVELS:7: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.DEFAULT_ONE_SIDED_CHAIN_LEVELS:8: WARNING: Inline strong start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.FastNormFit:3: WARNING: Inline literal start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/docs/api/jinwu.core.upperlimit.FastNormFit.rst:17:<autosummary>:1: WARNING: Inline literal start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/upperlimit.py:docstring of jinwu.core.upperlimit.FastNormFit.ts:1: WARNING: Inline literal start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py:docstring of jinwu.ep.wxt.pipeline.WXTPointingPipeline.stage_code_dependencies:12: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py:docstring of jinwu.ep.wxt.pipeline.WXTPointingPipeline.stage_code_dependencies:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py:docstring of jinwu.ep.wxt.pipeline.WXTPointingPipeline.stage_config_dependencies:3: WARNING: Inline literal start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py:docstring of jinwu.ep.wxt.pipeline.WXTPointingPipeline.stage_config_dependencies:3: WARNING: Inline literal start-string without end-string. [docutils]
+WARNING: autodoc: failed to import 'GBMObservation.dec' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'dec'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: dec
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.filepath' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'filepath'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: filepath
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.ra' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'ra'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: ra
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.srcname' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'srcname'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: srcname
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.tstart' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'tstart'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: tstart
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.tstart_offset' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'tstart_offset'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: tstart_offset
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.tstop' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'tstop'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: tstop
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.tstop_offset' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'tstop_offset'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: tstop_offset
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.utc_TSTART' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'utc_TSTART'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: utc_TSTART
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.check_gti' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'check_gti'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: check_gti
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.check_visibility' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'check_visibility'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: check_visibility
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.det_angle' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'det_angle'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: det_angle
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.download_data' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'download_data'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: download_data
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.earthmap' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'earthmap'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: earthmap
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.execute_observation' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'execute_observation'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: execute_observation
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.generate_rsp' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'generate_rsp'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: generate_rsp
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.get_detectors' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'get_detectors'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: get_detectors
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'GBMObservation.skymap' from module 'jinwu.fermi.gbm'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.fermi.gbm.GBMObservation' has no attribute 'skymap'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: skymap
+ [autodoc.import_object]
+/home/xinxiang/research/jinwu/packages/jinwu-fermi/src/jinwu/fermi/gbm/pipeline.py:docstring of jinwu.fermi.gbm.pipeline.GBMPipeline:10: WARNING: Definition list ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-fermi/src/jinwu/fermi/gbm/pipeline.py:docstring of jinwu.fermi.gbm.pipeline.GBMPipeline:16: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-fermi/src/jinwu/fermi/gbm/urls.py:docstring of jinwu.fermi.gbm.urls.generate_download_url:12: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-fermi/src/jinwu/fermi/gbm/urls.py:docstring of jinwu.fermi.gbm.urls.generate_download_url:13: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-gw/src/jinwu/gw/coverage.py:docstring of jinwu.gw.coverage.gbm_coverage_for_skymap:3: ERROR: Undefined substitution referenced: "dP". [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/physics/gr.py:docstring of jinwu.physics.gr.GeneralRelativity:7: WARNING: Bullet list ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/lf/specfake.py:docstring of jinwu.lf.specfake.KConfig.key:6: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/lf/specfake.py:docstring of jinwu.lf.specfake.XspecSession:6: ERROR: Unexpected indentation. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/lf/specfake.py:docstring of jinwu.lf.specfake.XspecSession:7: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/attitude.py:docstring of jinwu.swift.bat.attitude.Attitude:1: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/docs/api/jinwu.swift.bat.Attitude.rst:28:<autosummary>:1: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/attitude.py:docstring of jinwu.swift.bat.attitude.Attitude.from_file:1: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/bat_observation.py:docstring of jinwu.swift.bat.bat_observation.BATObservation:4: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/bat_observation.py:docstring of jinwu.swift.bat.bat_observation.BATObservation:4: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/bat_observation.py:docstring of jinwu.swift.bat.bat_observation.BATObservation:4: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/bat_observation.py:docstring of jinwu.swift.bat.bat_observation.BATObservation:9: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/bat_observation.py:docstring of jinwu.swift.bat.bat_observation.BATObservation:9: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/packages/jinwu-swift/src/jinwu/swift/bat/bat_observation.py:docstring of jinwu.swift.bat.bat_observation.BATObservation:9: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/docs/api/jinwu.swift.bat.BATObservation.rst:19:<autosummary>:1: WARNING: Inline emphasis start-string without end-string. [docutils]
+/home/xinxiang/research/jinwu/docs/api/jinwu.swift.bat.BATObservation.rst:19:<autosummary>:1: WARNING: Inline emphasis start-string without end-string. [docutils]
+WARNING: autodoc: failed to import 'BATObservation.attitude' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'attitude'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: attitude
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.frame' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'frame'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: frame
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.srcname' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'srcname'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: srcname
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.states' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'states'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: states
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.tstart' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'tstart'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: tstart
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.tstop' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'tstop'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: tstop
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.check_gti' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'check_gti'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: check_gti
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.check_visibility' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'check_visibility'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: check_visibility
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.close' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'close'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: close
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.earthmap' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'earthmap'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: earthmap
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.fov_to_sky_coords' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'fov_to_sky_coords'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: fov_to_sky_coords
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.get_bat_fov_polygon' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'get_bat_fov_polygon'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: get_bat_fov_polygon
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.in_coded_fov' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'in_coded_fov'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: in_coded_fov
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.info' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'info'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: info
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.skymap' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'skymap'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: skymap
+ [autodoc.import_object]
+WARNING: autodoc: failed to import 'BATObservation.source_offset_angle' from module 'jinwu.swift.bat'; the following exception was raised:
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 461, in safe_getattr
+    return getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'jinwu.swift.bat.BATObservation' has no attribute 'source_offset_angle'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_dynamic/_importer.py", line 150, in _import_from_module_and_path
+    obj = get_attr(obj, mangled_name)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/ext/autodoc/_shared.py", line 142, in __call__
+    return safe_getattr(obj, name, *defargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/sphinx/util/inspect.py", line 477, in safe_getattr
+    raise AttributeError(name) from exc
+AttributeError: source_offset_angle
+ [autodoc.import_object]
+/home/xinxiang/research/jinwu/docs/changelog.rst:80: ERROR: Undefined substitution referenced: "dP". [docutils]
+looking for now-outdated files... none found
+pickling environment... done
+checking consistency... /home/xinxiang/research/jinwu/docs/lf_redshift_transform.md: WARNING: document isn't included in any toctree [toc.not_included]
+/home/xinxiang/research/jinwu/docs/usage/absorption_budget.md: WARNING: document isn't included in any toctree [toc.not_included]
+done
+preparing documents... done
+copying assets... 
+copying downloadable files... [ 14%] ../../packages/jinwu/src/jinwu/lf/specfake.py
+copying downloadable files... [ 29%] ../../packages/jinwu/src/jinwu/core/ops.py
+copying downloadable files... [ 43%] ../../packages/jinwu/src/jinwu/background/backprior.py
+copying downloadable files... [ 57%] ../../packages/jinwu/src/jinwu/lf/redshift.py
+copying downloadable files... [ 71%] ../../packages/jinwu/src/jinwu/lf/lcfake.py
+copying downloadable files... [ 86%] ../../packages/jinwu/src/jinwu/lf/detectability.py
+copying downloadable files... [100%] ../../test/test_lf_model_structure.py
+
+copying static files... 
+Writing evaluated template result to /tmp/jinwu-docs-build/_static/basic.css
+Writing evaluated template result to /tmp/jinwu-docs-build/_static/language_data.js
+Writing evaluated template result to /tmp/jinwu-docs-build/_static/documentation_options.js
+copying static files: done
+copying extra files... 
+copying extra files: done
+copying assets: done
+writing output... [  0%] RedshiftExtrapolator
+writing output... [  1%] api
+writing output... [  1%] api/jinwu.background.BackgroundCountsPosterior
+writing output... [  1%] api/jinwu.background.BackgroundPrior
+writing output... [  1%] api/jinwu.background.BackgroundSpectralPrior
+writing output... [  2%] api/jinwu.core.ArfBase
+writing output... [  2%] api/jinwu.core.ArfData
+writing output... [  2%] api/jinwu.core.ArfReader
+writing output... [  2%] api/jinwu.core.ArfWriter
+writing output... [  3%] api/jinwu.core.BXAFitResult
+writing output... [  3%] api/jinwu.core.BXAPriorSpec
+writing output... [  3%] api/jinwu.core.ChannelBand
+writing output... [  3%] api/jinwu.core.EmpiricalCalibrationAdapter
+writing output... [  4%] api/jinwu.core.EnergyBand
+writing output... [  4%] api/jinwu.core.EventData
+writing output... [  4%] api/jinwu.core.EventDataBase
+writing output... [  5%] api/jinwu.core.EventWriter
+writing output... [  5%] api/jinwu.core.FitsHeaderDump
+writing output... [  5%] api/jinwu.core.GaussianNetRateObservation
+writing output... [  5%] api/jinwu.core.GaussianNetRateProfileResult
+writing output... [  6%] api/jinwu.core.HduHeader
+writing output... [  6%] api/jinwu.core.JointDataset
+writing output... [  6%] api/jinwu.core.LightcurveData
+writing output... [  6%] api/jinwu.core.LightcurveDataBase
+writing output... [  7%] api/jinwu.core.LightcurveDataset
+writing output... [  7%] api/jinwu.core.LightcurveLike
+writing output... [  7%] api/jinwu.core.LightcurveReader
+writing output... [  7%] api/jinwu.core.LightcurveWriter
+writing output... [  8%] api/jinwu.core.OgipArfReader
+writing output... [  8%] api/jinwu.core.OgipData
+writing output... [  8%] api/jinwu.core.OgipEventReader
+writing output... [  9%] api/jinwu.core.OgipFitsBase
+writing output... [  9%] api/jinwu.core.OgipLightcurveReader
+writing output... [  9%] api/jinwu.core.OgipMeta
+writing output... [  9%] api/jinwu.core.OgipPhaReader
+writing output... [ 10%] api/jinwu.core.OgipRmfReader
+writing output... [ 10%] api/jinwu.core.PanelSpec
+writing output... [ 10%] api/jinwu.core.PhaBase
+writing output... [ 10%] api/jinwu.core.PhaData
+writing output... [ 11%] api/jinwu.core.PhaWriter
+writing output... [ 11%] api/jinwu.core.RegionArea
+writing output... [ 11%] api/jinwu.core.RegionAreaSet
+writing output... [ 11%] api/jinwu.core.RmfBase
+writing output... [ 12%] api/jinwu.core.RmfData
+writing output... [ 12%] api/jinwu.core.RmfReader
+writing output... [ 12%] api/jinwu.core.RmfWriter
+writing output... [ 13%] api/jinwu.core.RspReader
+writing output... [ 13%] api/jinwu.core.SpectrumDataset
+writing output... [ 13%] api/jinwu.core.SpectrumLike
+writing output... [ 13%] api/jinwu.core.Time
+writing output... [ 14%] api/jinwu.core.TimeDelta
+writing output... [ 14%] api/jinwu.core.ValidationMessage
+writing output... [ 14%] api/jinwu.core.ValidationReport
+writing output... [ 14%] api/jinwu.core.__version__
+writing output... [ 15%] api/jinwu.core.band_from_arf_bins
+writing output... [ 15%] api/jinwu.core.bxa_fit.BXAFitResult
+writing output... [ 15%] api/jinwu.core.bxa_fit.BXAPriorSpec
+writing output... [ 15%] api/jinwu.core.bxa_fit.fit_prepared_bxa
+writing output... [ 16%] api/jinwu.core.bxa_fit.fit_xray_models_bxa
+writing output... [ 16%] api/jinwu.core.bxa_fit.resolve_priors
+writing output... [ 16%] api/jinwu.core.bxa_fit.run_bxa_pipeline
+writing output... [ 17%] api/jinwu.core.channel_mask_from_ebounds
+writing output... [ 17%] api/jinwu.core.check_response_compatibility
+writing output... [ 17%] api/jinwu.core.config.BAT
+writing output... [ 17%] api/jinwu.core.config.BATSurvey
+writing output... [ 18%] api/jinwu.core.config.BATSurveyConfig
+writing output... [ 18%] api/jinwu.core.config.BATSurveyDownloadConfig
+writing output... [ 18%] api/jinwu.core.config.BATSurveyMosaicConfig
+writing output... [ 18%] api/jinwu.core.config.BATSurveySelectionConfig
+writing output... [ 19%] api/jinwu.core.config.BXAConfig
+writing output... [ 19%] api/jinwu.core.config.BackgroundScalingConfig
+writing output... [ 19%] api/jinwu.core.config.BayesianBlockSpectrumConfig
+writing output... [ 19%] api/jinwu.core.config.DurationConfig
+writing output... [ 20%] api/jinwu.core.config.EnergyBandConfig
+writing output... [ 20%] api/jinwu.core.config.ExecutionConfig
+writing output... [ 20%] api/jinwu.core.config.ExtractionConfig
+writing output... [ 21%] api/jinwu.core.config.FXT
+writing output... [ 21%] api/jinwu.core.config.FitConfig
+writing output... [ 21%] api/jinwu.core.config.FluxCurveConfig
+writing output... [ 21%] api/jinwu.core.config.GBM
+writing output... [ 22%] api/jinwu.core.config.GBMAnalysisConfig
+writing output... [ 22%] api/jinwu.core.config.GBMContinuous
+writing output... [ 22%] api/jinwu.core.config.GECAM
+writing output... [ 22%] api/jinwu.core.config.GalacticAbsorptionConfig
+writing output... [ 23%] api/jinwu.core.config.InstrumentConfig
+writing output... [ 23%] api/jinwu.core.config.PlotConfig
+writing output... [ 23%] api/jinwu.core.config.RegionConfig
+writing output... [ 23%] api/jinwu.core.config.ReportConfig
+writing output... [ 24%] api/jinwu.core.config.SpectrumConfig
+writing output... [ 24%] api/jinwu.core.config.SwiftBATSurveyConfig
+writing output... [ 24%] api/jinwu.core.config.SwiftBATSurveyDownloadConfig
+writing output... [ 25%] api/jinwu.core.config.SwiftBATSurveyMosaicConfig
+writing output... [ 25%] api/jinwu.core.config.SwiftBATSurveySelectionConfig
+writing output... [ 25%] api/jinwu.core.config.SwiftGRB
+writing output... [ 25%] api/jinwu.core.config.SwiftGRBDataConfig
+writing output... [ 26%] api/jinwu.core.config.SwiftGRBSegmentationConfig
+writing output... [ 26%] api/jinwu.core.config.SwiftXRTRequestConfig
+writing output... [ 26%] api/jinwu.core.config.UVOT
+writing output... [ 26%] api/jinwu.core.config.UpperLimitConfig
+writing output... [ 27%] api/jinwu.core.config.WXT
+writing output... [ 27%] api/jinwu.core.config.XSPEC_COSMO_PLANCK18
+writing output... [ 27%] api/jinwu.core.config.fit_settings
+writing output... [ 27%] api/jinwu.core.config.get_fit_method
+writing output... [ 28%] api/jinwu.core.config.get_fit_settings
+writing output... [ 28%] api/jinwu.core.config.instrument
+writing output... [ 28%] api/jinwu.core.config.register_instrument
+writing output... [ 29%] api/jinwu.core.config.reset_fit_settings
+writing output... [ 29%] api/jinwu.core.config.set_fit_method
+writing output... [ 29%] api/jinwu.core.config.set_fit_settings
+writing output... [ 29%] api/jinwu.core.datasets.JointDataset
+writing output... [ 30%] api/jinwu.core.datasets.LightcurveDataset
+writing output... [ 30%] api/jinwu.core.datasets.SpectrumDataset
+writing output... [ 30%] api/jinwu.core.datasets.netdata
+writing output... [ 30%] api/jinwu.core.fit.FitResult
+writing output... [ 31%] api/jinwu.core.fit.LightcurveFitter
+writing output... [ 31%] api/jinwu.core.fit.ModelFitMetrics
+writing output... [ 31%] api/jinwu.core.fit.ModelRegistry
+writing output... [ 31%] api/jinwu.core.fit.XRayModelComparisonResult
+writing output... [ 32%] api/jinwu.core.fit.XRayModelSpec
+writing output... [ 32%] api/jinwu.core.fit.XspecChainParameter
+writing output... [ 32%] api/jinwu.core.fit.XspecChainResult
+writing output... [ 33%] api/jinwu.core.fit.calculate_bayesian_model_metrics
+writing output... [ 33%] api/jinwu.core.fit.calculate_model_fit_metrics
+writing output... [ 33%] api/jinwu.core.fit.fit
+writing output... [ 33%] api/jinwu.core.fit.fit_prepared
+writing output... [ 34%] api/jinwu.core.fit.fit_spectral
+writing output... [ 34%] api/jinwu.core.fit.fit_xray_models
+writing output... [ 34%] api/jinwu.core.fit.resolve_xray_model_specs
+writing output... [ 34%] api/jinwu.core.fit.run_xspec_chain
+writing output... [ 35%] api/jinwu.core.fit_prepared_bxa
+writing output... [ 35%] api/jinwu.core.fit_settings
+writing output... [ 35%] api/jinwu.core.fit_spectral
+writing output... [ 35%] api/jinwu.core.fit_xray_models_bxa
+writing output... [ 36%] api/jinwu.core.get_fit_method
+writing output... [ 36%] api/jinwu.core.get_fit_settings
+writing output... [ 36%] api/jinwu.core.guess_ogip_kind
+writing output... [ 37%] api/jinwu.core.heasoft.HeasoftEnvManager
+writing output... [ 37%] api/jinwu.core.model_comparison.BayesFactorResult
+writing output... [ 37%] api/jinwu.core.model_comparison.EmpiricalTailResult
+writing output... [ 37%] api/jinwu.core.model_comparison.PreparedOnOffMarginalLikelihood
+writing output... [ 38%] api/jinwu.core.model_comparison.empirical_tail_probability
+writing output... [ 38%] api/jinwu.core.model_comparison.model_averaged_direction_probabilities
+writing output... [ 38%] api/jinwu.core.model_comparison.model_averaged_direction_probability_interval
+writing output... [ 38%] api/jinwu.core.model_comparison.model_posterior_probability
+writing output... [ 39%] api/jinwu.core.model_comparison.onoff_log_marginal_likelihood
+writing output... [ 39%] api/jinwu.core.model_comparison.onoff_log_profile_likelihood
+writing output... [ 39%] api/jinwu.core.model_comparison.p_to_sigma
+writing output... [ 39%] api/jinwu.core.model_comparison.recover_raw_off_counts
+writing output... [ 40%] api/jinwu.core.model_comparison.sigma_to_p
+writing output... [ 40%] api/jinwu.core.model_comparison.summarize_bayes_factor
+writing output... [ 40%] api/jinwu.core.multi_panel
+writing output... [ 41%] api/jinwu.core.netdata
+writing output... [ 41%] api/jinwu.core.overlay
+writing output... [ 41%] api/jinwu.core.pipeline.InstrumentPipeline
+writing output... [ 41%] api/jinwu.core.pipeline.PipelineConfigProtocol
+writing output... [ 42%] api/jinwu.core.pipeline.PipelineInput
+writing output... [ 42%] api/jinwu.core.pipeline.PipelineRunState
+writing output... [ 42%] api/jinwu.core.pipeline.PipelineStage
+writing output... [ 42%] api/jinwu.core.pipeline.PipelineStatus
+writing output... [ 43%] api/jinwu.core.pipeline.StageResult
+writing output... [ 43%] api/jinwu.core.pipeline.pipeline
+writing output... [ 43%] api/jinwu.core.pipeline.register_pipeline
+writing output... [ 43%] api/jinwu.core.profile_gaussian_upper_bound
+writing output... [ 44%] api/jinwu.core.read_arf
+writing output... [ 44%] api/jinwu.core.read_evt
+writing output... [ 44%] api/jinwu.core.read_lc
+writing output... [ 45%] api/jinwu.core.read_pha
+writing output... [ 45%] api/jinwu.core.read_rmf
+writing output... [ 45%] api/jinwu.core.readfits
+writing output... [ 45%] api/jinwu.core.rebin_events_to_lightcurve
+writing output... [ 46%] api/jinwu.core.rebin_lightcurve
+writing output... [ 46%] api/jinwu.core.rebin_pha
+writing output... [ 46%] api/jinwu.core.reset_fit_settings
+writing output... [ 46%] api/jinwu.core.resolve_priors
+writing output... [ 47%] api/jinwu.core.run_bxa_pipeline
+writing output... [ 47%] api/jinwu.core.set_fit_method
+writing output... [ 47%] api/jinwu.core.set_fit_settings
+writing output... [ 47%] api/jinwu.core.slice_events
+writing output... [ 48%] api/jinwu.core.slice_lightcurve
+writing output... [ 48%] api/jinwu.core.slice_pha
+writing output... [ 48%] api/jinwu.core.upperlimit.CallablePhotonModelPredictor
+writing output... [ 49%] api/jinwu.core.upperlimit.CountPredictor
+writing output... [ 49%] api/jinwu.core.upperlimit.CountTemplateModel
+writing output... [ 49%] api/jinwu.core.upperlimit.DEFAULT_CHAIN_LEVELS
+writing output... [ 49%] api/jinwu.core.upperlimit.DEFAULT_ERROR_DELTAS
+writing output... [ 50%] api/jinwu.core.upperlimit.DEFAULT_ONE_SIDED_CHAIN_LEVELS
+writing output... [ 50%] api/jinwu.core.upperlimit.DetectionSensitivity
+writing output... [ 50%] api/jinwu.core.upperlimit.DetectionSensitivityAdapter
+writing output... [ 50%] api/jinwu.core.upperlimit.EmpiricalCalibrationAdapter
+writing output... [ 51%] api/jinwu.core.upperlimit.FastNormFit
+writing output... [ 51%] api/jinwu.core.upperlimit.GaussianNetRateObservation
+writing output... [ 51%] api/jinwu.core.upperlimit.GaussianNetRateProfileResult
+writing output... [ 51%] api/jinwu.core.upperlimit.ObservedUpperBound
+writing output... [ 52%] api/jinwu.core.upperlimit.OneSidedLevel
+writing output... [ 52%] api/jinwu.core.upperlimit.ProfileAmplitudeResult
+writing output... [ 52%] api/jinwu.core.upperlimit.ResponseAwareUpperLimitResult
+writing output... [ 53%] api/jinwu.core.upperlimit.UpperLimit
+writing output... [ 53%] api/jinwu.core.upperlimit.UpperLimitObservation
+writing output... [ 53%] api/jinwu.core.upperlimit.UpperLimitPoint
+writing output... [ 53%] api/jinwu.core.upperlimit.UpperLimitResult
+writing output... [ 54%] api/jinwu.core.upperlimit.UpperLimitStrategy
+writing output... [ 54%] api/jinwu.core.upperlimit.XspecCountPredictor
+writing output... [ 54%] api/jinwu.core.upperlimit.estimate_upper_limit
+writing output... [ 54%] api/jinwu.core.upperlimit.profile_source_amplitude
+writing output... [ 55%] api/jinwu.core.upperlimit.register_upper_limit_strategy
+writing output... [ 55%] api/jinwu.core.write_arf
+writing output... [ 55%] api/jinwu.core.write_evt
+writing output... [ 55%] api/jinwu.core.write_lc
+writing output... [ 56%] api/jinwu.core.write_pha
+writing output... [ 56%] api/jinwu.core.write_rmf
+writing output... [ 56%] api/jinwu.core.writefits
+writing output... [ 57%] api/jinwu.ep.wxt.BackgroundScalingResult
+writing output... [ 57%] api/jinwu.ep.wxt.ExposureMeasure
+writing output... [ 57%] api/jinwu.ep.wxt.TimeResolvedSegment
+writing output... [ 57%] api/jinwu.ep.wxt.WXTObservationFiles
+writing output... [ 58%] api/jinwu.ep.wxt.WXTPointingInput
+writing output... [ 58%] api/jinwu.ep.wxt.WXTPointingPipeline
+writing output... [ 58%] api/jinwu.ep.wxt.WXTPointingResult
+writing output... [ 58%] api/jinwu.fermi.gbm.GBMBackgroundSummary
+writing output... [ 59%] api/jinwu.fermi.gbm.GBMCoverageResult
+writing output... [ 59%] api/jinwu.fermi.gbm.GBMDataManifest
+writing output... [ 59%] api/jinwu.fermi.gbm.GBMDetectorSelection
+writing output... [ 59%] api/jinwu.fermi.gbm.GBMFlareInterval
+writing output... [ 60%] api/jinwu.fermi.gbm.GBMGeometryState
+writing output... [ 60%] api/jinwu.fermi.gbm.GBMObservation
+writing output... [ 60%] api/jinwu.fermi.gbm.GBMPipeline
+writing output... [ 61%] api/jinwu.fermi.gbm.GBMPipelineInput
+writing output... [ 61%] api/jinwu.fermi.gbm.GBMPipelineResult
+writing output... [ 61%] api/jinwu.fermi.gbm.GBMPosHistSelection
+writing output... [ 61%] api/jinwu.fermi.gbm.GBMSpectralProducts
+writing output... [ 62%] api/jinwu.fermi.gbm.background_windows
+writing output... [ 62%] api/jinwu.fermi.gbm.check_gbm_coverage
+writing output... [ 62%] api/jinwu.fermi.gbm.estimate_gbm_orbit_period
+writing output... [ 62%] api/jinwu.fermi.gbm.extract_gbm_spectral_products
+writing output... [ 63%] api/jinwu.fermi.gbm.fetch_gbm_continuous_products
+writing output... [ 63%] api/jinwu.fermi.gbm.fetch_gbm_products_for_interval
+writing output... [ 63%] api/jinwu.fermi.gbm.fetch_poshist_for_time
+writing output... [ 63%] api/jinwu.fermi.gbm.find_gbm_poshist
+writing output... [ 64%] api/jinwu.fermi.gbm.generate_download_url
+writing output... [ 64%] api/jinwu.fermi.gbm.gti_intervals_for_paths
+writing output... [ 64%] api/jinwu.fermi.gbm.integrate_background_interval
+writing output... [ 65%] api/jinwu.fermi.gbm.main
+writing output... [ 65%] api/jinwu.fermi.gbm.powerlaw_energy_flux_per_norm
+writing output... [ 65%] api/jinwu.fermi.gbm.read_gbm_geometry
+writing output... [ 65%] api/jinwu.fermi.gbm.read_ogip_products
+writing output... [ 66%] api/jinwu.fermi.gbm.response.GBMResponseCommand
+writing output... [ 66%] api/jinwu.fermi.gbm.response.GBMResponseRun
+writing output... [ 66%] api/jinwu.fermi.gbm.response.build_gbm_response_command
+writing output... [ 66%] api/jinwu.fermi.gbm.response.contgbmrsp
+writing output... [ 67%] api/jinwu.fermi.gbm.response.generate_gbm_response
+writing output... [ 67%] api/jinwu.fermi.gbm.select_gbm_detectors
+writing output... [ 67%] api/jinwu.fermi.gbm.single_response
+writing output... [ 67%] api/jinwu.fermi.gbm.tte_coverage
+writing output... [ 68%] api/jinwu.fermi.gbm.validate_background_residuals
+writing output... [ 68%] api/jinwu.gw.CoverageResult
+writing output... [ 68%] api/jinwu.gw.GWConfig
+writing output... [ 69%] api/jinwu.gw.GWEvent
+writing output... [ 69%] api/jinwu.gw.GWPipeline
+writing output... [ 69%] api/jinwu.gw.GWPipelineInput
+writing output... [ 69%] api/jinwu.gw.GWRunResult
+writing output... [ 70%] api/jinwu.gw.GraceDBClient
+writing output... [ 70%] api/jinwu.gw.GraceDBNotice
+writing output... [ 70%] api/jinwu.gw.Localization
+writing output... [ 70%] api/jinwu.gw.ProbabilityIntegral
+writing output... [ 71%] api/jinwu.gw.SkyFootprint
+writing output... [ 71%] api/jinwu.gw.SkyMap
+writing output... [ 71%] api/jinwu.gw.credible_region
+writing output... [ 71%] api/jinwu.gw.credible_region_stats
+writing output... [ 72%] api/jinwu.gw.fetch_skymap_url
+writing output... [ 72%] api/jinwu.gw.fetch_superevent
+writing output... [ 72%] api/jinwu.gw.footprint_from_circle
+writing output... [ 73%] api/jinwu.gw.footprint_from_polygon
+writing output... [ 73%] api/jinwu.gw.gbm_coverage_for_skymap
+writing output... [ 73%] api/jinwu.gw.load_layers
+writing output... [ 73%] api/jinwu.gw.load_skymap
+writing output... [ 74%] api/jinwu.gw.normalize_superevent_id
+writing output... [ 74%] api/jinwu.gw.plot_allsky
+writing output... [ 74%] api/jinwu.gw.plot_gbm_diagnostic
+writing output... [ 74%] api/jinwu.gw.probability_in_footprint
+writing output... [ 75%] api/jinwu.gw.read_notice
+writing output... [ 75%] api/jinwu.gw.refined_probability
+writing output... [ 75%] api/jinwu.gw.run_gw_pipeline
+writing output... [ 75%] api/jinwu.gw.sky_map_footprint
+writing output... [ 76%] api/jinwu.gw.skymap_from_notice
+writing output... [ 76%] api/jinwu.lightcurve.BackgroundSimple
+writing output... [ 76%] api/jinwu.lightcurve.LightcurveFaker
+writing output... [ 77%] api/jinwu.lightcurve.LightcurveSNREvaluator
+writing output... [ 77%] api/jinwu.lightcurve.TriggerDecider
+writing output... [ 77%] api/jinwu.lightcurve.li_ma_snr
+writing output... [ 77%] api/jinwu.model.AdditiveModel
+writing output... [ 78%] api/jinwu.model.ConvolutionModel
+writing output... [ 78%] api/jinwu.model.ModelBase
+writing output... [ 78%] api/jinwu.model.MultiplicativeModel
+writing output... [ 78%] api/jinwu.physics.GeneralRelativity
+writing output... [ 79%] api/jinwu.spectrum.KConfig
+writing output... [ 79%] api/jinwu.spectrum.XspecKFactory
+writing output... [ 79%] api/jinwu.spectrum.XspecSession
+writing output... [ 79%] api/jinwu.spectrum.prepare_background_for_fakeit
+writing output... [ 80%] api/jinwu.swift.bat.AreaRow
+writing output... [ 80%] api/jinwu.swift.bat.Attitude
+writing output... [ 80%] api/jinwu.swift.bat.BATObservation
+writing output... [ 81%] api/jinwu.swift.bat.BATSurveyInput
+writing output... [ 81%] api/jinwu.swift.bat.BATSurveyPipeline
+writing output... [ 81%] api/jinwu.swift.bat.BATSurveyResult
+writing output... [ 81%] api/jinwu.swift.bat.BATSurveySensitivityAdapter
+writing output... [ 82%] api/jinwu.swift.bat.BatAnalysisSurveyBackend
+writing output... [ 82%] api/jinwu.swift.bat.SurveyPhaValidation
+writing output... [ 82%] api/jinwu.swift.bat.SurveyRatePoint
+writing output... [ 82%] api/jinwu.swift.bat.SurveyUpperLimitResult
+writing output... [ 83%] api/jinwu.swift.bat.build_source_catalog
+writing output... [ 83%] api/jinwu.swift.bat.calculate_background_scale
+writing output... [ 83%] api/jinwu.swift.bat.estimate_bat_survey_sensitivity
+writing output... [ 83%] api/jinwu.swift.bat.gti_overlap_duration
+writing output... [ 84%] api/jinwu.swift.bat.parse_area_table
+writing output... [ 84%] api/jinwu.swift.bat.profile_survey_upper_limit
+writing output... [ 84%] api/jinwu.swift.bat.read_bat_survey_rates
+writing output... [ 85%] api/jinwu.swift.bat.read_gti_intervals
+writing output... [ 85%] api/jinwu.swift.bat.safe_extract_archive
+writing output... [ 85%] api/jinwu.swift.bat.select_overlapping_pointings
+writing output... [ 85%] api/jinwu.swift.bat.signed_snr
+writing output... [ 86%] api/jinwu.swift.bat.survey.AreaRow
+writing output... [ 86%] api/jinwu.swift.bat.survey.BATSurveyInput
+writing output... [ 86%] api/jinwu.swift.bat.survey.BATSurveyPipeline
+writing output... [ 86%] api/jinwu.swift.bat.survey.BATSurveyResult
+writing output... [ 87%] api/jinwu.swift.bat.survey.BATSurveySensitivityAdapter
+writing output... [ 87%] api/jinwu.swift.bat.survey.BatAnalysisSurveyBackend
+writing output... [ 87%] api/jinwu.swift.bat.survey.SurveyPhaValidation
+writing output... [ 87%] api/jinwu.swift.bat.survey.SurveyRatePoint
+writing output... [ 88%] api/jinwu.swift.bat.survey.SurveyUpperLimitResult
+writing output... [ 88%] api/jinwu.swift.bat.survey.build_source_catalog
+writing output... [ 88%] api/jinwu.swift.bat.survey.calculate_background_scale
+writing output... [ 89%] api/jinwu.swift.bat.survey.estimate_bat_survey_sensitivity
+writing output... [ 89%] api/jinwu.swift.bat.survey.gti_overlap_duration
+writing output... [ 89%] api/jinwu.swift.bat.survey.parse_area_table
+writing output... [ 89%] api/jinwu.swift.bat.survey.profile_survey_upper_limit
+writing output... [ 90%] api/jinwu.swift.bat.survey.read_bat_survey_rates
+writing output... [ 90%] api/jinwu.swift.bat.survey.read_gti_intervals
+writing output... [ 90%] api/jinwu.swift.bat.survey.safe_extract_archive
+writing output... [ 90%] api/jinwu.swift.bat.survey.select_overlapping_pointings
+writing output... [ 91%] api/jinwu.swift.bat.survey.signed_snr
+writing output... [ 91%] api/jinwu.swift.bat.survey.validate_observation_directory
+writing output... [ 91%] api/jinwu.swift.bat.survey.validate_survey_pha
+writing output... [ 91%] api/jinwu.swift.bat.validate_observation_directory
+writing output... [ 92%] api/jinwu.swift.bat.validate_survey_pha
+writing output... [ 92%] api/jinwu.swift.grb.GRBRecord
+writing output... [ 92%] api/jinwu.swift.grb.RedshiftCandidate
+writing output... [ 93%] api/jinwu.swift.grb.SwiftBurstAnalyserFetcher
+writing output... [ 93%] api/jinwu.swift.grb.SwiftGRBInput
+writing output... [ 93%] api/jinwu.swift.grb.SwiftGRBPipeline
+writing output... [ 93%] api/jinwu.swift.grb.SwiftGRBResult
+writing output... [ 94%] api/jinwu.swift.grb.build_grb_record
+writing output... [ 94%] api/jinwu.swift.grb.merge_low_snr_segments
+writing output... [ 94%] api/jinwu.swift.grb.normalize_grb_name
+writing output... [ 94%] api/jinwu.swift.grb.parse_bat_burst_durations
+writing output... [ 95%] api/jinwu.swift.grb.parse_redshift_candidates
+writing output... [ 95%] api/jinwu.swift.grb.preferred_redshift
+writing output... [ 95%] api/jinwu.swift.grb.prompt_classification
+writing output... [ 95%] api/jinwu.swift.grb.read_badbin_table
+writing output... [ 96%] api/jinwu.swift.grb.read_burst_analyser_dat
+writing output... [ 96%] api/jinwu.swift.grb.segment_from_payload
+writing output... [ 96%] changelog
+writing output... [ 97%] index
+writing output... [ 97%] lf_redshift_transform
+writing output... [ 97%] quickstart
+writing output... [ 97%] usage/absorption_budget
+writing output... [ 98%] usage/bat_survey
+writing output... [ 98%] usage/bxa_fitting
+writing output... [ 98%] usage/fermi_gbm
+writing output... [ 98%] usage/gbm_subthreshold
+writing output... [ 99%] usage/gw_coverage
+writing output... [ 99%] usage/lightcurve
+writing output... [ 99%] usage/nhtot
+writing output... [ 99%] usage/spectral
+writing output... [100%] usage/swift_grb
+writing output... [100%] usage/upperlimits
+
+<unknown>:1: WARNING: more than one target found for cross-reference 'LightcurveDataset': jinwu.core.LightcurveDataset, jinwu.core.datasets.LightcurveDataset [ref.python]
+/home/xinxiang/research/jinwu/docs/usage/absorption_budget.md:171: WARNING: Unknown source document '/home/xinxiang/research/jinwu/examples/absorption/README' [myst.xref_missing]
+generating indices... genindex py-modindex done
+highlighting module code... [  3%] astropy.time.core
+highlighting module code... [  6%] jinwu.background.backprior
+highlighting module code... [  8%] jinwu.core.base
+highlighting module code... [ 11%] jinwu.core.bxa_fit
+highlighting module code... [ 14%] jinwu.core.config
+highlighting module code... [ 17%] jinwu.core.data
+highlighting module code... [ 19%] jinwu.core.datasets
+highlighting module code... [ 22%] jinwu.core.fit
+highlighting module code... [ 25%] jinwu.core.heasoft
+highlighting module code... [ 28%] jinwu.core.io
+highlighting module code... [ 31%] jinwu.core.model_comparison
+highlighting module code... [ 33%] jinwu.core.ogip
+highlighting module code... [ 36%] jinwu.core.ops
+highlighting module code... [ 39%] jinwu.core.pipeline
+highlighting module code... [ 42%] jinwu.core.plotpanel
+highlighting module code... [ 44%] jinwu.core.upperlimit
+highlighting module code... [ 47%] jinwu.core.utils
+highlighting module code... [ 50%] jinwu.ep.wxt.pipeline
+highlighting module code... [ 53%] jinwu.fermi.gbm.pipeline
+highlighting module code... [ 56%] jinwu.fermi.gbm.poshist
+highlighting module code... [ 58%] jinwu.fermi.gbm.response
+highlighting module code... [ 61%] jinwu.fermi.gbm.urls
+highlighting module code... [ 64%] jinwu.gw.alert
+highlighting module code... [ 67%] jinwu.gw.coverage
+highlighting module code... [ 69%] jinwu.gw.gracedb
+highlighting module code... [ 72%] jinwu.gw.layers
+highlighting module code... [ 75%] jinwu.gw.models
+highlighting module code... [ 78%] jinwu.gw.pipeline
+highlighting module code... [ 81%] jinwu.gw.plot
+highlighting module code... [ 83%] jinwu.gw.skymap
+highlighting module code... [ 86%] jinwu.lf.specfake
+highlighting module code... [ 89%] jinwu.model.modelbase
+highlighting module code... [ 92%] jinwu.physics.gr
+highlighting module code... [ 94%] jinwu.swift.bat.attitude
+highlighting module code... [ 97%] jinwu.swift.bat.survey
+highlighting module code... [100%] jinwu.swift.grb.pipeline
+
+writing additional pages... search done
+dumping search index in English (code: en)... done
+dumping object inventory... done
+build succeeded, 165 warnings.
+
+The HTML pages are in ../../../../tmp/jinwu-docs-build.

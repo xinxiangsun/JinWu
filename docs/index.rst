@@ -24,6 +24,8 @@ shines light on the most energetic transients in the Universe.
    usage/swift_grb
    usage/bat_survey
    usage/fermi_gbm
+   usage/gbm_subthreshold
+   usage/gw_coverage
    usage/nhtot
    RedshiftExtrapolator
    changelog
@@ -68,6 +70,7 @@ Optional extras pull in heavier dependencies only when needed:
    pip install "jinwu[bxa]"          # BXA + UltraNest Bayesian spectral fitting
    pip install jinwu-ep              # Einstein Probe (WXT) support
    pip install "jinwu-fermi[rsp]"    # Fermi/GBM + pure-Python response generation
+   pip install jinwu-gw               # GW localization + GBM/EP coverage plots
    pip install "jinwu-swift[ukssdc]" # Swift/BAT + UKSSDC catalog & Burst Analyser
    pip install "jinwu-swift[survey]" # + BatAnalysis for the BAT survey pipeline
 
@@ -93,6 +96,7 @@ For development:
    pip install -e packages/jinwu-ep        # instrument packages referenced by the API docs
    pip install -e packages/jinwu-swift
    pip install -e packages/jinwu-fermi
+   pip install -e packages/jinwu-gw
 
 .. note::
 

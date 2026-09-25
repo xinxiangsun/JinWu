@@ -1,0 +1,49 @@
+Round-5 deep review evidence (2026-09-21)
+=========================================
+Scope: swift/bat/attitude.py, fermi/gbm/pipeline.py physics core, ep/wxt/pipeline.py diff.
+
+1. attitude.py vs BatAnalysis upstream (external_sources/BatAnalysis-main/batanalysis/attitude.py)
+   - POINTING[:,0/1/2] extraction and FLAGS column order
+     [10arcmin_settled, settled, in_saa, safehold]: line-by-line identical to upstream
+     (upstream lines 58-73). VERIFIED.
+   - jinwu adds 360-deg unwrap before linear RA/roll interpolation (upstream has no
+     interpolators): method correct (numpy.unwrap, wrap-back to [0,360)).
+   - FINDING R26 (P3): fill_value='extrapolate' silently extrapolates outside the
+     attitude time range; bat_observation.py:289-294's mid-point fallback is therefore
+     unreachable (pointing_at never raises); _parse_sao silently substitutes zero
+     pointing when columns are missing. Recommend range guard + explicit failure.
+
+2. gbm/pipeline.py physics core - VERIFIED
+   - integrate_background_interval: uses fitter.interpolate_bins on the exact source
+     interval (avoids whole-boundary-bin inclusion of to_bak); exposure from
+     get_exposure(..., scale=True) (dead-time aware), refuses to fabricate stop-start;
+     2D exposure-weighted mean rate and quadrature uncertainty propagation correct.
+   - _background_holdout_statistics: 80/20 holdout, Poisson deviance
+     D=2*sum[mu-y+y*ln(y/mu)] (McCullagh & Nelder 1989 sec 2.3), y=0 handled,
+     order+2 training bins required, mean/SE returned. Selection: min holdout score,
+     1-SE qualification + residual gate, full-window refit before BAK. AICc fallback
+     counts k=(order+1)*n_channels. All methodologically sound.
+   - _ensure_gdt_polynomial_basis: in-process monkeypatch normalizing the polynomial
+     time basis to [-1,1] (MET~8e8 conditioning). Same polynomial space reparametrized
+     (average of s^i over bin = (s_hi^(i+1)-s_lo^(i+1))/((i+1)ds)), identical LSQ
+     solution up to conditioning; span cached once and reused by all evaluation paths.
+     Mathematically sound; API-compat guarded.
+   - single_response/_select_rsp2_response: RSP2 midpoint vs exposure-weighted DRM;
+     sub-interval decomposition at DRM boundaries, overlap-weighted matrix average,
+     midpoint kept only when folded unit powerlaw rate agrees within tolerance
+     (physics-aware gate, metadata persisted). _rsp2_time_coordinate disambiguates
+     absolute vs trigger-relative MET (|t|>1e6), 1 ms boundary tolerance, refuses
+     disjoint intervals instead of silently picking first/last DRM.
+   - Channel renumbering 0->1 based with TLMIN/TLMAX shifted consistently; input
+     response never mutated (copy + isolated output dir); SPECRESP MATRIX->MATRIX
+     rename documented per-consumer.
+
+3. ep/wxt/pipeline.py working-tree diff (+24/-1): two method-documentation comment
+   blocks (exposure-map alpha ratio method; bayesian-block merge with Li & Ma Eq.17,
+   formula transcription verified against the round-2 verified implementation) and
+   plot_dpi -> plot_density keyword fix (reverts beta's silent breaking rename;
+   fit.py:2984-2986 confirms master parameter name plot_density). CORRECT.
+
+4. Targeted regression: test_gbm_pipeline.py + test_gbm_pipeline_stages.py +
+   test_gbm_poshist_predict.py + test_swift_grb_pipeline.py
+   => 50 passed, 1 skipped (not network), hea env.

@@ -1,0 +1,25 @@
+nohup: ignoring input
+........................................................................ [ 33%]
+........................................................................ [ 66%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+=============================== warnings summary ===============================
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+
+packages/jinwu-swift/tests/test_bat_survey.py::test_all_zero_rates_are_preserved_and_marked_for_review
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/batanalysis/mosaic.py:8: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+
+packages/jinwu-swift/tests/test_bat_survey.py::test_all_zero_rates_are_preserved_and_marked_for_review
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/pkg_resources/__init__.py:3148: DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('sphinxcontrib')`.
+  Implementing implicit namespace packages (as specified in PEP 420) is preferred to `pkg_resources.declare_namespace`. See https://setuptools.pypa.io/en/latest/references/keywords.html#keyword-namespace-packages
+
+test/test_gbm_poshist_predict.py::test_read_gbm_geometry_interpolates_and_flags
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/astropy/coordinates/baseframe.py:1978: NonRotationTransformationWarning: transforming other coordinates from <GCRS Frame (obstime=304.9999999999981, obsgeoloc=(0., 0., 0.) m, obsgeovel=(0., 0., 0.) m / s)> to <ICRS Frame>. Angular separation can depend on the direction of the transformation.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+218 passed, 1 deselected, 7 warnings in 10.73s
+Creating a $HOME/.xspec directory for you

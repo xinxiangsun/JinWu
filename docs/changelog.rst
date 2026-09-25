@@ -1,9 +1,75 @@
 Changelog
 =========
 
-Unreleased
-----------
+v0.2.0 (unreleased)
+-------------------
 
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+* ``from jinwu.core import timescale`` now resolves to the
+  :mod:`jinwu.core.timescale` module.  On master the name referred to the
+  timescale analyzer class in ``jinwu.core.data``; the new module silently
+  shadowed it.  Use the ``LightcurveData.timescale()`` method or
+  ``jinwu.core.data.timescale`` for the class.
+* :meth:`jinwu.core.fit.LightcurveFitter.plot_fit
+  <jinwu.core.fit.LightcurveFitter.plot_fit>` returns ``(ax1, ax2)`` again.
+  The beta tree briefly returned ``(fig, (ax1, ax2))``, which silently bound
+  the figure to ``ax1`` in master-style unpacking.
+* :func:`jinwu.core.fit.fit_prepared`: the ``plot_dpi`` keyword is renamed
+  back to ``plot_density`` (it feeds ``plotfit(density=...)``, a sampling
+  density, not a DPI), and ``stat_method`` / ``abundance`` /
+  ``cross_section`` carry explicit defaults (``cstat`` / ``wilm`` /
+  ``vern``) again.  The function no longer resolves ``None`` against the
+  process-wide fit settings, so ``set_fit_settings()`` can no longer change
+  its behaviour as a hidden side effect — pass values explicitly or route
+  through :func:`jinwu.core.fit_spectral` with ``settings=``.
+* XSPEC result conversion data now reports ``'total_counts'`` while keeping
+  ``'counts'`` as a compatibility alias.  Recoverable flux, rate, conversion,
+  and statistic failures are recorded in the result warnings.
+* The vestigial :mod:`jinwu.response` package is removed; GBM response
+  generation lives in :mod:`jinwu.fermi.gbm.response`.
+  ``jinwu.core.utils.generate_download_url`` moved to
+  :mod:`jinwu.fermi.gbm` (a deprecated delegating shim remains in
+  ``jinwu.core.utils``).
+* ``InstrumentConfig.response_type`` is validated against the OGIP response
+  vocabulary ``rsp2 | drm | rsp | rmf`` and every instrument preset declares
+  its file type: Swift GRB ``"rmf"`` (was ``"rmf_arf"``), GBM /
+  GBMContinuous ``"rsp2"`` (was ``"rsp"``).  ``response_type="rmf"``
+  automatically sets ``response_requires_arf=True`` (an RMF must be paired
+  with an ARF file, OGIP CAL/GEN/92-002).  The upper-limit contract check
+  accepts ``{'rsp','rsp2','drm'}`` for ``response_folding='rsp'``.
+* GECAM and Insight-HXMT mission elapsed time zero now corresponds to
+  2019-01-01 and 2012-01-01 00:00:00 UTC, respectively; both formats use
+  TT internally.  Any saved UTC labels produced from the former epochs
+  should be regenerated.  Fermi/GW calendar grouping explicitly converts
+  ``Time`` values to UTC before reading ``datetime``.
+* ``jinwu.ftools`` now matches HEASoft 6.37 semantics: ``rebin_pha``
+  (ftrbnpha) requires the output channel count to divide the input exactly,
+  renumbers output channels from the first input channel and folds the
+  QUALITY column; ``group_min_counts`` / ``compute_grouping_by_min_counts``
+  (ftgrouppha/grppha) turn incomplete tail channels into single-channel
+  groups flagged ``QUALITY=2`` (``grouping::loadMin``) instead of good data;
+  ``rebin_rmf`` (ftrbnrmf) divides merged energy rows by the merged row
+  count for REDIST-type responses (``rmf::rebinEnergies``).
+* Release gating fix: the three offline gate test files referenced by CI and
+  the publish wheel-gate (``test_quickstart_examples.py``,
+  ``test_stage_code_deps.py``, ``test_gr.py``) are now tracked in git —
+  ``.gitignore`` excluded the whole ``test/`` directory, so the wheel-gate
+  (and therefore publishing) referenced non-existent files and never ran.
+  CI additionally collects ``packages/jinwu-swift/tests``.
+
+New and improved
+~~~~~~~~~~~~~~~~
+
+* Added :mod:`jinwu.core.skymap`, a dependency-light HEALPix probability-map
+  reader (:class:`~jinwu.core.skymap.SkyMapData`, ``load_skymap``,
+  ``sky_map_pixel_vectors``; requires the new ``jinwu[skymap]`` extra).
+  The Fermi/GBM subthreshold search now takes its sky-map prior from this
+  shared layer, so ``jinwu-fermi[search-skymap]`` no longer depends on
+  ``jinwu-gw`` and the former ``jinwu-fermi <-> jinwu-gw`` dependency cycle
+  is removed.  ``jinwu.gw.skymap.load_skymap`` keeps its richer
+  URL-fetching/provenance/MOC behaviour for GW workflows.
 * Added a resumable Swift BAT+XRT GRB pipeline (:mod:`jinwu.swift.grb`,
   registered ``"swift.grb"``) with CLI ``python -m jinwu.swift.grb``:
   catalog resolution with redshift priority, Burst Analyser ingestion with
@@ -23,6 +89,19 @@ Unreleased
   :class:`jinwu.fermi.gbm.GBMObservation` no longer hardcodes a macOS
   poshist directory; it falls back to the ``GBM_POSHIST_DIR`` environment
   variable or the working directory.
+* Added the standalone ``jinwu-gw`` distribution (:mod:`jinwu.gw`, entry point
+  ``jinwu-gw plot``) for gravitational-wave localizations: LVK alert reading
+  (embedded Base64 FITS, local FITS, FITS URL and public GraceDB superevents
+  with alert version/checksum provenance), multi-resolution and flat HEALPix
+  sky maps with 50%/90% credible regions, MOC-refined coverage integrals
+  (order 10 -> 13, |dP| < 1e-3 convergence recorded), Fermi/GBM geometry from
+  real POSHIST or the RapidGBM 30-orbit historical reference
+  (:func:`jinwu.fermi.gbm.find_gbm_poshist`,
+  :func:`jinwu.fermi.gbm.read_gbm_geometry`), time-tagged EP/BAT MOC, polygon
+  and circle layers, and static all-sky/GBM diagnostic PNG+PDF plots with
+  JSON/ECSV reports.  The pipeline machinery config contract is narrowed to
+  the ``PipelineConfigProtocol`` (``name``/``pipeline``/``execution``) so the
+  GW workflow ships its own lightweight configuration.
 * Added :mod:`jinwu.core.plotpanel` — multi-object overlay helpers
   (:func:`jinwu.core.multi_panel`, :func:`jinwu.core.overlay`,
   :class:`jinwu.core.PanelSpec`) for lightcurve- and spectrum-like data.
@@ -97,6 +176,11 @@ Unreleased
   ``sphinx-automodapi>=0.21`` is required for Sphinx 8.2+/9 compatibility.
 * ``WXTPointingResult.display()`` keeps the same output contract
   (【标题】 headers first, summary last) with and without IPython.
+* Under review (annotated in code, logic unchanged): the GECAM and HXMT
+  epochs in :mod:`jinwu.core.time` look 69.184 s early relative to a
+  "UTC zero point + TT counting" convention — see the ⚠️ comments on
+  ``TimeGECAM`` / ``TimeHXMT`` and verify against official mission
+  documentation and real event files before correcting.
 
 v0.0.27 (2026-06-03)
 --------------------

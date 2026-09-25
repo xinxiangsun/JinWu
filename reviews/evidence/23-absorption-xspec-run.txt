@@ -1,0 +1,20 @@
+=== tbabs ===
+E=  0.5 keV  sigma=6.2964e-22 cm2/H  tau= 6.2964  T=0.0018  closure=0.0035821112863673706  status=decomposition_not_closed
+E=  1.0 keV  sigma=1.7375e-22 cm2/H  tau= 1.7375  T=0.1760  closure=0.0028855630431367726  status=decomposition_not_closed
+E=  2.0 keV  sigma=2.9207e-23 cm2/H  tau= 0.2921  T=0.7467  closure=0.0015122620240178792  status=decomposition_not_closed
+E=  5.0 keV  sigma=2.3902e-24 cm2/H  tau= 0.0239  T=0.9764  closure=0.0003178527500975689  status=decomposition_not_closed
+E= 10.0 keV  sigma=7.0779e-25 cm2/H  tau= 0.0071  T=0.9929  closure=0.0004773232029119644  status=decomposition_not_closed
+max |sigma - (-lnT)/NH| = 4.4999393117415694e-39
+T(1 keV) = 0.17595276985106467 (tbabs NH=1e22; 文献 ~0.116)
+=== atomic (vphabs/vern) ===
+E=  0.5 keV  sigma=5.9288e-22  closure=1.8179599965212777e-07  status=ok
+E=  1.0 keV  sigma=1.6959e-22  closure=5.303786736312746e-09  status=ok
+E=  2.0 keV  sigma=2.8543e-23  closure=1.3408549848657668e-07  status=ok
+E=  5.0 keV  sigma=2.3474e-24  closure=8.563658175058781e-08  status=ok
+E= 10.0 keV  sigma=7.0330e-25  closure=1.2178218081398425e-07  status=ok
+point 0: sum(sigma_elements)=nan  sigma_total=5.9288e-22  rel diff=nan
+point 1: sum(sigma_elements)=nan  sigma_total=1.6959e-22  rel diff=nan
+point 2: sum(sigma_elements)=nan  sigma_total=2.8543e-23  rel diff=nan
+point 3: sum(sigma_elements)=nan  sigma_total=2.3474e-24  rel diff=nan
+point 4: sum(sigma_elements)=nan  sigma_total=7.0330e-25  rel diff=nan
+T_atomic(1keV) = 0.18343181364537495  (vphabs 无散射，应高于 tbabs)

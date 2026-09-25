@@ -2,10 +2,10 @@
 
 # ============================================================
 #  jinwu monorepo 一键构建与发布
-#  发行包: packages/{jinwu,jinwu-ep,jinwu-swift,jinwu-fermi,jinwurs}
+#  发行包: packages/{jinwu,jinwu-ep,jinwu-swift,jinwu-fermi,jinwu-gw,jinwurs}
 # ============================================================
 
-PY_PACKAGES = packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi
+PY_PACKAGES = packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw
 
 # 自动探测 Python 解释器（部分环境无裸 `python` 命令，只有 python3）
 PYTHON := $(shell command -v python3 2>/dev/null || command -v python)
@@ -61,8 +61,7 @@ build: sdist wheel
 # 更新 meta.yaml 里的 sha256（只处理核心包）
 # -----------------------------------------------------------
 sha256:
-	@LATEST=$$(ls -t dist/jinwu-*.tar.gz 2>/dev/null | grep -v jinwu- | head -1); \
-	LATEST=$$(ls -t dist/jinwu-[0-9]*.tar.gz 2>/dev/null | head -1); \
+	@LATEST=$$(ls -t dist/jinwu-[0-9]*.tar.gz 2>/dev/null | head -1); \
 	if [ -z "$$LATEST" ]; then \
 		echo "❌ 没有找到核心包 sdist，请先运行 make build"; \
 		exit 1; \
@@ -76,11 +75,11 @@ sha256:
 	echo "  sha256  = $$HASH"
 
 # -----------------------------------------------------------
-# 上传到 PyPI（全部发行包）
+# 上传到 PyPI（全部发行包，含 Rust 平台 wheel；未构建时显式跳过并提示）
 # -----------------------------------------------------------
-publish: build sha256
+publish: build rust-build sha256
 	@echo "→ 上传到 PyPI..."
-	$(PYTHON) -m twine upload dist/*.tar.gz dist/*-py3-none-any.whl
+	$(PYTHON) -m twine upload --skip-existing dist/*.tar.gz dist/*.whl
 	@echo "✓ 发布完成！"
 
 # -----------------------------------------------------------
@@ -103,9 +102,12 @@ sync:
 	@sed -i 's/^version = ".*"/version = "$(_VERSION)"/' packages/jinwurs/Cargo.toml
 	@sed -i 's/^version = ".*"/version = "$(_VERSION)"/' packages/jinwurs/pyproject.toml
 	@# 仪器包版本（锁步发布）
-	@for pkg in packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi; do \
+	@for pkg in packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw; do \
 		sed -i 's/^version = ".*"/version = "$(_VERSION)"/' "$$pkg/pyproject.toml"; \
 	done
+	@# jinwurs 独立 conda recipe（sha256 在 jinwurs 发布 sdist 后单独更新，见其目录 README/CI）
+	@sed -i 's/{% set version = ".*" %}/{% set version = "$(_VERSION)" %}/' packages/jinwurs/conda-recipe/meta.yaml
+	@sed -i 's/^  version: ".*"/  version: "$(_VERSION)"/' packages/jinwurs/conda-recipe/meta.yaml
 	@echo "✓ 全部同步到 $(_VERSION)"
 
 # ── 一键发布 ──────────────────────────────────────────────
@@ -113,7 +115,7 @@ release: sync
 	@echo ""
 	@echo "→ 提交变更..."
 	git add packages/jinwu/pyproject.toml packages/jinwu-ep/pyproject.toml \
-		packages/jinwu-swift/pyproject.toml packages/jinwu-fermi/pyproject.toml \
+		packages/jinwu-swift/pyproject.toml packages/jinwu-fermi/pyproject.toml packages/jinwu-gw/pyproject.toml \
 		packages/jinwurs/Cargo.toml packages/jinwurs/pyproject.toml packages/jinwurs/README.md \
 		recipe/meta.yaml
 	git diff --cached --stat

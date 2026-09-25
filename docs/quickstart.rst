@@ -103,13 +103,19 @@ quicklook report:
    inp = WXTPointingInput(
        target_id="EP260809a",
        root="/data/06800001692_32",        # 官方 L2/L3 数据目录
+       output_root="/analysis/ep260809a_wxt", # 独立产物目录
        source_id="s1",
        ra_deg=..., dec_deg=...,
        obsid="06800001692",
-       auto_approve_regions=True,          # 跳过人工区域审批
+       auto_approve_regions=False,
    )
    pipeline = WXTPointingPipeline(inp, config=instrument("WXT"))
-   result = pipeline.run(resume=False)     # 断点续跑用 resume=True
+   preview = pipeline.run(until="exposure_arm_qc", resume=False)
+   print(preview.status, preview.workspace) # 预期 needs_review
+   # 在图像上检查 regions/regions.json 指向的源区、背景区与 ARM，
+   # 并阅读 regions/exposure_qc.json 中的覆盖率、alpha 与警告。
+   pipeline.approve_regions(note="source and background reviewed")
+   result = pipeline.run(resume=True)
 
    result.summary_text()                   # 中文快报文本
    result.display()                        # Jupyter 内嵌展示产物图
@@ -129,6 +135,7 @@ Next Steps
   and :doc:`usage/bxa_fitting` for BXA/UltraNest Bayesian spectral fitting.
 * For instrument pipelines, see :doc:`usage/swift_grb` (Swift BAT+XRT GRB),
   :doc:`usage/bat_survey` (Swift/BAT survey targets) and
-  :doc:`usage/fermi_gbm` (Fermi/GBM continuous data).
+  :doc:`usage/fermi_gbm` (Fermi/GBM continuous data), and
+  :doc:`usage/gw_coverage` (GW localization and coverage plots).
 * Check the `GitHub repository <https://github.com/xinxiangsun/jinwu>`_
   for examples and issue tracking.

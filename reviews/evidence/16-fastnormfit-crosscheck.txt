@@ -1,0 +1,20 @@
+=== ts / dts pointwise agreement (upstream vs jinwu) ===
+bright   max|dTS|=2.132e-14 max|d1|=0.000e+00 max|d2|=0.000e+00
+faint    max|dTS|=8.882e-16 max|d1|=4.441e-16 max|d2|=0.000e+00
+zero_d   max|dTS|=0.000e+00 max|d1|=0.000e+00 max|d2|=0.000e+00
+random   max|dTS|=5.684e-14 max|d1|=2.842e-14 max|d2|=1.066e-14
+
+=== solve() agreement ===
+bright   norm 4.634211836 vs 4.634211836 | ts 1.4155693 vs 1.4155693 | err(TS=1) 0.69003482 vs 0.69003482 | failed False vs False
+faint    norm 0 vs 0 | ts 0 vs 0 | err(TS=1) 1.0728486 vs 1.0728486 | failed False vs False
+zero_d   norm 0 vs 0 | ts 0 vs 0 | err(TS=1) 0.25 vs 0.25 | failed False vs False
+random   norm 14.05877183 vs 14.05877183 | ts 1.1643425 vs 1.1643425 | err(TS=1) 0.33664137 vs 0.33664137 | failed False vs False
+
+=== upper_limit semantics ===
+chi2.ppf(0.90, df=1) = 2.705543454095404
+gauss one-sided 90% z^2 = 1.642374415149816
+gauss one-sided 95% z^2 = 2.705543454095413
+bright   best=4.63421 failed=False upper_limit(0.9)=2.59219 delta_ts=2.70554
+faint    best=0 failed=False upper_limit(0.9)=2.31096 delta_ts=2.70554
+zero_d   best=0 failed=False upper_limit(0.9)=0.676386 delta_ts=2.70554
+random   best=14.0588 failed=False upper_limit(0.9)=1.73713 delta_ts=2.70554

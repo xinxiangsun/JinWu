@@ -1,0 +1,53 @@
+Round-6 review evidence (2026-09-21): conciseness / duplication / dead code
+============================================================================
+Method: AST scan of all module-level defs across 5 packages (zero-reference
+candidates), manually re-verified with grep over src+test+examples; plus
+duplication scan for statistical/physics helpers.
+
+A. Duplication across distribution packages (R27, P2)
+  - Binomial (Clopper-Pearson + Wilson fallback) interval: THREE copies
+    * packages/jinwu/src/jinwu/core/model_comparison.py:106-107 (CP inside
+      empirical_tail_probability)
+    * packages/jinwu-swift/src/jinwu/swift/bat/survey.py:920
+      _binomial_proportion_interval
+    * packages/jinwu-fermi/src/jinwu/fermi/gbm/pipeline.py:1055
+      _binomial_interval
+    survey/gbm copies are structurally identical (CP via scipy beta.ppf with
+    identical k/n-k+1, k+1/n-k parameters, Wilson fallback). Both packages
+    already depend on jinwu core => consolidate into core.
+  - powerlaw energy flux per unit norm: TWO copies
+    * survey.py:2725 _powerlaw_energy_flux_per_norm (inline 1.602176634e-9)
+    * gbm/pipeline.py:1786 powerlaw_energy_flux_per_norm (KEV_TO_ERG const)
+    Same analytic integral; threshold differs trivially (1e-12 vs 1e-9).
+
+B. Deviating dead Li&Ma reimplementation (R28, P2)
+  - lf/legacy_redshift.py:585 _snr_li_ma_counts (@staticmethod, ZERO callers):
+    unsigned (negative excess clipped to 0) + epsilon inside logs; deviates
+    from canonical signed core.utils.li_ma_snr (round-2 verified vs Eq.17).
+    Numeric demo (canonical vs dead copy):
+      n_on=5,  n_off=200, alpha=0.3 ->  -8.5203  vs +8.5203
+      n_on=0,  n_off=100, alpha=0.2 ->  -6.0386  vs +6.0386
+      positive-excess cases agree exactly (6.5055/20.3584).
+  - Li&Ma itself is otherwise single-source: all modules import
+    core.utils.li_ma_snr (ops, timescale, ep, swift, lf) - GOOD.
+
+C. Dead module-level defs (R29, P3; each has exactly 1 ref = its own def)
+  packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py:634   _combined_region_mask
+  packages/jinwu-fermi/src/jinwu/fermi/gbm/pipeline.py:1125 _background_holdout_score
+  packages/jinwu/src/jinwu/core/time.py:174            _leap_seconds_from_elapsed
+  packages/jinwu/src/jinwu/core/utils.py:330           HydroDynamics (IPython
+      display demo class, misplaced in core shared layer)
+  packages/jinwu/src/jinwu/core/xselect.py:1399        trim_events_to_gti
+  packages/jinwu/src/jinwu/ftools/ftrbnrmf.py:145      map_bins_by_edges
+  packages/jinwu/src/jinwu/ftools/region.py:221        _points_in_polygon_mpl
+  packages/jinwu/src/jinwu/ftools/teldef_helpers.py:77 rotate_vector_by_quat
+  packages/jinwu/src/jinwu/ftools/teldef_helpers.py:114 rotmatrix_to_xform2d
+  packages/jinwu/src/jinwu/lf/legacy_redshift.py:585   _snr_li_ma_counts (=R28)
+  (_vendor/* zero-ref functions excluded: upstream fidelity preserved)
+
+D. Method-correctness spot checks this round - PASSED
+  - gbm/pipeline.gti_intervals_for_paths: GTI intersect + 1e-9 merge, never
+    converts wall-clock to scaled exposure. Correct.
+  - gbm/pipeline.background_windows: guard-anchored flanking windows, far-side
+    truncation to context_max, short-window flags with documented 1/4 lower
+    bound (FIX M15). Correct.

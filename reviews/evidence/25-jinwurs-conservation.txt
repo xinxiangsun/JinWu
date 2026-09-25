@@ -1,0 +1,2 @@
+300 trials, contiguous bins, full-cover grids: max |sum_new/sum_orig - 1| = 4.44e-16
+300 trials, partial-cover grids: max rel deviation from analytic overlap sum = 6.42e-16

@@ -1,0 +1,8 @@
+300 random cases: max |dTS| = 7.816e-14, max rel |dnorm| = 7.949e-15, mismatches = 0
+
+=== allow_negative=True path (documented deliberate deviation) ===
+   upstream: [-0.12836, -0.546008, 1.523999, 0.0]
+   jinwu   : [0.12836, -0.546008, 1.523999, 0.0]
+
+=== independent verification of upper_limit (fine-grid profile root) ===
+200 cases checked against brute-force scan: inconsistencies = 0

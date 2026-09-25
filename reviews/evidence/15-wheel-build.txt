@@ -1,0 +1,921 @@
+nohup: ignoring input
+* Getting build dependencies for wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running egg_info
+writing src/jinwu.egg-info/PKG-INFO
+writing dependency_links to src/jinwu.egg-info/dependency_links.txt
+writing requirements to src/jinwu.egg-info/requires.txt
+writing top-level names to src/jinwu.egg-info/top_level.txt
+reading manifest file 'src/jinwu.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu.egg-info/SOURCES.txt'
+* Building wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running bdist_wheel
+running build
+running build_py
+copying src/jinwu/cluster/cluster.py -> build/lib/jinwu/cluster
+copying src/jinwu/background/backprior.py -> build/lib/jinwu/background
+copying src/jinwu/ftools/ftgrouppha.py -> build/lib/jinwu/ftools
+copying src/jinwu/ftools/region.py -> build/lib/jinwu/ftools
+copying src/jinwu/ftools/xselect_mdb.py -> build/lib/jinwu/ftools
+copying src/jinwu/ftools/ftrbnpha.py -> build/lib/jinwu/ftools
+copying src/jinwu/ftools/teldef.py -> build/lib/jinwu/ftools
+copying src/jinwu/ftools/ftrbnrmf.py -> build/lib/jinwu/ftools
+copying src/jinwu/ftools/grppha.py -> build/lib/jinwu/ftools
+copying src/jinwu/physics/absorption.py -> build/lib/jinwu/physics
+copying src/jinwu/physics/gr.py -> build/lib/jinwu/physics
+copying src/jinwu/core/timescale.py -> build/lib/jinwu/core
+copying src/jinwu/core/galactic.py -> build/lib/jinwu/core
+copying src/jinwu/core/time.py -> build/lib/jinwu/core
+copying src/jinwu/core/ops.py -> build/lib/jinwu/core
+copying src/jinwu/core/rebin_rs.py -> build/lib/jinwu/core
+copying src/jinwu/core/model_comparison.py -> build/lib/jinwu/core
+copying src/jinwu/core/pipeline.py -> build/lib/jinwu/core
+copying src/jinwu/core/io.py -> build/lib/jinwu/core
+copying src/jinwu/core/upperlimit.py -> build/lib/jinwu/core
+copying src/jinwu/core/config.py -> build/lib/jinwu/core
+copying src/jinwu/core/__init__.py -> build/lib/jinwu/core
+copying src/jinwu/core/xselect.py -> build/lib/jinwu/core
+copying src/jinwu/core/ogip.py -> build/lib/jinwu/core
+copying src/jinwu/core/fit.py -> build/lib/jinwu/core
+copying src/jinwu/core/utils.py -> build/lib/jinwu/core
+copying src/jinwu/core/spectrum_prep.py -> build/lib/jinwu/core
+copying src/jinwu/lf/redshift.py -> build/lib/jinwu/lf
+running egg_info
+writing src/jinwu.egg-info/PKG-INFO
+writing dependency_links to src/jinwu.egg-info/dependency_links.txt
+writing requirements to src/jinwu.egg-info/requires.txt
+writing top-level names to src/jinwu.egg-info/top_level.txt
+reading manifest file 'src/jinwu.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu.egg-info/SOURCES.txt'
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/jinwu
+creating build/bdist.linux-x86_64/wheel/jinwu/data
+copying build/lib/jinwu/data/EP_bkg_Xray_PerCM2_12umCMOS.fits -> build/bdist.linux-x86_64/wheel/./jinwu/data
+copying build/lib/jinwu/data/xselect.mdb -> build/bdist.linux-x86_64/wheel/./jinwu/data
+copying build/lib/jinwu/data/EP_bkg_Particles_PerCM2_12umCMOS.fits -> build/bdist.linux-x86_64/wheel/./jinwu/data
+creating build/bdist.linux-x86_64/wheel/jinwu/cluster
+copying build/lib/jinwu/cluster/cluster.py -> build/bdist.linux-x86_64/wheel/./jinwu/cluster
+copying build/lib/jinwu/cluster/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/cluster
+creating build/bdist.linux-x86_64/wheel/jinwu/lightcurve
+copying build/lib/jinwu/lightcurve/trigger.py -> build/bdist.linux-x86_64/wheel/./jinwu/lightcurve
+copying build/lib/jinwu/lightcurve/duration.py -> build/bdist.linux-x86_64/wheel/./jinwu/lightcurve
+copying build/lib/jinwu/lightcurve/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/lightcurve
+copying build/lib/jinwu/lightcurve/lcfake.py -> build/bdist.linux-x86_64/wheel/./jinwu/lightcurve
+creating build/bdist.linux-x86_64/wheel/jinwu/background
+copying build/lib/jinwu/background/backprior.py -> build/bdist.linux-x86_64/wheel/./jinwu/background
+copying build/lib/jinwu/background/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/background
+creating build/bdist.linux-x86_64/wheel/jinwu/ftools
+copying build/lib/jinwu/ftools/ftgrouppha.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/region.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/teldef_helpers.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/rmf_mapping.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/xselect_mdb.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/fextract.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/ftrbnpha.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/ftselect.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/grppha_hsp.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/teldef.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/ftrbnrmf.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+copying build/lib/jinwu/ftools/grppha.py -> build/bdist.linux-x86_64/wheel/./jinwu/ftools
+creating build/bdist.linux-x86_64/wheel/jinwu/spectrum
+copying build/lib/jinwu/spectrum/specfake.py -> build/bdist.linux-x86_64/wheel/./jinwu/spectrum
+copying build/lib/jinwu/spectrum/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/spectrum
+creating build/bdist.linux-x86_64/wheel/jinwu/timing
+copying build/lib/jinwu/timing/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/timing
+creating build/bdist.linux-x86_64/wheel/jinwu/physics
+copying build/lib/jinwu/physics/absorption.py -> build/bdist.linux-x86_64/wheel/./jinwu/physics
+copying build/lib/jinwu/physics/radiation.py -> build/bdist.linux-x86_64/wheel/./jinwu/physics
+copying build/lib/jinwu/physics/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/physics
+copying build/lib/jinwu/physics/gr.py -> build/bdist.linux-x86_64/wheel/./jinwu/physics
+creating build/bdist.linux-x86_64/wheel/jinwu/response
+copying build/lib/jinwu/response/basic.py -> build/bdist.linux-x86_64/wheel/./jinwu/response
+copying build/lib/jinwu/response/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/response
+creating build/bdist.linux-x86_64/wheel/jinwu/core
+copying build/lib/jinwu/core/timescale.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/instruments.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/heasoft.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/plotstyle.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/plotpanel.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/galactic.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/data.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/products.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/time.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/ops.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/rebin_rs.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/model_comparison.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/plot.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/redshift.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/lf.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/pipeline.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/io.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/upperlimit.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/config.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/gti.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/units.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/xselect.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/ogip.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/base.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/fit.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/utils.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/datasets.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/bxa_fit.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/host.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+copying build/lib/jinwu/core/spectrum_prep.py -> build/bdist.linux-x86_64/wheel/./jinwu/core
+creating build/bdist.linux-x86_64/wheel/jinwu/model
+copying build/lib/jinwu/model/modelbase.py -> build/bdist.linux-x86_64/wheel/./jinwu/model
+copying build/lib/jinwu/model/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/model
+creating build/bdist.linux-x86_64/wheel/jinwu/lf
+copying build/lib/jinwu/lf/specfake.py -> build/bdist.linux-x86_64/wheel/./jinwu/lf
+copying build/lib/jinwu/lf/legacy_redshift.py -> build/bdist.linux-x86_64/wheel/./jinwu/lf
+copying build/lib/jinwu/lf/redshift.py -> build/bdist.linux-x86_64/wheel/./jinwu/lf
+copying build/lib/jinwu/lf/detectability.py -> build/bdist.linux-x86_64/wheel/./jinwu/lf
+copying build/lib/jinwu/lf/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/lf
+copying build/lib/jinwu/lf/lcfake.py -> build/bdist.linux-x86_64/wheel/./jinwu/lf
+running install_egg_info
+Copying src/jinwu.egg-info to build/bdist.linux-x86_64/wheel/./jinwu-0.2.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/jinwu-0.2.0.dist-info/WHEEL
+creating '/tmp/jinwu-wheels/.tmp-9u4_l2gl/jinwu-0.2.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'jinwu/background/__init__.py'
+adding 'jinwu/background/backprior.py'
+adding 'jinwu/cluster/__init__.py'
+adding 'jinwu/cluster/cluster.py'
+adding 'jinwu/core/__init__.py'
+adding 'jinwu/core/base.py'
+adding 'jinwu/core/bxa_fit.py'
+adding 'jinwu/core/config.py'
+adding 'jinwu/core/data.py'
+adding 'jinwu/core/datasets.py'
+adding 'jinwu/core/fit.py'
+adding 'jinwu/core/galactic.py'
+adding 'jinwu/core/gti.py'
+adding 'jinwu/core/heasoft.py'
+adding 'jinwu/core/host.py'
+adding 'jinwu/core/instruments.py'
+adding 'jinwu/core/io.py'
+adding 'jinwu/core/lf.py'
+adding 'jinwu/core/model_comparison.py'
+adding 'jinwu/core/ogip.py'
+adding 'jinwu/core/ops.py'
+adding 'jinwu/core/pipeline.py'
+adding 'jinwu/core/plot.py'
+adding 'jinwu/core/plotpanel.py'
+adding 'jinwu/core/plotstyle.py'
+adding 'jinwu/core/products.py'
+adding 'jinwu/core/rebin_rs.py'
+adding 'jinwu/core/redshift.py'
+adding 'jinwu/core/spectrum_prep.py'
+adding 'jinwu/core/time.py'
+adding 'jinwu/core/timescale.py'
+adding 'jinwu/core/units.py'
+adding 'jinwu/core/upperlimit.py'
+adding 'jinwu/core/utils.py'
+adding 'jinwu/core/xselect.py'
+adding 'jinwu/data/EP_bkg_Particles_PerCM2_12umCMOS.fits'
+adding 'jinwu/data/EP_bkg_Xray_PerCM2_12umCMOS.fits'
+adding 'jinwu/data/xselect.mdb'
+adding 'jinwu/ftools/__init__.py'
+adding 'jinwu/ftools/fextract.py'
+adding 'jinwu/ftools/ftgrouppha.py'
+adding 'jinwu/ftools/ftrbnpha.py'
+adding 'jinwu/ftools/ftrbnrmf.py'
+adding 'jinwu/ftools/ftselect.py'
+adding 'jinwu/ftools/grppha.py'
+adding 'jinwu/ftools/grppha_hsp.py'
+adding 'jinwu/ftools/region.py'
+adding 'jinwu/ftools/rmf_mapping.py'
+adding 'jinwu/ftools/teldef.py'
+adding 'jinwu/ftools/teldef_helpers.py'
+adding 'jinwu/ftools/xselect_mdb.py'
+adding 'jinwu/lf/__init__.py'
+adding 'jinwu/lf/detectability.py'
+adding 'jinwu/lf/lcfake.py'
+adding 'jinwu/lf/legacy_redshift.py'
+adding 'jinwu/lf/redshift.py'
+adding 'jinwu/lf/specfake.py'
+adding 'jinwu/lightcurve/__init__.py'
+adding 'jinwu/lightcurve/duration.py'
+adding 'jinwu/lightcurve/lcfake.py'
+adding 'jinwu/lightcurve/trigger.py'
+adding 'jinwu/model/__init__.py'
+adding 'jinwu/model/modelbase.py'
+adding 'jinwu/physics/__init__.py'
+adding 'jinwu/physics/absorption.py'
+adding 'jinwu/physics/gr.py'
+adding 'jinwu/physics/radiation.py'
+adding 'jinwu/response/__init__.py'
+adding 'jinwu/response/basic.py'
+adding 'jinwu/spectrum/__init__.py'
+adding 'jinwu/spectrum/specfake.py'
+adding 'jinwu/timing/__init__.py'
+adding 'jinwu-0.2.0.dist-info/METADATA'
+adding 'jinwu-0.2.0.dist-info/WHEEL'
+adding 'jinwu-0.2.0.dist-info/top_level.txt'
+adding 'jinwu-0.2.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built jinwu-0.2.0-py3-none-any.whl
+* Getting build dependencies for wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running egg_info
+writing src/jinwu_ep.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_ep.egg-info/dependency_links.txt
+writing entry points to src/jinwu_ep.egg-info/entry_points.txt
+writing requirements to src/jinwu_ep.egg-info/requires.txt
+writing top-level names to src/jinwu_ep.egg-info/top_level.txt
+reading manifest file 'src/jinwu_ep.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_ep.egg-info/SOURCES.txt'
+* Building wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running bdist_wheel
+running build
+running build_py
+copying src/jinwu/ep/wxt/pipeline.py -> build/lib/jinwu/ep/wxt
+running egg_info
+writing src/jinwu_ep.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_ep.egg-info/dependency_links.txt
+writing entry points to src/jinwu_ep.egg-info/entry_points.txt
+writing requirements to src/jinwu_ep.egg-info/requires.txt
+writing top-level names to src/jinwu_ep.egg-info/top_level.txt
+reading manifest file 'src/jinwu_ep.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_ep.egg-info/SOURCES.txt'
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/jinwu
+creating build/bdist.linux-x86_64/wheel/jinwu/ep
+creating build/bdist.linux-x86_64/wheel/jinwu/ep/wxt
+copying build/lib/jinwu/ep/wxt/pipeline.py -> build/bdist.linux-x86_64/wheel/./jinwu/ep/wxt
+copying build/lib/jinwu/ep/wxt/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/ep/wxt
+copying build/lib/jinwu/ep/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/ep
+running install_egg_info
+Copying src/jinwu_ep.egg-info to build/bdist.linux-x86_64/wheel/./jinwu_ep-0.2.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/jinwu_ep-0.2.0.dist-info/WHEEL
+creating '/tmp/jinwu-wheels/.tmp-hinduqa_/jinwu_ep-0.2.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'jinwu/ep/__init__.py'
+adding 'jinwu/ep/wxt/__init__.py'
+adding 'jinwu/ep/wxt/pipeline.py'
+adding 'jinwu_ep-0.2.0.dist-info/METADATA'
+adding 'jinwu_ep-0.2.0.dist-info/WHEEL'
+adding 'jinwu_ep-0.2.0.dist-info/entry_points.txt'
+adding 'jinwu_ep-0.2.0.dist-info/top_level.txt'
+adding 'jinwu_ep-0.2.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built jinwu_ep-0.2.0-py3-none-any.whl
+* Getting build dependencies for wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running egg_info
+writing src/jinwu_swift.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_swift.egg-info/dependency_links.txt
+writing entry points to src/jinwu_swift.egg-info/entry_points.txt
+writing requirements to src/jinwu_swift.egg-info/requires.txt
+writing top-level names to src/jinwu_swift.egg-info/top_level.txt
+reading manifest file 'src/jinwu_swift.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_swift.egg-info/SOURCES.txt'
+* Building wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running bdist_wheel
+running build
+running build_py
+copying src/jinwu/swift/bat/attitude.py -> build/lib/jinwu/swift/bat
+copying src/jinwu/swift/bat/survey.py -> build/lib/jinwu/swift/bat
+running egg_info
+writing src/jinwu_swift.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_swift.egg-info/dependency_links.txt
+writing entry points to src/jinwu_swift.egg-info/entry_points.txt
+writing requirements to src/jinwu_swift.egg-info/requires.txt
+writing top-level names to src/jinwu_swift.egg-info/top_level.txt
+reading manifest file 'src/jinwu_swift.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_swift.egg-info/SOURCES.txt'
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/jinwu
+creating build/bdist.linux-x86_64/wheel/jinwu/swift
+creating build/bdist.linux-x86_64/wheel/jinwu/swift/bat
+copying build/lib/jinwu/swift/bat/BATObservation.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/bat
+copying build/lib/jinwu/swift/bat/attitude.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/bat
+copying build/lib/jinwu/swift/bat/survey.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/bat
+copying build/lib/jinwu/swift/bat/bat_observation.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/bat
+copying build/lib/jinwu/swift/bat/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/bat
+copying build/lib/jinwu/swift/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift
+creating build/bdist.linux-x86_64/wheel/jinwu/swift/grb
+copying build/lib/jinwu/swift/grb/pipeline.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/grb
+copying build/lib/jinwu/swift/grb/__main__.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/grb
+copying build/lib/jinwu/swift/grb/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/swift/grb
+running install_egg_info
+Copying src/jinwu_swift.egg-info to build/bdist.linux-x86_64/wheel/./jinwu_swift-0.2.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/jinwu_swift-0.2.0.dist-info/WHEEL
+creating '/tmp/jinwu-wheels/.tmp-1w4nlt6u/jinwu_swift-0.2.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'jinwu/swift/__init__.py'
+adding 'jinwu/swift/bat/BATObservation.py'
+adding 'jinwu/swift/bat/__init__.py'
+adding 'jinwu/swift/bat/attitude.py'
+adding 'jinwu/swift/bat/bat_observation.py'
+adding 'jinwu/swift/bat/survey.py'
+adding 'jinwu/swift/grb/__init__.py'
+adding 'jinwu/swift/grb/__main__.py'
+adding 'jinwu/swift/grb/pipeline.py'
+adding 'jinwu_swift-0.2.0.dist-info/METADATA'
+adding 'jinwu_swift-0.2.0.dist-info/WHEEL'
+adding 'jinwu_swift-0.2.0.dist-info/entry_points.txt'
+adding 'jinwu_swift-0.2.0.dist-info/top_level.txt'
+adding 'jinwu_swift-0.2.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built jinwu_swift-0.2.0-py3-none-any.whl
+* Getting build dependencies for wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running egg_info
+writing src/jinwu_fermi.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_fermi.egg-info/dependency_links.txt
+writing entry points to src/jinwu_fermi.egg-info/entry_points.txt
+writing requirements to src/jinwu_fermi.egg-info/requires.txt
+writing top-level names to src/jinwu_fermi.egg-info/top_level.txt
+reading manifest file 'src/jinwu_fermi.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_fermi.egg-info/SOURCES.txt'
+* Building wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running bdist_wheel
+running build
+running build_py
+copying src/jinwu/fermi/gbm/poshist.py -> build/lib/jinwu/fermi/gbm
+copying src/jinwu/fermi/gbm/pipeline.py -> build/lib/jinwu/fermi/gbm
+copying src/jinwu/fermi/gbm/__init__.py -> build/lib/jinwu/fermi/gbm
+copying src/jinwu/fermi/gbm/subthreshold/data.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/pipeline.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/models.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/calibration.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/plots.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/__main__.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/__init__.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/search.py -> build/lib/jinwu/fermi/gbm/subthreshold
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/data.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/priors.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/response.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/configuration.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/__init__.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/likelihood.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/results.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/filters.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/utils.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/search.py -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+running egg_info
+writing src/jinwu_fermi.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_fermi.egg-info/dependency_links.txt
+writing entry points to src/jinwu_fermi.egg-info/entry_points.txt
+writing requirements to src/jinwu_fermi.egg-info/requires.txt
+writing top-level names to src/jinwu_fermi.egg-info/top_level.txt
+reading manifest file 'src/jinwu_fermi.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_fermi.egg-info/SOURCES.txt'
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/UPSTREAM.json -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+copying src/jinwu/fermi/gbm/subthreshold/_vendor/license.txt -> build/lib/jinwu/fermi/gbm/subthreshold/_vendor
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/jinwu
+creating build/bdist.linux-x86_64/wheel/jinwu/fermi
+copying build/lib/jinwu/fermi/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi
+creating build/bdist.linux-x86_64/wheel/jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/poshist.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/response.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/gbm_observation.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/GBMObservation.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/pipeline.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/__main__.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/urls.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+copying build/lib/jinwu/fermi/gbm/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm
+creating build/bdist.linux-x86_64/wheel/jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/data.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/pipeline.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/models.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/calibration.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/plots.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/__main__.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+copying build/lib/jinwu/fermi/gbm/subthreshold/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+creating build/bdist.linux-x86_64/wheel/jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/license.txt -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/data.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/priors.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/response.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/configuration.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/likelihood.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/results.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/filters.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/utils.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/UPSTREAM.json -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/_vendor/search.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold/_vendor
+copying build/lib/jinwu/fermi/gbm/subthreshold/search.py -> build/bdist.linux-x86_64/wheel/./jinwu/fermi/gbm/subthreshold
+running install_egg_info
+Copying src/jinwu_fermi.egg-info to build/bdist.linux-x86_64/wheel/./jinwu_fermi-0.2.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/jinwu_fermi-0.2.0.dist-info/WHEEL
+creating '/tmp/jinwu-wheels/.tmp-i71qqlc2/jinwu_fermi-0.2.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'jinwu/fermi/__init__.py'
+adding 'jinwu/fermi/gbm/GBMObservation.py'
+adding 'jinwu/fermi/gbm/__init__.py'
+adding 'jinwu/fermi/gbm/__main__.py'
+adding 'jinwu/fermi/gbm/gbm_observation.py'
+adding 'jinwu/fermi/gbm/pipeline.py'
+adding 'jinwu/fermi/gbm/poshist.py'
+adding 'jinwu/fermi/gbm/response.py'
+adding 'jinwu/fermi/gbm/urls.py'
+adding 'jinwu/fermi/gbm/subthreshold/__init__.py'
+adding 'jinwu/fermi/gbm/subthreshold/__main__.py'
+adding 'jinwu/fermi/gbm/subthreshold/calibration.py'
+adding 'jinwu/fermi/gbm/subthreshold/data.py'
+adding 'jinwu/fermi/gbm/subthreshold/models.py'
+adding 'jinwu/fermi/gbm/subthreshold/pipeline.py'
+adding 'jinwu/fermi/gbm/subthreshold/plots.py'
+adding 'jinwu/fermi/gbm/subthreshold/search.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/UPSTREAM.json'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/__init__.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/configuration.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/data.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/filters.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/license.txt'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/likelihood.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/priors.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/response.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/results.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/search.py'
+adding 'jinwu/fermi/gbm/subthreshold/_vendor/utils.py'
+adding 'jinwu_fermi-0.2.0.dist-info/METADATA'
+adding 'jinwu_fermi-0.2.0.dist-info/WHEEL'
+adding 'jinwu_fermi-0.2.0.dist-info/entry_points.txt'
+adding 'jinwu_fermi-0.2.0.dist-info/top_level.txt'
+adding 'jinwu_fermi-0.2.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built jinwu_fermi-0.2.0-py3-none-any.whl
+* Getting build dependencies for wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running egg_info
+writing src/jinwu_gw.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_gw.egg-info/dependency_links.txt
+writing entry points to src/jinwu_gw.egg-info/entry_points.txt
+writing requirements to src/jinwu_gw.egg-info/requires.txt
+writing top-level names to src/jinwu_gw.egg-info/top_level.txt
+reading manifest file 'src/jinwu_gw.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_gw.egg-info/SOURCES.txt'
+* Building wheel...
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:82: SetuptoolsDeprecationWarning: `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  corresp(dist, value, root_dir)
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/config/_apply_pyprojecttoml.py:61: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  dist._finalize_license_expression()
+/home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/setuptools/dist.py:765: SetuptoolsDeprecationWarning: License classifiers are deprecated.
+!!
+
+        ********************************************************************************
+        Please consider removing the following classifiers in favor of a SPDX license expression:
+
+        License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+  self._finalize_license_expression()
+running bdist_wheel
+running build
+running build_py
+copying src/jinwu/gw/alert.py -> build/lib/jinwu/gw
+copying src/jinwu/gw/models.py -> build/lib/jinwu/gw
+copying src/jinwu/gw/skymap.py -> build/lib/jinwu/gw
+running egg_info
+writing src/jinwu_gw.egg-info/PKG-INFO
+writing dependency_links to src/jinwu_gw.egg-info/dependency_links.txt
+writing entry points to src/jinwu_gw.egg-info/entry_points.txt
+writing requirements to src/jinwu_gw.egg-info/requires.txt
+writing top-level names to src/jinwu_gw.egg-info/top_level.txt
+reading manifest file 'src/jinwu_gw.egg-info/SOURCES.txt'
+writing manifest file 'src/jinwu_gw.egg-info/SOURCES.txt'
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/jinwu
+creating build/bdist.linux-x86_64/wheel/jinwu/gw
+copying build/lib/jinwu/gw/layers.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/alert.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/gracedb.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/cli.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/plot.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/pipeline.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/models.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/__main__.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/__init__.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/skymap.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+copying build/lib/jinwu/gw/coverage.py -> build/bdist.linux-x86_64/wheel/./jinwu/gw
+running install_egg_info
+Copying src/jinwu_gw.egg-info to build/bdist.linux-x86_64/wheel/./jinwu_gw-0.2.0-py3.12.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/jinwu_gw-0.2.0.dist-info/WHEEL
+creating '/tmp/jinwu-wheels/.tmp-s9bd2uav/jinwu_gw-0.2.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'jinwu/gw/__init__.py'
+adding 'jinwu/gw/__main__.py'
+adding 'jinwu/gw/alert.py'
+adding 'jinwu/gw/cli.py'
+adding 'jinwu/gw/coverage.py'
+adding 'jinwu/gw/gracedb.py'
+adding 'jinwu/gw/layers.py'
+adding 'jinwu/gw/models.py'
+adding 'jinwu/gw/pipeline.py'
+adding 'jinwu/gw/plot.py'
+adding 'jinwu/gw/skymap.py'
+adding 'jinwu_gw-0.2.0.dist-info/METADATA'
+adding 'jinwu_gw-0.2.0.dist-info/WHEEL'
+adding 'jinwu_gw-0.2.0.dist-info/entry_points.txt'
+adding 'jinwu_gw-0.2.0.dist-info/top_level.txt'
+adding 'jinwu_gw-0.2.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+Successfully built jinwu_gw-0.2.0-py3-none-any.whl
+total 828
+-rw-rw-r-- 1 xinxiang xinxiang 501576 Sep 20 15:36 jinwu-0.2.0-py3-none-any.whl
+-rw-rw-r-- 1 xinxiang xinxiang  35707 Sep 20 15:36 jinwu_ep-0.2.0-py3-none-any.whl
+-rw-rw-r-- 1 xinxiang xinxiang 143458 Sep 20 15:36 jinwu_fermi-0.2.0-py3-none-any.whl
+-rw-rw-r-- 1 xinxiang xinxiang  38153 Sep 20 15:36 jinwu_gw-0.2.0-py3-none-any.whl
+-rw-rw-r-- 1 xinxiang xinxiang 117079 Sep 20 15:36 jinwu_swift-0.2.0-py3-none-any.whl

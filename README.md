@@ -8,6 +8,7 @@
 | `jinwu-ep` | `jinwu.ep` | Einstein Probe (WXT) |
 | `jinwu-swift` | `jinwu.swift` | Swift/BAT |
 | `jinwu-fermi` | `jinwu.fermi` | Fermi/GBM |
+| `jinwu-gw` | `jinwu.gw` | GW localization and high-energy coverage plots |
 
 ### 通过 PyPI 安装
 
@@ -35,11 +36,13 @@ Especially, this repo devoting on EP/WXT&FXT data products process.
 ### 源码安装
 
 ```bash
-git clone https://github.com/Charon0922/jinwu.git
+git clone https://github.com/xinxiangsun/jinwu.git
 cd jinwu
 pip install -e packages/jinwu            # 核心（可编辑安装）
 pip install -e packages/jinwu-ep         # 按需安装仪器包
 pip install -e packages/jinwu-swift      # Swift/BAT（survey 适配器可选依赖）
+pip install -e packages/jinwu-fermi      # Fermi/GBM（响应生成可选依赖）
+pip install -e packages/jinwu-gw          # GW 天区与覆盖绘图
 ```
 
 Swift/BAT 单目标 survey 管线位于 `jinwu.swift.bat.survey`，按“本地发现 →

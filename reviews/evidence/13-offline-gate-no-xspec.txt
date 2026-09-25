@@ -1,0 +1,36 @@
+
+==================================== ERRORS ====================================
+_______________ ERROR collecting test/test_lf_model_structure.py _______________
+ImportError while importing test module '/home/xinxiang/research/jinwu/test/test_lf_model_structure.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../miniconda3/envs/hea/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test/test_lf_model_structure.py:96: in <module>
+    _load_module_objects()
+test/test_lf_model_structure.py:37: in _load_module_objects
+    module = importlib.import_module("jinwu.lf.redshift")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../miniconda3/envs/hea/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/jinwu/src/jinwu/lf/__init__.py:13: in <module>
+    from .legacy_redshift import RedshiftExtrapolator
+packages/jinwu/src/jinwu/lf/legacy_redshift.py:24: in <module>
+    import xspec as xs
+/tmp/blockxspec/xspec.py:1: in <module>
+    raise ImportError("xspec deliberately blocked: CI simulation")
+E   ImportError: xspec deliberately blocked: CI simulation
+=============================== warnings summary ===============================
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR test/test_lf_model_structure.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 deselected, 4 warnings, 1 error in 1.85s

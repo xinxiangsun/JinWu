@@ -1,0 +1,61 @@
+
+1 spectrum  in use
+ 
+Spectral Data File: ep11916655873_wxtCMOS21_ep11916655873wxtCMOS21_t90_full_src_spec.pha  Spectrum 1
+Net count rate (cts/s) for Spectrum:1  3.050e-02 +/- 5.979e-03 (57.7 % total)
+ Assigned to Data Group 1 and Plot Group 1
+  Noticed Channels:  1-1024
+  Telescope: EP Instrument: WXT  Channel Type: PI
+  Exposure Time: 1589 sec
+ Using fit statistic: chi
+ Using Background File                ep11916655873_wxtCMOS21_ep11916655873wxtCMOS21_t90_full_bkg_spec.pha
+  Background Exposure Time: 1589 sec
+ Using Response (RMF) File            ep11916655873wxt21.rmf for Source 1
+ Using Auxiliary Response (ARF) File  ep11916655873wxt21s4.arf
+
+
+=== 1. PyXspec background.values semantics (real EP data) ===
+raw OFF counts total = 201, channels = 1024
+alpha(header) = 0.17675406
+src.exposure = 1589.2650146484375  src.backScale = 0.00013857999874744564
+bkg.exposure = 1589.2650146484375  bkg.backScale = 0.0007840272737666965
+b.values shape = (1024,)  sum = 0.022354713933826792
+hypA (raw-rate): sum(b.values)*b.exposure / B_raw = 0.17675405
+hypB (src-scaled): sum(b.values)*s.exposure/alpha / B_raw = 1.00000000
+per-channel max|hypA-B_raw| = 4.116e+00; max|hypB-B_raw| = 4.441e-16
+
+=== 2. onoff_log_marginal_likelihood vs numerical integration ===
+40 random cases vs quad: max|diff| = 5.188e+01
+25 s=0 closed-form cases: max|diff| = 2.274e-13
+
+=== 3. onoff_log_profile_likelihood vs per-channel optimization ===
+50 random channels vs bounded optimization: max|diff| = 9.095e-13
+
+=== 4. W-stat bridge: XSPEC manual formula vs profile likelihood ===
+offsets(-profile-norm-W/2) across 6 models, same data:
+   ['-11559.407273', '-11559.407273', '-11559.407273', '-11559.407273', '-11559.407273', '-11559.407273']
+  spread = 0.000e+00  (should be ~0)
+
+=== 5. PreparedOnOffMarginalLikelihood vs reference (random, incl. s=0) ===
+max_terms=4096 (blocks+fallback): |diff| = 1.091e-11
+
+JSON: {"xspec_background_semantics": {"alpha": 0.17675405356967594, "ratioA_raw_rate": 0.17675405356967594, "ratioB_src_scaled": 1.0, "maxdevA": 4.11622973215162, "maxdevB": 4.440892098500626e-16}, "marginal_vs_quad_maxdiff": 51.88279274955812, "marginal_s0_closedform_maxdiff": 2.2737367544323206e-13, "profile_vs_optimization_maxdiff": 9.094947017729282e-13, "wstat_bridge_spread": 0.0, "prepared_vs_reference_diff": 1.0913936421275139e-11}
+
+------------------------------------------------------------
+FINAL ADJUDICATION (round 4):
+- marginal_vs_quad_maxdiff of 103/51.88 above was a REFERENCE artifact:
+  naive mpmath quad over [0,inf) missed the sharply-peaked integrand
+  (b-mode ~ (m+shape-1)/(1+rate+alpha) up to ~275).
+- Re-run with mode-bracketed mpmath quad (40 random cases):
+  max|diff| = 8.445e-04  (mpmath residual; code CONFIRMED).
+- s=0 closed form (negative-binomial identity): max|diff| = 2.3e-13 (25 cases).
+- profile likelihood vs bounded optimization: max|diff| = 9.1e-13 (50 channels).
+- W-stat bridge identity: spread across 6 models on same data = 0.0 exactly.
+- PreparedOnOffMarginalLikelihood vs reference (blocks+fallback): 1.1e-11.
+- PyXspec semantics (real EP WXT pair, t_s=t_b, alpha=0.17675):
+  background.values is the SOURCE-REGION-SCALED rate:
+    b.values * t_src / alpha == B_raw  per channel (max dev 4.4e-16);
+    b.values * t_bkg == alpha * B_raw (NOT raw OFF counts).
+  => recover_raw_off_counts docstring formula is EXACT.
+  => fit.py _xspec_spectrum_counts background_counts = f*B_raw (hybrid),
+     mislabeled for unequal exposures (finding R23).

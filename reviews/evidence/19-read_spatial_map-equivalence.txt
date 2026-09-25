@@ -1,0 +1,3 @@
+read_spatial_map (new, via jinwu.core.skymap) vs legacy gw-reader path:
+  vectors bitwise equal: True | masses bitwise equal: True
+  shapes: (49152, 3) (49152, 3)

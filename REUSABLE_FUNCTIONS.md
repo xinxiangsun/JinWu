@@ -78,7 +78,7 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `bayesian_blocks_exposure` | `jinwu.core.ops` | 曝光加权分箱贝叶斯块（支持 0 计数箱，返回变点箱索引），移植自 HEASoft burstcube | 2026-08-30 |
 | `iterative_bayesian_blocks` / `txx_iterbkg` | `jinwu.core.timescale` | 迭代背景自洽贝叶斯块（Giacomo 技巧 + prominence 定界 + 循环检测）与其 Txx 封装 | 2026-08-30 |
 | `txx`（拆分） | `jinwu.core.timescale` | 时标计算从 `ops.py` 拆入独立模块；`jinwu.core.ops.txx` 及 `_txx54_*` 助手保持兼容重导出 | 2026-08-30 |
-| `PhaWriter`/`RmfWriter`/`ArfWriter`（关键字对齐） | `jinwu.core.io` | 写出对齐 HEASoft 6.37 heasp 约定：PHA 补 `TLMIN1/TLMAX1/DETCHANS`；RMF 补 `DETCHANS/NUMGRP/NUMELT/TLMIN4` + header 透传；ARF 补 `HDUVERS` | 2026-08-30 |
+| `PhaWriter`/`RmfWriter`/`ArfWriter`（关键字对齐） | `jinwu.core.io` | 写出对齐 HEASoft 6.37 heasp 约定：PHA 补 `TLMIN1/TLMAX1/DETCHANS`；RMF 补 `DETCHANS/NUMGRP/NUMELT` 与实际 `F_CHAN` 列对应的 `TLMINn` + header 透传；ARF 补 `HDUVERS` | 2026-08-30 |
 | 读端结构化解析 + 通道校验 | `jinwu.core.io` / `jinwu.core.data` | `PhaData.tlmin/tlmax/det_chans`、`RmfData.tlmin/det_chans`、`ArfData.hduvers` 读入即解析（缺失时回退推断）；`RmfData.validate()` 新增 `INCONSISTENT_CHANNELS` 校验（F_CHAN+N_CHAN vs TLMIN+DETCHANS，同 6.37 heasp） | 2026-08-30 |
 | `check_response_compatibility` + validate 对齐 ftverify/heasp | `jinwu.core.ogip` | 谱↔响应通道兼容性检查；`validate()` 全面对齐 HEASoft 6.37 校验：HDUCLAS1/HDUCLAS2/HDUVERS、PHA 通道三件套自洽、RMF DETCHANS↔EBOUNDS、GTI 自洽（BAD_GTI/UNSORTED_GTI）；均从 `jinwu.core` 懒加载导出 | 2026-08-30 |
 | `SwiftGRB` / `SwiftGRBDataConfig` / `SwiftGRBSegmentationConfig` | `jinwu.core.config` | 单 GRB Swift BAT+XRT 的公共产品、分段、拟合和执行预设（插件保持惰性导入） | 2026-08-31 |
@@ -100,3 +100,30 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `onoff_log_marginal_likelihood` | `jinwu.core.model_comparison` | Analytic Poisson ON/OFF background marginal likelihood with a proper Gamma prior | 2026-09-02 |
 | `model_averaged_direction_probability_interval` / `onoff_log_profile_likelihood` | `jinwu.core.model_comparison` | Propagate evidence/q numerical intervals and provide a normalized ON/OFF profile diagnostic for W-stat cross-checks | 2026-09-02 |
 | `recover_raw_off_counts` | `jinwu.core.model_comparison` | Recover raw OFF PHA counts from PyXspec source-scaled background rates with fail-closed integer validation | 2026-09-04 |
+| `GBMPosHistSelection` / `find_gbm_poshist` / `estimate_gbm_orbit_period` | `jinwu.fermi.gbm.pipeline` | 按目标时刻选择真实或 RapidGBM 风格 30 轨历史 POSHIST，并记录预测来源 | 2026-09-06 |
+| `GBMGeometryState` / `fetch_poshist_for_time` / `read_gbm_geometry` | `jinwu.fermi.gbm.poshist` | 按时间取得 POSHIST 并读取单时刻地心位置、地球遮挡、SAA 和 GBM 指向 | 2026-09-06 |
+| `SkyMap` / `load_skymap` / `credible_region` / `probability_in_footprint` / `refined_probability` | `jinwu.gw.skymap` | 统一读取 LVK 多分辨率/普通 HEALPix 天图，计算可信区、MOC 覆盖概率和 10--13 阶收敛 | 2026-09-06 |
+| `SkyMapData` / `load_skymap` / `sky_map_pixel_vectors` | `jinwu.core.skymap` | 纯数据 HEALPix 天图读取（本地文件、嵌套 UNIQ、sr^-1 密度），供仪器包使用；jinwu-fermi 的 subthreshold 天图先验由此提供，不再依赖 jinwu-gw | 2026-09-20 |
+| `GWPipeline` / `run_gw_pipeline` | `jinwu.gw.pipeline` | 单 GW 警报天区、GBM 与 EP/BAT 图层交叉及静态报告 | 2026-09-06 |
+| `GraceDBClient` / `normalize_superevent_id` | `jinwu.gw.gracedb` | 匿名只读检索 GraceDB 超事件、公告版本与文件，支持事件页 URL | 2026-09-06 |
+| `spherical_cap_moc` | `jinwu.gw.layers` | 使用 MOCPy 锥体并以自适应 HEALPix 后备构造带来源方法的球冠 MOC | 2026-09-06 |
+| `fetch_gbm_products_for_interval` | `jinwu.fermi.gbm.pipeline` | 带单位上下文的跨小时/跨日连续产品下载；已泛化到 jinwu：是 | 2026-09-12 |
+| `GBMTargetedSearchInput` / `GBMTargetedSearchConfig` / `GBMTargetedSearchPipeline` / `run_targeted_search` | `jinwu.fermi.gbm.subthreshold` | 外部触发亚临界搜索、位置/天图先验、候选和统计定位产品；已泛化到 jinwu：是 | 2026-09-12 |
+| `calibrate_targeted_search` / `calibration_from_searches` / `estimate_candidate_far` | `jinwu.fermi.gbm.subthreshold.calibration` | 同配置离源搜索及有限曝光经验 FAR，零尾返回上限；已泛化到 jinwu：是 | 2026-09-12 |
+| `merge_tte_events` / `interval_exposure` / `read_detector_events` / `prepare_search_data` / `MeasuredHistory` | `jinwu.fermi.gbm.subthreshold.data` | 多重事件去重、GTI 活时间、背景和真实姿态；已泛化到 jinwu：是 | 2026-09-12 |
+| `make_search_windows` / `spatial_prior_weights` / `evaluate_search_likelihood` / `select_search_candidates` / `run_search_grid` | `jinwu.fermi.gbm.subthreshold.search` | 多尺度窗口、先验加权、GTS 核及候选筛选；已泛化到 jinwu：是 | 2026-09-12 |
+| `validate_search_templates` / `make_search_plots` / `write_candidate_localizations` | `jinwu.fermi.gbm.subthreshold.pipeline` / `plots` | 模板来源验证、光变/瀑布图、统计 HEALPix 与响应检查；已泛化到 jinwu：是 | 2026-09-12 |
+
+| `PreparedOnOffMarginalLikelihood` | `jinwu.core.model_comparison` | Exact normalized Gamma-Poisson ON/OFF likelihood with cached data terms | 是 |
+
+| `absorption_budget`, `AbsorptionBudget` | `packages/jinwu/src/jinwu/physics/absorption.py` | 单位化中性吸收截面/光深/占比，独立 XSPEC 进程，tbabs/atomic 后端，查询、绘图及导出；闭合失败显式掩码 | 是 |
+
+| `AbsorptionBudget.plot(fraction_scale=...)`, `.show()`, `.from_json()` | `jinwu.physics.absorption` | Accessible opacity plotting, log percentages, Notebook display and archived table reload | 是 |
+
+| `absorption_budget(backend="ztbabs")`, `AbsorptionBudget.plot(energy_scale=...)` | `jinwu.physics.absorption` | 原生 zTBabs/wilm 丰度缩放、线性能量轴与 tau=1 标注 / Native zTBabs/wilm scaling and tau=1 plots | 是 |
+
+| `absorption_budget` 教程 / tutorial | `examples/absorption/absorption_budget.ipynb`; `test/test_absorption_plot.py` | 自包含双语教程与自动化回归 / Self-contained bilingual tutorial and regression tests | 是 |
+
+| 吸收示例 / absorption examples | `examples/absorption/absorption_budget.ipynb`, `examples/absorption/absorption_budget.py` | 独立双语教程目录 / Dedicated bilingual example directory | 是 |
+
+| 其他示例教程 / Other tutorials | `examples/README.md`, `examples/migration_manifest.json` | 11 组双语迁移说明与 Notebook/Python 示例；状态分级 / 11 classified Notebook/script pairs | 是 |

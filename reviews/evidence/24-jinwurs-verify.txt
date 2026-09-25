@@ -1,0 +1,10 @@
+jinwurs loaded from: /tmp/jwtest/jinwurs/__init__.py
+200 conservation trials (full cover): max |sum_new/sum_orig - 1| = 4.34e-02
+_HAS_RUST = True
+binsize=   5.0 method=sum : max|dvalue|=0.000e+00 max|derror|=0.000e+00
+binsize=   5.0 method=mean: max|dvalue|=0.000e+00 max|derror|=0.000e+00
+binsize=  20.0 method=sum : max|dvalue|=0.000e+00 max|derror|=0.000e+00
+binsize=  20.0 method=mean: max|dvalue|=0.000e+00 max|derror|=0.000e+00
+binsize= 100.0 method=sum : max|dvalue|=0.000e+00 max|derror|=0.000e+00
+binsize= 100.0 method=mean: max|dvalue|=0.000e+00 max|derror|=0.000e+00
+200k-bin rebin (10x): rust 0.007s vs python 0.491s -> speedup x67.3

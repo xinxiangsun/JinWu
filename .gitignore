@@ -67,10 +67,22 @@ packages/jinwurs/Cargo.lock
 .qoder/
 # === External Dependencies (large / not in repo) ===
 external_sources/
-test/
+test/*
 tests/
 
 # Keep the maintained Swift survey contracts visible to version control.
 !packages/jinwu-swift/tests/
 !packages/jinwu-swift/tests/test_bat_survey.py
 
+# The GW/POSHIST tests live in the historical top-level test tree.
+!test/test_gw.py
+!test/test_gw_*.py
+!test/test_gbm_poshist_predict.py
+!test/test_gbm_subthreshold*.py
+!test/test_core_skymap.py
+!test/test_merge_regressions.py
+!test/test_base_time.py
+!test/test_gr.py
+!test/test_quickstart_examples.py
+!test/test_stage_code_deps.py
+.runtime/gbm-search-validation/

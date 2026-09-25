@@ -1,0 +1,48 @@
+.................ssssssss..s............................................ [  4%]
+........................................................................ [  9%]
+........................................................................ [ 14%]
+.................s...................................................... [ 19%]
+........................................................................ [ 24%]
+......s.............................................s...............s... [ 29%]
+.....s.......................ss....................ssssss............... [ 34%]
+........................................................................ [ 39%]
+..........s......................ssssssssssssssssssssssssss............. [ 44%]
+........................................................................ [ 48%]
+...........................................s............................ [ 53%]
+........................................................................ [ 58%]
+...............................s......................... [ 62%]
+........................................................................ [ 67%]
+.......................................................................s [ 72%]
+.............................................s.......................... [ 77%]
+........................................................................ [ 82%]
+........................................................................ [ 87%]
+........................................................................ [ 92%]
+........................................................................ [ 96%]
+.................................s...........                            [100%]
+=============================== warnings summary ===============================
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+../../miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/ligo/skymap/util/numpy.py:41: DeprecationWarning: _add_newdoc_ufunc is deprecated. Use `ufunc.__doc__ = newdoc` instead.
+
+test/test_data_b.py::TestTimescaleCompute::test_compute_with_synthetic_background
+  /home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/data.py:1539: RuntimeWarning: txx: 源/背景时间窗不完全一致，将使用公共时间范围 [100.302867, 462.376943] 进行约束。
+
+test/test_fit_a.py: 13 warnings
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/astropy/modeling/fitting.py:288: AstropyDeprecationWarning: Using LMLSQFitter for models with bounds is now deprecated since astropy 7.0. We recommend you use another non-linear fitter such as TRFLSQFitter or DogBoxLSQFitter instead as these have full support for fitting models with bounds
+
+test/test_gbm_poshist_predict.py::test_read_gbm_geometry_interpolates_and_flags
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/astropy/coordinates/baseframe.py:1978: NonRotationTransformationWarning: transforming other coordinates from <GCRS Frame (obstime=304.9999999999981, obsgeoloc=(0., 0., 0.) m, obsgeovel=(0., 0., 0.) m / s)> to <ICRS Frame>. Angular separation can depend on the direction of the transformation.
+
+test/test_ops_a.py::TestAutobin::test_autobin_with_background
+  /home/xinxiang/research/jinwu/test/test_ops_a.py:1112: RuntimeWarning: autobin: 保留了末尾低显著性但净计数为正的 tail bin。
+
+test/test_ops_b.py::TestTxx54PositiveScalar::test_nan_returns_none
+  /home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/timescale.py:378: RuntimeWarning: All-NaN slice encountered
+
+test/test_pipeline_products.py::test_plot_event_txx_uses_safe_filename_tokens_and_t100_resolution
+  /home/xinxiang/miniconda3/envs/hea/lib/python3.12/site-packages/astropy/utils/compat/numpycompat.py:42: AstropyPendingDeprecationWarning: COPY_IF_NEEDED is no longer needed now that astropy only supports numpy >= 2. It can be safely replaced with 'None'.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1416 passed, 54 skipped, 3 deselected, 22 warnings, 15 subtests passed in 27.11s

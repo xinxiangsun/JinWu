@@ -1,0 +1,3 @@
+20 multi-obs cases vs joint analytic: max|diff| = 6.250e-12
+flux path: upper=2.268328157300 analytic=2.268328157300
+  flux_upper=2.268328e-08  A_up*1e-8=2.268328e-08

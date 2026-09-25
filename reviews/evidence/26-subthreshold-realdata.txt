@@ -1,0 +1,14 @@
+{
+  "GW170817": {
+    "status": "needs_review",
+    "science_status": "needs_review",
+    "candidate_count": 0,
+    "report": "/tmp/jw-gw-validation/GW170817/partial_report.json"
+  },
+  "GRB140606A": {
+    "status": "needs_review",
+    "science_status": "needs_review",
+    "candidate_count": 0,
+    "report": "/tmp/jw-gw-validation/GRB140606A/partial_report.json"
+  }
+}

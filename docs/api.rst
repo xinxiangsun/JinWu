@@ -90,7 +90,10 @@ Spectral Analysis
 Response Matrix Utilities
 -------------------------
 
-.. automodapi:: jinwu.response
+GBM 响应生成已随 0.2.0 拆分移植到仪器包 ``jinwu.fermi.gbm.response``
+（原 ``jinwu.response`` 空壳已移除；本节经由 fermi 文档页展示）。
+
+.. automodapi:: jinwu.fermi.gbm.response
    :no-inheritance-diagram:
    :include-all-objects:
 
@@ -133,6 +136,11 @@ Fermi/GBM
 ---------
 
 .. automodapi:: jinwu.fermi.gbm
+
+GW localization and coverage
+----------------------------
+
+.. automodapi:: jinwu.gw
    :no-inheritance-diagram:
    :include-all-objects:
 
