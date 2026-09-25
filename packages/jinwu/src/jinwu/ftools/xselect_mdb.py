@@ -60,6 +60,13 @@ def _parse_value(s: str) -> Any:
     return s
 
 
+# 方法：xselect.mdb 解析规则与 XSELECT 任务库一致：'!' 起始为注释；键形如
+#       Mission:SubMission:Detector:Datamode:keyword（中间层级可省略），解析为
+#       上下文元组 + 关键字；查询时自最具体层级（mission:instrument:mode）向
+#       mission 层回退，即最低（最具体）层级的值覆盖高层级。
+# 参考：HEASoft 6.37 ftools/xselect/common/xselect.mdb 文件头（第 1-15 行：
+#       层级树格式与"keywords are inherited from higher levels"/
+#       "the value for the lowest level is used"规则）。
 def _parse_lines(lines):
     """Parse lines of an xselect.mdb file into a mapping.
 

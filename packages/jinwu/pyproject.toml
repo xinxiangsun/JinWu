@@ -49,6 +49,10 @@ ep = ["jinwu-ep>=0.2,<0.3"]
 swift = ["jinwu-swift>=0.2,<0.3"]
 fermi = ["jinwu-fermi>=0.2,<0.3"]
 gbm = ["jinwu-fermi>=0.2,<0.3"]
+gw = ["jinwu-gw>=0.2,<0.3"]
+# Pure-data HEALPix sky-map reader (jinwu.core.skymap); consumed by
+# jinwu-fermi[search-skymap] without pulling in the full jinwu-gw stack.
+skymap = ["astropy-healpix>=1.0"]
 crossmatch = [
     "pandas",
     "astroquery",

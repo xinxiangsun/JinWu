@@ -362,6 +362,8 @@ def resolve_xray_model_specs(
     return tuple(selected)
 
 
+# 方法：以似然拟合统计量（对 cstat/wstat 即 deviance=-2lnL 加仅依赖数据的常数，模型比较时常数相消）加复杂度惩罚做模型选择；关键式：AIC=stat+2k；AICc=AIC+2k(k+1)/(n-k-1)；BIC=stat+k*ln(n)；其中 k=自由参数数、n=dof+k=拟合 bin 数（与 XSPEC dof=bin数-自由参数数一致）
+# 参考：Akaike 1974, IEEE Trans. Autom. Control 19, 716；Burnham & Anderson 2002, Model Selection and Multimodel Inference, 2nd ed., Springer (AICc 校正项)；Schwarz 1978, Ann. Statist. 6, 461；dof 定义见本地 HEASoft 6.37 源码 Xspec/src/XSFit/Fit/StatManager.cxx:702
 def calculate_model_fit_metrics(
     statistic: float,
     dof: int,
@@ -398,6 +400,8 @@ def calculate_model_fit_metrics(
     )
 
 
+# 方法：以嵌套采样得到的贝叶斯对数证据 logZ=ln∫L(θ)π(θ)dθ 作为模型排名指标（Poisson 似然与先验下模型的全域支持度），ΔlogZ（含 logzerr 误差棒）替代 AIC/BIC 用于贝叶斯模型比较
+# 参考：Buchner et al. 2014, A&A 564, A125 (arXiv:1402.0004, BXA)；Buchner 2021, J. Open Source Softw. 6, 3001 (UltraNest)；Feroz, Hobson & Bridges 2009, MNRAS 398, 1601 (MultiNest/嵌套采样基础)
 def calculate_bayesian_model_metrics(
     logz: float,
     logzerr: float | None,
@@ -880,6 +884,8 @@ class LightcurveFitter:
             residuals = self.value - fitted
             
             # 计算卡方
+            # 方法：加权最小二乘 χ²=Σ((data-fitted)/σ)²，dof=N-k，约化卡方=χ²/dof；astropy 拟合 weights=1/σ 即最小化该 χ²（absolute_sigma=False 时协方差按约化卡方缩放）
+            # 参考：Bevington & Robinson 2003, Data Reduction and Error Analysis for the Physical Sciences, 3rd ed., McGraw-Hill（最小二乘与协方差缩放惯例）
             if sigma is not None:
                 chisq = np.sum((residuals / sigma) ** 2)
             else:
@@ -1173,7 +1179,10 @@ class LightcurveFitter:
 
         返回
         ----
-        ``(fig, (ax1, ax2))``：figure 与主图/残差图坐标轴（无残差时 ax2 为 None）
+        ``(ax1, ax2)``：主图与残差图坐标轴（无残差时 ax2 为 None）；
+        figure 经 ``ax1.figure`` 获取。与 master 保持同一返回结构——beta 曾改为
+        ``return fig, (ax1, ax2)``，master 风格的 ``ax1, ax2 = plot_fit(...)`` 调用
+        会把 Figure 静默解包进 ax1（已修复，0.2.0 回归项）。
         """
         try:
             import matplotlib.pyplot as plt
@@ -1782,7 +1791,8 @@ class LightcurveFitter:
             # tight_layout 可能在某些情况下失败（特别是智能标签放置后）
             # 静默忽略，布局可能略有偏差但不影响使用
             pass
-        return fig, (ax1, ax2)
+        # 返回结构与 master 一致：(ax1, ax2)；figure 用 ax1.figure 获取。
+        return ax1, ax2
 
 
 # =============================================================================
@@ -1982,6 +1992,8 @@ def _xspec_fit_dof(value) -> int | None:
         return None
 
 
+# 方法：调用 XSPEC 内置 MCMC（chain 命令）对当前全部自由参数采样：algorithm='gw' 为 XSPEC 默认的 Goodman-Weare 仿射不变集成采样器（多游走者）、'mh' 为 Metropolis-Hastings；burn/runLength/walkers 默认值与 XSPEC 一致（walkers=10、gw）
+# 参考：Goodman & Weare 2010, Commun. Appl. Math. Comput. Sci. 5, 65（GW 集成采样）；XSPEC manual chain 命令；本地 HEASoft 6.37 源码 Xspec/src/XSUser/Handler/xsChain.cxx:41,47（默认 walkers=10、type='gw'）与 636-641（mh=Metropolis-Hastings / gw=Goodman-Weare）
 def run_xspec_chain(
     *,
     chain_path: str | Path,
@@ -2088,6 +2100,8 @@ def run_xspec_chain(
     )
 
 
+# 方法：XSPEC 误差搜索的 9 位状态串按位（bit0=1, bit1=2, ..., bit8=256）对应九种异常，'T' 置位、全 'F' 表示搜索未报异常；从未计算时初始值即 "FFFFFFFFF"
+# 参考：本地 HEASoft 6.37 源码 Xspec/src/XSFit/Fit/FitErrorCalc.h:55（ErrorCalcCodes: NEWMIN=1..TOOLARGE=256）与 FitErrorCalc.cxx errCodeToString；Fit.cxx:1264（TOOLARGE=约化卡方超上限拒绝误差计算）；ModParam.cxx:51（初始 "FFFFFFFFF"）
 #: XSPEC 九位误差状态串各位的含义（tclout error / Parameter.error[2]）。
 #: 每位 T 表示该异常发生，全 'F' 表示搜索本身未报异常。
 _XSPEC_ERROR_STATUS_FLAGS: tuple[str, ...] = (
@@ -2112,6 +2126,8 @@ def _decode_xspec_error_status(status: str) -> list[str]:
     return reasons
 
 
+# 方法：区分"轮廓误差从未计算"与"真实轮廓区间"——HEASoft 6.36+ 未运行 error 时 PyXspec Parameter.error 返回数值哨兵 (0.0, 0.0) 且状态串 'FFFFFFFFF'（ModParam 初始化 m_emn=m_epo=0），旧版哨兵为 (2v, 2v)；真实区间取 |bound-value|（非对称）
+# 参考：本地 HEASoft 6.37 源码 Xspec/src/XSModel/Parameter/ModParam.cxx:47-65（m_epo(0.)/m_emn(0.) 初始化）；Xspec/src/XSUser/Python/xspec/parameter.py:_getError（getParTuple 索引 6-8 = 下界,上界,状态串）
 def _classify_parameter_error(param, param_val: float, *, errors_computed: bool = True) -> tuple[dict[str, Any], str]:
     """读取 PyXspec ``Parameter.error`` 三元组并按参数归类误差状态。
 
@@ -2209,6 +2225,14 @@ def _generate_xspec_result(
     """
     xspec = _require_xspec()
 
+    def warn(component: str, exc: Exception) -> None:
+        message = f"XSPEC {component} unavailable: {type(exc).__name__}: {exc}"
+        if warnings_list is not None:
+            warnings_list.append(message)
+        else:
+            import warnings
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+
     lines = []
     result = {}
     result['model'] = model.expression
@@ -2277,7 +2301,8 @@ def _generate_xspec_result(
         xspec.AllModels.calcFlux(f"{emin} {emax}")
         flux_erg = float(spectrum.flux[0])
         flux_photons = float(spectrum.flux[3])
-    except Exception:
+    except Exception as exc:
+        warn("flux", exc)
         flux_erg = None
         flux_photons = None
         emin = None
@@ -2296,7 +2321,8 @@ def _generate_xspec_result(
     try:
         rate = float(spectrum.rate[0])
         rate_err = float(spectrum.rate[1]) if len(spectrum.rate) > 1 else None
-    except Exception:
+    except Exception as exc:
+        warn("rate", exc)
         rate = None
         rate_err = None
 
@@ -2316,7 +2342,8 @@ def _generate_xspec_result(
     if rate is not None and rate > 0 and flux_erg is not None and flux_erg > 0:
         try:
             conv_factor = 10**model.cflux.lg10Flux.values[0] / rate
-        except Exception:
+        except Exception as exc:
+            warn("conversion factor", exc)
             conv_factor = None
     else:
         conv_factor = None
@@ -2324,6 +2351,7 @@ def _generate_xspec_result(
     result['conversion'] = {
         'exposure_s': exposure,
         'erg_per_count': conv_factor,
+        'counts': photon_counts,
         'total_counts': photon_counts,
     }
 
@@ -2352,7 +2380,8 @@ def _generate_xspec_result(
             'reduced': statdof,
             'null_hypothesis_probability': null_prob
         }
-    except Exception:
+    except Exception as exc:
+        warn("fit statistics", exc)
         result['statistics'] = {}
 
     result['text'] = "\n".join(lines)
@@ -2427,6 +2456,8 @@ def _prepared_error_parameters(
     return " ".join((prefix, *parameter_indices)) if parameter_indices else ""
 
 
+# 方法：XSPEC error 命令的单参数轮廓（profile）置信区间：Δstat=stat(θ)-stat_min 达到阈值处即区间端点；关键式：Δ=1.0 对应单参数 1σ/68.3%（置信度 0.682689492137=erf(1/√2)），Δ=2.706 对应 90%（χ²1 分布上分位数），3σ 对应 Δ=9.0
+# 参考：Cash 1979, ApJ 228, 939；Baker & Cousins 1984, Nucl. Instrum. Methods Phys. Res. A 221, 437（2ΔlnL↔χ² 等价）；XSPEC manual "Fits and Confidence Intervals"/error 命令（2.706→单参数 90%）
 def _profile_error_metadata(delta_stat: float) -> dict[str, Any]:
     """Describe the one-parameter XSPEC profile interval for ``delta_stat``."""
 
@@ -2928,9 +2959,15 @@ def fit_prepared(
     frozen_parameters: Mapping[str, float] | None = None,
     redshift: float = 0.0,
     redshift_absorbers: Sequence[float] | None = None,
-    stat_method: str | None = None,
-    abundance: str | None = None,
-    cross_section: str | None = None,
+    # 与 master 一致恢复显式默认值（statistic="cstat", abundance="wilm",
+    # cross_section="vern"）。beta 曾默认 None 并隐式回退到进程级
+    # get_fit_settings()，导致同一进程内其它代码调用 set_fit_settings()/
+    # set_fit_method() 会静默改变本函数行为（全局状态副作用，0.2.0 已修复）。
+    # 需要"进程级拟合设置"的调用方请走 fit_spectral(settings=...)，由它把
+    # FitConfig 解析成显式实参传入本函数；直接调用本函数时行为只取决于实参。
+    stat_method: str = "cstat",
+    abundance: str = "wilm",
+    cross_section: str = "vern",
     galactic_nh_1e22: float | None = None,
     freeze_galactic_nh: bool = True,
     intrinsic_nh_mode: Literal["free", "zero"] = "free",
@@ -2942,24 +2979,14 @@ def fit_prepared(
     plot_backend: str = "matplotlib",
     plot_format: str = "png",
     plot_formats: Sequence[str] | None = None,
-    plot_dpi: int = 300,
+    # 参数名与 master 一致为 plot_density（传给 plotfit 的 density=，是绘图
+    # 采样密度而非 DPI；beta 曾更名为 plot_dpi，属静默破坏性改名，已回退）。
+    plot_density: int = 300,
     plot_required: bool = False,
 ) -> dict:
     """Fit one prepared spectrum or multiple prepared spectra with XSPEC."""
     from jinwu.core.plot import plotfit
     from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum
-
-    # Resolve None sentinels against the process-wide fit settings.  The
-    # packaged FitConfig defaults (statistic="cstat", abundance="wilm",
-    # cross_section="vern") match the historical hardcoded defaults exactly, so
-    # a bare call behaves identically unless the user changed global settings.
-    # ``model_name`` deliberately keeps its own hardcoded default (see plan).
-    _settings = get_fit_settings()
-    stat_method = stat_method if stat_method is not None else _settings.statistic
-    abundance = abundance if abundance is not None else _settings.abundance
-    cross_section = (
-        cross_section if cross_section is not None else _settings.cross_section
-    )
 
     error_metadata = _profile_error_metadata(error_delta_stat)
     if isinstance(prepared, PreparedSpectrum):
@@ -3195,6 +3222,8 @@ def fit_prepared(
         "error_command": command if calculate_errors else None,
         "profile_errors_succeeded": profile_errors_succeeded,
     }
+    # 方法：XSPEC 统计命令选 cstat 且光谱挂载 Poisson 背景文件时，实际计算的是 W 统计量——对每 bin 背景率 f̂ 做 profile likelihood 解析消去背景阈值参数（s>0,b>0 分支 f̂ 由二次方程 ti*f^2+(ti*y-s-b)*f-b*y=0 的正根给出，总统计量=2Σ半贡献），故此处把 (cstat+背景) 报告为 wstat
+    # 参考：Cash 1979, ApJ 228, 939；Humphrey, Liu & Buote 2009, ApJ 693, 822（W 统计量推导）；XSPEC manual Appendix B "Statistics in XSPEC"；本地 HEASoft 6.37 源码 Xspec/src/XSStat/CstatVariants.cxx（specificPerformB 五分支闭式）与 Cstat.h:307（statValues*=2.0）
     results["effective_statistic"] = (
         "wstat"
         if stat_method.lower() == "cstat"
@@ -3223,7 +3252,7 @@ def fit_prepared(
                 outputdir=output,
                 backend=plot_backend,
                 output_format=requested_format,
-                density=plot_dpi,
+                density=plot_density,
             )
             if figure_path is not None:
                 plot_paths.append(str(figure_path))
@@ -3377,6 +3406,8 @@ def _metric_value(metrics: ModelFitMetrics, metric: str) -> float:
     return float(value)
 
 
+# 方法：Akaike 权重 w_i=exp(-0.5Δ_i)/Σ_j exp(-0.5Δ_j)（Δ 为相对最优模型的 AICc 差，AICc 不可用时退回 AIC），表示"模型 i 为给定候选集中最优近似"的相对可信度
+# 参考：Burnham & Anderson 2004, Sociol. Methods Res. 33, 261；Burnham & Anderson 2002, Model Selection and Multimodel Inference, 2nd ed., Springer
 def _decorate_model_metrics(
     metrics: Mapping[str, ModelFitMetrics],
     requested_metric: str,
@@ -3479,6 +3510,8 @@ def _candidate_is_well_constrained(
     return not problems, problems
 
 
+# 方法：ΔC 的朴素似然比 p 值按 χ²1 上尾计算：p=P(χ²1>ΔC)=0.5*erfc(sqrt(ΔC/2))；因检验对象 nH=0 位于参数空间边界，朴素 χ² LRT p 值不成立（正确零分布为 0.5χ²0+0.5χ²1 混合），故该值仅作描述性参考（字段名 boundary_lrt_p_reference_only）并显式警告、不使用 F 检验
+# 参考：Baker & Cousins 1984, Nucl. Instrum. Methods Phys. Res. A 221, 437（2ΔlnL↔χ²）；Protassov et al. 2002, ApJ 571, 545（边界参数 LRT 禁用约定）
 def _absorption_comparisons(
     candidates: Mapping[str, Mapping[str, Any]],
     metrics: Mapping[str, ModelFitMetrics],
@@ -3535,6 +3568,8 @@ def _absorption_comparisons(
     return comparisons
 
 
+# 方法：模型采用的决策规则：信息准则差 Δ<2 视为统计不可区分并按简约性选自由参数更少者；挑战模型需较基线改进 Δ≥6（"相当支持"量级）且关键参数受约束良好才被采纳（2.0/6.0 为约定经验阈值）
+# 参考：Burnham & Anderson 2004, Sociol. Methods Res. 33, 261（Δ 阈值经验标尺：≤2 等价、4-7 相当差异、>10 实质无支持）
 def _choose_xray_model(
     specs: Mapping[str, XRayModelSpec],
     candidates: Mapping[str, Mapping[str, Any]],

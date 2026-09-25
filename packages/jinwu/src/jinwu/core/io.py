@@ -178,6 +178,11 @@ def _mission_timezero_object(telescop: Optional[str], timezero: float, *, allow_
                        "please report the related header keywords to the authors")
 
 
+# 方法：GTI 扩展识别：扩展名（EXTNAME/HDU 名）='GTI'，时间列按 START/STOP 读取
+#       （TSTART/TSTOP 仅作兼容别名，标准名优先）。
+# 参考：OGIP/93-003 "The Proposed Timing FITS File Format for High Energy
+#       Astrophysics Data"（Angelini, Pence & Tennant, Legacy 3, 32）——
+#       GTI 扩展含 START/STOP 两列。
 def _extract_gti(hdul: fits.HDUList) -> Optional[list[tuple[float, float]]]:
     if hdul is None:
         return None
@@ -346,6 +351,10 @@ def _opt_int(value: Any) -> Optional[int]:
         return None
 
 
+# 方法：F_CHAN 的 TLMIN 采用"文件声明优先、缺失回退推断"：先读 TLMINn（F_CHAN 列的
+#       TLMIN，标准列布局下为第 4 列即 TLMIN4），无声明时取 F_CHAN 列最小值作为首道号。
+# 参考：HEASoft 6.37 heacore/heasp/rmf.cxx rmf::readMatrix（先读 TLMIN<F_CHAN 列索引>，
+#       读不到时回退 min(F_CHAN)：最小值为 0 则取 0，否则取 1）。
 def _infer_rmf_tlmin(header: Mapping[str, Any], f_chan: Optional[np.ndarray]) -> Optional[int]:
     """F_CHAN 的 TLMIN（0 基/1 基约定）：优先读文件声明的 TLMINn（n>1），
     否则从 F_CHAN 列最小值推断（对齐 HEASoft 6.37 heasp::rmf 行为）。"""
@@ -422,6 +431,13 @@ class OgipRmfReader:
             # names describe the same response table; rejecting the former
             # prevents deterministic ``fakeit`` templates from being read
             # back for otherwise valid survey PHA files.
+            # 方法：RMF 矩阵扩展按 "MATRIX" → "SPECRESP MATRIX" 顺序接受（两者同为
+            #       OGIP RMF 矩阵扩展的不同年代命名），与 heasp 的查找优先级一致。
+            # 参考：HEASoft 6.37 heacore/heasp/rmf.cxx rmf::readMatrix（先按 EXTNAME=
+            #       "MATRIX" 定位，失败再试 "SPECRESP MATRIX"，最后回退
+            #       HDUCLAS1=RESPONSE + HDUCLAS2=RSP_MATRIX）；
+            #       格式定义 CAL/GEN/92-002 "The Calibration Requirements for
+            #       Spectral Analysis (Definition of RMF and ARF file formats)"。
             matrix_name = next(
                 (
                     name
@@ -729,8 +745,8 @@ class OgipLightcurveReader:
                 tseg = None
             headers_dump = _collect_headers_dump(h)
             meta = _build_meta(h, header)
-            if timezero_obj is None:
-                raise ValueError('无法构建 timezero_obj，请检查 TELESCOP/MJDREF/时间字段')
+            # Relative light curves remain useful without mission time metadata.
+            # Their absolute-time object is intentionally unavailable.
             exposure = None
             if 'EXPOSURE' in header:
                 try:
@@ -1029,7 +1045,12 @@ class PhaWriter:
         channels = np.asarray(pha.channels, dtype=int)
         counts = np.asarray(pha.counts, dtype=float)
         cols.append(fits.Column(name='CHANNEL', format='J', array=channels))
-        cols.append(fits.Column(name='COUNTS', format='E', array=counts))
+        rate_only = (
+            pha.rate is not None
+            and (pha.exposure is None or not np.isfinite(pha.exposure) or pha.exposure <= 0)
+        )
+        if not rate_only:
+            cols.append(fits.Column(name='COUNTS', format='E', array=counts))
 
         if getattr(pha, 'rate', None) is not None:
             cols.append(fits.Column(name='RATE', format='E', array=np.asarray(pha.rate, dtype=float)))
@@ -1038,6 +1059,10 @@ class PhaWriter:
         if pha.quality is not None:
             cols.append(fits.Column(name='QUALITY', format='J', array=np.asarray(pha.quality, dtype=int)))
         if pha.grouping is not None:
+            # 方法：GROUPING 列采用 OGIP 分组标记：+1=新分组起始道，-1=同组延续道，
+            #       0=未分组/忽略；写出前把旧版"组号编码"归一化为该标记。
+            # 参考：OGIP/92-007 "The OGIP Spectral File Format" §3.1.2
+            #       （Grpg=+1 为新 bin 起始，-1 为延续，0 为未定义分组）。
             g = _normalize_grouping_to_flags(np.asarray(pha.grouping, dtype=int))
             cols.append(fits.Column(name='GROUPING', format='J', array=g))
 
@@ -1050,6 +1075,11 @@ class PhaWriter:
 
         # 通道编号三件套（HEASoft 6.37 heasp::pha 写入约定：总是写全）。
         # 优先用读入时解析的结构化字段；否则以本文件实际通道数组为准。
+        # 方法：总是写出 TLMIN1=首道、TLMAX1=末道、DETCHANS=道数，并写
+        #       HDUCLASS=OGIP、HDUCLAS1=SPECTRUM、CHANTYPE（见上方写出）。
+        # 参考：HEASoft 6.37 heacore/heasp/pha.cxx pha::write（SPwriteKey：
+        #       DETCHANS、TLMIN1=FirstChannel、TLMAX1=FirstChannel+DetChans-1，
+        #       HDUCLASS="OGIP"、HDUCLAS1="SPECTRUM"、CHANTYPE）。
         if channels.size > 0:
             _tlmin1 = getattr(pha, 'tlmin', None)
             _tlmax1 = getattr(pha, 'tlmax', None)
@@ -1067,7 +1097,7 @@ class PhaWriter:
         elif pha.header is not None and 'INSTRUME' in pha.header:
             hdr['INSTRUME'] = str(pha.header['INSTRUME'])
 
-        if pha.exposure is not None:
+        if pha.exposure is not None and np.isfinite(pha.exposure) and pha.exposure > 0:
             hdr['EXPOSURE'] = float(pha.exposure)
         if pha.backscal is not None:
             hdr['BACKSCAL'] = float(pha.backscal)
@@ -1083,7 +1113,7 @@ class PhaWriter:
                 key = str(k).upper()
                 if key in hdr:
                     continue
-                if key in {'SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND'}:
+                if key in {'SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND'} or (rate_only and key in {'EXPOSURE', 'EXPTIME'}):
                     continue
                 try:
                     hdr[key] = v
@@ -1137,6 +1167,13 @@ class ArfWriter:
             fits.Column(name='SPECRESP', format='E', array=np.asarray(arf.specresp, dtype=float)),
         ]
         hdu = fits.BinTableHDU.from_columns(cols, name='SPECRESP')
+        # 方法：ARF 写出列序 ENERG_LO/ENERG_HI/SPECRESP（32 位浮点）与关键字集
+        #       EXTNAME=SPECRESP、HDUCLASS=OGIP、HDUCLAS1=RESPONSE、
+        #       HDUCLAS2=SPECRESP、HDUVERS 缺省 1.1.0，与 heasp 写出约定一致。
+        # 参考：HEASoft 6.37 heacore/heasp/arf.cxx arf::write（ttype 依次为
+        #       ENERG_LO/ENERG_HI/SPECRESP，SPwriteKey HDUCLASS="OGIP"、
+        #       HDUCLAS1="RESPONSE"、HDUCLAS2="SPECRESP"、HDUVERS="1.1.0"）；
+        #       格式定义 CAL/GEN/92-002（ARF = SPECRESP 扩展）。
         hdu.header['EXTNAME'] = 'SPECRESP'
         hdu.header['HDUCLASS'] = 'OGIP'
         hdu.header['HDUCLAS1'] = 'RESPONSE'
@@ -1198,6 +1235,12 @@ class RmfWriter:
 
         # 响应矩阵统计与通道约定键（对齐 HEASoft 6.37 heasp::rmf 写入约定），
         # 供下游工具的 F_CHAN+N_CHAN vs TLMIN+DETCHANS 一致性校验使用。
+        # 方法：写出 DETCHANS=通道数、NUMGRP=ΣN_GRP（每行组数之和）、
+        #       NUMELT=矩阵元素总数、TLMINn=F_CHAN 列首道。
+        # 参考：HEASoft 6.37 heacore/heasp/rmf.cxx rmf::write（SPwriteKey
+        #       DETCHANS、NUMGRP、NUMELT、TLMIN4=FirstChannel）与
+        #       heacore/heasp/rmf.h（NumberTotalGroups=Σ每行组数、
+        #       NumberTotalElements=Σ矩阵元素数）。
         n_det = getattr(rmf, 'det_chans', None)
         if n_det is None:
             if rmf.e_min is not None:
@@ -1240,14 +1283,15 @@ class RmfWriter:
                     tlmin4 = int(vals.min())
             except Exception:
                 pass
-        if tlmin4 is not None:
-            hdu_mat.header['TLMIN4'] = tlmin4
+        f_chan_column = (hdu_mat.columns.names.index('F_CHAN') + 1) if 'F_CHAN' in hdu_mat.columns.names else None
+        if tlmin4 is not None and f_chan_column is not None:
+            hdu_mat.header[f'TLMIN{f_chan_column}'] = tlmin4
 
         # 源 header 透传（与 PhaWriter 同策略；已写入的键不被覆盖）
         if rmf.header is not None:
             for k, v in dict(rmf.header).items():
                 key = str(k).upper()
-                if key in hdu_mat.header:
+                if key in hdu_mat.header or (key.startswith('TLMIN') and key[5:].isdigit()):
                     continue
                 if key in {'SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND'}:
                     continue
@@ -1354,6 +1398,7 @@ class EventWriter:
                     hdu_evt.header[key] = v
                 except Exception:
                     continue
+        hdu_evt.header['TIMEZERO'] = float(ev.timezero or 0.0)
         prih = fits.PrimaryHDU()
         hdul = fits.HDUList([prih, hdu_evt])
 
@@ -1381,7 +1426,7 @@ def guess_ogip_kind(path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt']:
         extnames = {getattr(x, 'name', '').upper() for x in h}
         if 'SPECRESP' in extnames and 'MATRIX' not in extnames:
             return 'arf'
-        if 'MATRIX' in extnames:
+        if 'MATRIX' in extnames or 'SPECRESP MATRIX' in extnames:
             return 'rmf'
         if 'SPECTRUM' in extnames:
             return 'pha'

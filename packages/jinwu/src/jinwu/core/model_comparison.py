@@ -524,7 +524,88 @@ def onoff_log_profile_likelihood(
     return float(total)
 
 
+class PreparedOnOffMarginalLikelihood:
+    """Exact cached Gamma-Poisson ON/OFF marginal likelihood.
+
+    Parameters are raw dimensionless ON/OFF counts and the positive ON/OFF
+    exposure-area ratio ``alpha``. Background prior shape and rate use the
+    same normalized convention as :func:`onoff_log_marginal_likelihood`.
+    ``max_terms`` limits each temporary coefficient block; bins exceeding it
+    use the reference implementation. Inputs are copied. Calling the object
+    with expected source counts returns the normalized scalar log likelihood.
+
+    Only data-dependent combinatorial terms are cached; no likelihood,
+    response, parameter prior or model approximation is introduced.
+    """
+    def __init__(self, source_counts: Any, background_counts: Any, alpha: Any,
+                 *, background_prior_shape: float = 0.5,
+                 background_prior_rate: float = 1e-6, max_terms: int = 1_000_000):
+        self.on = _as_count_array(source_counts, "source_counts").copy()
+        self.off = _as_count_array(background_counts, "background_counts").copy()
+        if self.on.shape != self.off.shape:
+            raise ValueError("ON/OFF count shapes must match")
+        scale = np.asarray(alpha, dtype=float)
+        self.alpha = np.broadcast_to(scale, self.on.shape).copy()
+        if np.any(~np.isfinite(self.alpha)) or np.any(self.alpha <= 0):
+            raise ValueError("alpha must be positive and finite")
+        self.shape = float(background_prior_shape)
+        self.rate = float(background_prior_rate)
+        if not np.isfinite(self.shape) or self.shape <= 0 or not np.isfinite(self.rate) or self.rate <= 0:
+            raise ValueError("background Gamma parameters must be positive and finite")
+        if isinstance(max_terms, bool) or int(max_terms) != max_terms or max_terms < 1:
+            raise ValueError("max_terms must be a positive integer")
+        self.blocks = []
+        self.fallback = []
+        start = 0
+        while start < self.on.size:
+            if self.on[start] + 1 > max_terms:
+                self.fallback.append(start)
+                start += 1
+                continue
+            end = start + 1
+            width = int(self.on[start]) + 1
+            while end < self.on.size:
+                next_width = max(width, int(self.on[end]) + 1)
+                if (end + 1 - start) * next_width > max_terms:
+                    break
+                width = next_width
+                end += 1
+            n = self.on[start:end, None]
+            m = self.off[start:end, None]
+            a = self.alpha[start:end, None]
+            k = np.arange(width, dtype=float)[None, :]
+            valid = k <= n
+            power = np.maximum(n - k, 0)
+            coefficients = (
+                -gammaln(k + 1) - gammaln(power + 1)
+                + k * np.log(a) + gammaln(m + self.shape + k)
+                - (m + self.shape + k) * np.log1p(a + self.rate)
+                + self.shape * math.log(self.rate) - gammaln(self.shape)
+                - gammaln(m + 1)
+            )
+            coefficients[~valid] = -np.inf
+            self.blocks.append((start, end, power, coefficients))
+            start = end
+
+    def __call__(self, source_model_counts: Any) -> float:
+        from scipy.special import xlogy
+        source = np.asarray(source_model_counts, dtype=float).reshape(-1)
+        if source.shape != self.on.shape or np.any(~np.isfinite(source)) or np.any(source < 0):
+            raise ValueError("source counts must be finite, non-negative and match data")
+        total = 0.0
+        for start, end, power, coefficients in self.blocks:
+            s = source[start:end]
+            total += float(np.sum(logsumexp(coefficients + xlogy(power, s[:, None]), axis=1) - s))
+        for index in self.fallback:
+            total += onoff_log_marginal_likelihood(
+                self.on[index:index+1], self.off[index:index+1], source[index:index+1],
+                self.alpha[index:index+1], background_prior_shape=self.shape,
+                background_prior_rate=self.rate)
+        return total
+
+
 __all__ = [
+    "PreparedOnOffMarginalLikelihood",
     "BayesFactorResult",
     "EmpiricalTailResult",
     "model_averaged_direction_probabilities",

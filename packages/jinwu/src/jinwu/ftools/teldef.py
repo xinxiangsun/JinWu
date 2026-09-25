@@ -127,6 +127,15 @@ class Teldef:
             cd = np.array([[cd_vals[0], cd_vals[1]], [cd_vals[2], cd_vals[3]]], dtype=float)
 
         # attempt to parse ALIGNM (3x3) and focal length / detector scales (SWIFT-style)
+        # 方法：teldef 关键字识别与 coordfits 命名约定一致：DETXPIX1/DETYPIX1
+        #       （坐标根名+"XPIX1"）、DET_XSCL/DET_YSCL（根名+"_XSCL/_YSCL"）、
+        #       DET_XSIZ/DET_YSIZ（根名+"_XSIZ/_YSIZ"）、FOCALLEN、
+        #       OPTAXISX/OPTAXISY、ALIGNM11..ALIGNM33、DET_ROTD、RAWFLIPY、CORINRAW。
+        # 参考：HEASoft 6.37 attitude/lib/coordfits：teldef.c
+        #       setCoordinatesFromKeywordsInTeldef（键名拼为 <NAME>XPIX1/<NAME>_XSIZ/
+        #       <NAME>_XSCL 等）、teldef_coord.c（readKey FOCALLEN；DET_ROTD/RAWFLIPY
+        #       约定）、tr_telescope.c（OPTAXISX/OPTAXISY）、align.c（ALIGNM%d%d）、
+        #       teldef_nonlinear.c（CORINRAW）。
         align = None
         m_align = []
         for i in range(1,4):

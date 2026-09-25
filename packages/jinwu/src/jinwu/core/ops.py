@@ -574,6 +574,16 @@ def slice_pha(
             mask &= (pha.channels <= int(ch_hi))
         sel_idx = np.where(mask)[0]
     
+    sliced_ebounds = None
+    if pha.ebounds is not None:
+        eb_ch, eb_lo, eb_hi = (np.asarray(part) for part in pha.ebounds)
+        lookup = {int(channel): index for index, channel in enumerate(eb_ch)}
+        selected = np.asarray(pha.channels)[sel_idx]
+        if any(int(channel) not in lookup for channel in selected):
+            raise ValueError("EBOUNDS does not cover every selected PHA channel")
+        eb_idx = np.asarray([lookup[int(channel)] for channel in selected], dtype=int)
+        sliced_ebounds = (eb_ch[eb_idx], eb_lo[eb_idx], eb_hi[eb_idx])
+
     pha_cls = type(pha)
     return pha_cls(
         path=pha.path,
@@ -585,7 +595,7 @@ def slice_pha(
         areascal=pha.areascal,
         quality=pha.quality[sel_idx] if pha.quality is not None else None,
         grouping=pha.grouping[sel_idx] if pha.grouping is not None else None,
-        ebounds=pha.ebounds,
+        ebounds=sliced_ebounds,
         header=pha.header,
         meta=pha.meta,
         headers_dump=pha.headers_dump,
@@ -607,7 +617,7 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
     English
     Rebin PHA by grouping channels (fixed factor, min counts, or existing grouping); returns new instance.
     """
-    from ..ftools.grppha import compute_grouping_by_min_counts
+    from ..ftools.grppha import compute_grouping_by_min_counts, fold_group_quality, min_counts_group_quality
 
     ch = pha.channels
     cnt = pha.counts
@@ -615,9 +625,18 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
 
     # 确定分组数组
     grouping = None
+    generated_group_ids = False
+    # 逐通道有效质量：min_counts 路径叠加"尾组 QUALITY=2"（HEASoft loadMin），
+    # 其余路径沿用输入 quality；随后按组折叠（rebinChannels 规则）。
+    per_ch_quality = None
     if min_counts is not None:
         # 基于最小计数阈值的贪心聚合
         grouping = compute_grouping_by_min_counts(cnt, min_counts)
+        tail_q = min_counts_group_quality(cnt, min_counts)
+        if pha.quality is not None:
+            per_ch_quality = np.maximum(np.asarray(pha.quality, dtype=int).ravel(), tail_q)
+        else:
+            per_ch_quality = tail_q
     elif factor is not None and factor > 1:
         # 固定因子聚合
         n = ch.size
@@ -627,6 +646,7 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
             grouping[i] = gid
             if (i + 1) % int(factor) == 0 and i < n - 1:
                 gid += 1
+        generated_group_ids = True
     elif getattr(pha, 'grouping', None) is not None:
         # 使用已有的 grouping 数组
         grouping = np.asarray(pha.grouping, dtype=int)
@@ -634,10 +654,13 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
         # 默认：不聚合（factor=1）
         return pha
 
+    if per_ch_quality is None and pha.quality is not None:
+        per_ch_quality = np.asarray(pha.quality, dtype=int).ravel()
+
     # grouping 兼容：支持 OGIP 标志位(1/-1/0) 与历史组号编码(1,2,3...)
     g_arr = np.asarray(grouping, dtype=int)
     nz = g_arr[g_arr != 0]
-    if nz.size > 0 and np.all(np.isin(nz, [-1, 1])):
+    if not generated_group_ids and nz.size > 0 and np.all(np.isin(nz, [-1, 1])):
         gid_arr = np.zeros_like(g_arr)
         gid = 0
         for i, val in enumerate(g_arr):
@@ -674,6 +697,9 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
     new_ch = np.asarray(new_ch, dtype=int)
     new_counts = np.asarray(new_counts, dtype=float)
     new_err = np.asarray(new_err, dtype=float) if new_err else None
+    # 组质量折叠：组首质量起步、其后最后一个非零成员覆盖（HEASoft
+    # pha::rebinChannels 的 "any bad quality in a bin makes the bin bad" 规则）
+    new_quality = fold_group_quality(per_ch_quality, gid_arr, gids)
 
     # 聚合 EBOUNDS（若存在）
     new_ebounds = None
@@ -699,7 +725,7 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
         exposure=pha.exposure,
         backscal=pha.backscal,
         areascal=pha.areascal,
-        quality=None,
+        quality=new_quality,
         grouping=None,
         ebounds=new_ebounds if new_ebounds is not None else pha.ebounds,
         header=pha.header,
@@ -1163,7 +1189,8 @@ class BayesianBlocksBinner:
         for i in range(nb):
             a = edges[i]
             b = edges[i + 1]
-            mask = (left < b) & (right > a)
+            centers = (left + right) / 2
+            mask = (centers >= a) & (centers < b)
             block_slices.append(np.where(mask)[0])
         merged_indices = [np.unique(ix) for ix in block_slices if ix.size > 0]
 
@@ -1404,8 +1431,8 @@ class BayesianBlocksBinner:
         for i in range(nb):
             a = edges[i]
             b = edges[i + 1]
-            src_slices.append(np.where((l_s < b) & (r_s > a))[0])
-            bkg_slices.append(np.where((l_b < b) & (r_b > a))[0])
+            src_slices.append(np.where(((l_s + r_s) / 2 >= a) & ((l_s + r_s) / 2 < b))[0])
+            bkg_slices.append(np.where(((l_b + r_b) / 2 >= a) & ((l_b + r_b) / 2 < b))[0])
 
         merged = []
         for i in range(nb):

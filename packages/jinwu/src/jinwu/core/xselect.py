@@ -450,6 +450,14 @@ def _build_external_xselect_commands(
     lc_binsize_s: float | None,
     image_binsize: int | None,
 ) -> tuple[str, ...]:
+    # 方法：XSELECT 命令流遵循其命令语言：read events <目录> <文件>；
+    #       filter time scc|mjd|ut（输入起止后以 x 结束过滤会话）；
+    #       filter pha_cutoff <lo> <hi>；filter region "<files>"；
+    #       set binsize / set xybinsize；extract spectrum|curve|image|events；
+    #       save <product>（保存事件后应答 no）；exit 退出会话。
+    # 参考：HEASoft 6.37 ftools/xselect/doc/xselectManual/node12.html
+    #       （FILTER TIME MJD/SCC/UT、FILTER REGION、FILTER PHA_CUTOFF）、
+    #       node110/node122.html（SET BINSIZE / SET XYBINSIZE）。
     commands = [
         session_name,
         'read events',
@@ -1757,7 +1765,7 @@ def extract_curve(ev_or_path: EventData | str | Path, *, binsize: float, tmin: O
 
     # time filter
     if tmin is not None or tmax is not None:
-        ev = select_events(ev.path if isinstance(ev_or_path, (str, Path)) else ev.path, tmin=tmin, tmax=tmax)
+        ev = select_events(ev, tmin=tmin, tmax=tmax)
 
     t = np.asarray(ev.time, dtype=float)
     if t.size == 0:
@@ -1902,53 +1910,38 @@ def extract_image(ev_or_path: EventData | str | Path, *, xcol: str | None = None
 
     # time filter
     if tmin is not None or tmax is not None:
-        ev = select_events(ev.path if isinstance(ev_or_path, (str, Path)) else ev.path, tmin=tmin, tmax=tmax)
+        ev = select_events(ev, tmin=tmin, tmax=tmax)
 
-    # find columns
-    if xcol is None:
-        x_candidates = ['X', 'X_IMAGE', 'RAWX', 'DETX']
-        xval = None
-        for xc in x_candidates:
-            xval = _read_column_from_evt(ev.path, xc)
-            if xval is not None:
-                xcol = xc
-                break
-    else:
-        xval = _read_column_from_evt(ev.path, xcol)
+    def coordinate(name: str | None, axis: str):
+        if name is None or name.upper() == axis:
+            values = getattr(ev, axis.lower(), None)
+            if values is not None:
+                return values
+        raw = getattr(ev, 'raw_columns', None) or {}
+        candidates = (name,) if name is not None else (
+            ('X', 'X_IMAGE', 'RAWX', 'DETX') if axis == 'X'
+            else ('Y', 'Y_IMAGE', 'RAWY', 'DETY')
+        )
+        for candidate in candidates:
+            values = raw.get(candidate)
+            if values is not None and len(values) == len(ev.time):
+                return values
+        # A file fallback is safe only when no filtering changed the row count.
+        if ev.path is not None:
+            for candidate in candidates:
+                values = _read_column_from_evt(ev.path, candidate)
+                if values is not None and len(values) == len(ev.time):
+                    return values
+        return None
 
-    if ycol is None:
-        y_candidates = ['Y', 'Y_IMAGE', 'RAWY', 'DETY']
-        yval = None
-        for yc in y_candidates:
-            yval = _read_column_from_evt(ev.path, yc)
-            if yval is not None:
-                ycol = yc
-                break
-    else:
-        yval = _read_column_from_evt(ev.path, ycol)
+    xval = coordinate(xcol, 'X')
+    yval = coordinate(ycol, 'Y')
 
     if xval is None or yval is None:
         raise ValueError('Cannot find X/Y columns for image extraction')
 
     x = np.asarray(xval, dtype=float)
     y = np.asarray(yval, dtype=float)
-
-    # apply optional time filter to arrays (if select_events changed ev.time)
-    t = np.asarray(ev.time, dtype=float)
-    if t.size != x.size:
-        # align by reading time from FITS directly and filtering
-        tcol = _read_column_from_evt(ev.path, 'TIME')
-        if tcol is not None:
-            t = np.asarray(tcol, dtype=float)
-    # Build mask if select_events applied
-    if tmin is not None or tmax is not None:
-        mask = np.ones(x.size, dtype=bool)
-        if tmin is not None:
-            mask &= (t >= float(tmin))
-        if tmax is not None:
-            mask &= (t <= float(tmax))
-        x = x[mask]
-        y = y[mask]
 
     if xrange is None:
         xmin, xmax = float(x.min()) if x.size else 0.0, float(x.max()) if x.size else 1.0

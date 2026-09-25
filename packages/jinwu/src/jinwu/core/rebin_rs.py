@@ -128,6 +128,8 @@ def rebin_lightcurve_rs(
         )
     orig_eff_expo_contig = np.ascontiguousarray(orig_eff_expo, dtype=np.float64)
 
+    # 方法：counts 守恒式重分组——旧 bin 按时间重叠比例 frac=overlap/width 分配到新 bin（counts_j=Σ c_i·frac_ij），误差按独立项线性传播 var_j=Σ(ε_i·frac_ij)²（无误差数组时取 Poisson ε=√c；rate 输入先乘有效曝光还原 counts）；sum 法直接输出计数、mean/rate 法除以新 bin 有效曝光。注意同一旧 bin 跨越多个新 bin 时输出 bin 误差相关，属分数拆分的固有近似
+    # 参考：Gaussian 线性误差传播标准式（Bevington & Robinson 2003, Data Reduction and Error Analysis for the Physical Sciences, 3rd ed., McGraw-Hill）；与 ops.rebin_lightcurve 数值逐点一致（模块 docstring 声明）
     new_counts, new_var, new_exposure = rebin_counts_core(
         orig_counts,
         orig_err_counts,

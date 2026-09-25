@@ -356,17 +356,28 @@ def points_in_shape(xs: np.ndarray, ys: np.ndarray, shape: Dict[str, Any]) -> np
     
     typ = shape.get('type', '').lower()
     if typ == 'circle':
+        # 方法：圆内判定含边界：dx²+dy² <= r²（圆周上的点计入区域）。
+        # 参考：HEASoft 6.37 ftools/image/ximage/src/region/region.c circle_rgn
+        #       （解析时预存平方半径 a=r²，仅当 r²>a 才判外部，边界包含）。
         cx = float(shape['x'])
         cy = float(shape['y'])
         r = float(shape['r'])
         return _circle_mask(xs, ys, cx, cy, r)
     if typ == 'annulus':
+        # 方法：环带判定内外边界均含：rin² <= r² <= rout²。
+        # 参考：HEASoft 6.37 ftools/image/ximage/src/region/region.c annulus_rgn
+        #       （r<a 或 r>b 才判外部，a/b 为平方半径，两边界均包含）。
         cx = float(shape['x'])
         cy = float(shape['y'])
         rin = float(shape['r_in'])
         rout = float(shape['r_out'])
         return _annulus_mask(xs, ys, cx, cy, rin, rout)
     if typ == 'box':
+        # 方法：盒判定先把点绕中心按反角旋转（xr=dx·cosθ+dy·sinθ、yr=-dx·sinθ+dy·cosθ，
+        #       θ 为盒角度，度），再做 |xr|<=w/2 且 |yr|<=h/2（边界包含）。
+        # 参考：HEASoft 6.37 ftools/image/ximage/src/region/region.c box_rgn
+        #       （x=x'·cosT+y'·sinT、y=-x'·sinT+y'·cosT；x<-dx||x>dx||y<-dy||y>dy
+        #       才判外部；sinT/cosT=sin/cos(角度制)）。
         cx = float(shape.get('x', 0.0))
         cy = float(shape.get('y', 0.0))
         w = float(shape.get('width', shape.get('w', 1.0)))
@@ -374,6 +385,9 @@ def points_in_shape(xs: np.ndarray, ys: np.ndarray, shape: Dict[str, Any]) -> np
         ang = float(shape.get('angle', 0.0))
         return _box_mask(xs, ys, cx, cy, w, h, ang)
     if typ == 'polygon':
+        # 方法：多边形参数须 ≥6 个（≥3 个顶点）且为偶数（x,y 成对）方可解析。
+        # 参考：HEASoft 6.37 ftools/image/ximage/src/region/region.c polygon 解析
+        #       （nParams<6 或为奇数即 PARSE_SYNTAX_ERR）。
         pts = shape['points']
         if _HAVE_SHAPELY:
             poly = Polygon(pts)
@@ -381,6 +395,9 @@ def points_in_shape(xs: np.ndarray, ys: np.ndarray, shape: Dict[str, Any]) -> np
         else:
             return _points_in_polygon_wrapper(xs, ys, pts)
     if typ == 'ellipse':
+        # 方法：椭圆判定（角度制旋转后）(xr/a)²+(yr/b)² <= 1，边界包含。
+        # 参考：HEASoft 6.37 ftools/image/ximage/src/region/region.c ellipse_rgn
+        #       （x/=a、y/=b 后 r=x²+y²，仅 r>1.0 判外部）。
         # approximate ellipse using affine transform (angle in degrees)
         cx = float(shape.get('x', 0.0))
         cy = float(shape.get('y', 0.0))

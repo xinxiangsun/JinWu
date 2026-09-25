@@ -434,8 +434,8 @@ def load_net_lightcurve(path: str | Path) -> NetLightcurve:
         background_error=np.asarray(table["background_error"], dtype=float),
         net_rate=np.asarray(table["net_rate"], dtype=float),
         net_error=np.asarray(table["net_error"], dtype=float),
-        alpha=float(table.meta["alpha"]),
-        timezero=float(table.meta.get("timezero", 0.0)),
+        alpha=float({str(k).lower(): v for k, v in table.meta.items()}["alpha"]),
+        timezero=float({str(k).lower(): v for k, v in table.meta.items()}.get("timezero", 0.0)),
     )
 
 

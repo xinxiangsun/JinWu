@@ -426,6 +426,16 @@ def _txx54_convert_event_inputs(
     return src_evt, bkg_evt, alpha
 
 
+# 方法：事件级贝叶斯块定界 + 累计净计数双侧分位累计求 Txx：先对源事件到达时刻做
+#       贝叶斯块分割（fitness='events'），以首个/末个 Li&Ma 信噪比超过阈值的块的外边界
+#       定义 T0/T100（管线约定，同旧实现 docstring 第 3-4 步）；在 T100 内对累计净计数
+#       取双侧分位交点并按箱内均匀率线性内插。统计误差由 T100 内细网格 Poisson MC
+#       重采样后取 16%/84% 分位；系统误差由多种分段方案下的稳健标准差（MAD*1.4826）合成。
+# 关键式：low = 0.5*(1-p)*N_net；high = 0.5*(1+p)*N_net；Txx = t(high) - t(low)
+#       （p=0.9 → 5%~95%，p=0.5 → 25%~75%）。
+# 参考：Scargle, Norris, Jackson & Chiang 2013, ApJ 764, 167 (doi:10.1088/0004-637X/764/2/167;
+#       arXiv:1207.5578)；Koshut, Paciesas, Kouveliotou, et al. 1996, ApJ 463, 570
+#       (doi:10.1086/177272)；Li & Ma 1983, ApJ 272, 317。
 def txx(
     lc_src: 'EventDataBase | str | _Path',
     background: Optional['EventDataBase | str | _Path'] = None,
@@ -577,6 +587,9 @@ def txx(
     if duration <= 0.0:
         raise ValueError(f"无效分析时长: t0={t0}, t1={t1}")
 
+    # 方法：贝叶斯块事件分割：逐块适应度 N_k*ln(N_k/T_k) - ncp_prior（Scargle 2013 Eq.19）；
+    #       以 p0 给先验时 ncp_prior = 4 - ln(73.53*p0*N^-0.478)（Eq.21 修正式，astropy 同式）。
+    # 参考：Scargle, Norris, Jackson & Chiang 2013, ApJ 764, 167 (arXiv:1207.5578)
     src_rel = np.sort(src_use - t0)
     try:
         bb_edges_rel = np.asarray(
@@ -632,6 +645,10 @@ def txx(
         block_net.append(net_blk)
         block_bkg_model.append(b_blk)
 
+        # 方法：块显著性用 Li&Ma (1983) Eq.17 似然比显著性
+        #       S = sqrt(2*[N_on*ln((1+al)/al*N_on/(N_on+N_off)) + N_off*ln((1+al)*N_off/(N_on+N_off))])，
+        #       负超出取负号；退化时回退 net/sqrt(S+B)（净计数 Poisson 方差 S+al^2*B_raw = S+B）。
+        # 参考：Li, T.-P. & Ma, Y.-Q. 1983, ApJ 272, 317 (doi:10.1086/161095)
         if bkg_evt is not None and alpha > 0.0:
             s_pos = max(float(s_blk), 0.0)
             b_pos = max(float(b_raw_blk), 0.0)
@@ -730,6 +747,11 @@ def txx(
 
         for i_p, p in enumerate(core_percent_arr):
             # A&A 5.4: 以累计净计数的双侧分位定义 Txx 及其左右边界。
+            # 方法：Txx = t(high) - t(low)，low=(1-p)/2*N_net、high=(1+p)/2*N_net，
+            #       交点按箱内均匀率线性内插；即中央分位定义（T90: 5%~95%，T50: 25%~75%）。
+            # 参考：Koshut, Kouveliotou, Paciesas, et al. 1996, ApJ 463, 570 (doi:10.1086/177272)；
+            #       p=0.9 时与标准 T90 定义 t(95%)-t(5%) 等价：Kouveliotou, Meegan, Fishman,
+            #       et al. 1993, ApJ 413, L101 (doi:10.1086/186969)；T50=t(75%)-t(25%) 同口径。
             low = 0.5 * (1.0 - float(p)) * total_local
             high = 0.5 * (1.0 + float(p)) * total_local
             t1v = _txx54_cross_target(low, seg_left_local, seg_right_local, seg_net_local)
@@ -1095,6 +1117,17 @@ def _fit_poly_background_counts(
     return np.maximum(bkg_rate, 0.0) * exposure
 
 
+# 方法：迭代背景自洽贝叶斯块：每轮在信号排除区做曝光加权多项式背景拟合 → 以
+#       "曝光:=背景计数"的 Giacomo 技巧运行贝叶斯块（把含背景的 Poisson 过程化为
+#       近似齐次 Poisson，等效率恒定）→ 块率峰的 prominence 定信号区，向外排除
+#       buffer_blocks 个边缘块宽（不超过到光变端距离之半）作背景区 → 收敛判据为
+#       背景区间重复（含 2-3 周期近似振荡的循环检测）。
+# 参考：移植自 HEASoft 6.37 BurstCube GDT burstcube/lib/bayesian_lc.py
+#       （BayesianBlocksLightcurve.compute_bayesian_blocks；本仓库
+#       external_sources/heasoft-6.37/ 同路径可查）；Giacomo 技巧见 threeML
+#       utils/bayesian_blocks.py (G. Vianello)，github.com/threeML/threeML
+#       e31db70 .../threeML/utils/bayesian_blocks.py#L171；贝叶斯块本身见
+#       Scargle, Norris, Jackson & Chiang 2013, ApJ 764, 167 (arXiv:1207.5578)。
 def iterative_bayesian_blocks(
     left: np.ndarray,
     right: np.ndarray,
@@ -1315,6 +1348,9 @@ def _signed_cumulative_curve(
     return np.asarray(curve_time, dtype=float), np.asarray(cumulative, dtype=float)
 
 
+# 方法：同一阈值多次穿越时，取最早与最晚交点的中点作为分位时刻（稳健化处理，同
+#       Swift/BAT battblocks 的 T(X%) 时刻约定）。
+# 参考：HEASoft/HEADAS battblocks 文档, https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/help/battblocks.html
 def _crossing_midpoint(
     curve_time: np.ndarray,
     cumulative: np.ndarray,
@@ -1342,6 +1378,11 @@ def _crossing_midpoint(
     return 0.5 * (min(crossings) + max(crossings))
 
 
+# 方法：双侧净计数分位区间：累计净计数曲线达到 (1-q)/2 与 1-(1-q)/2 倍总量的交点即为
+#       Txx 的起止时刻（负净计数箱保持有符号贡献；区间按时间有序返回）。
+# 参考：Koshut, Paciesas, Kouveliotou, et al. 1996, ApJ 463, 570 (doi:10.1086/177272)；
+#       q=0.9 即标准 T90 定义 t(95%)-t(5%)：Kouveliotou et al. 1993, ApJ 413, L101
+#       (doi:10.1086/186969)；battblocks (HEASoft) 交点约定。
 def _quantile_interval(
     left: np.ndarray,
     right: np.ndarray,

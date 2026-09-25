@@ -5,13 +5,17 @@
     把给定的 ARF（每个能量区间恒定的有效面积）重分箱到新的能量区间。
     算法：把原始区间视为分段常数，按重叠能量段宽加权并归一化到新 bin 宽。
 
-- `rebin_rmf(matrix, channel_map, row_map=None) -> new_matrix`
+- `rebin_rmf(matrix, channel_map, row_map=None, rmf_type='redist') -> new_matrix`
     把 RMF 矩阵（2D numpy 数组）按列（通道）进行重分箱。`channel_map` 是长度
     为 old_nchan 的整型数组，指定每个旧通道映射到的新通道索引。可选的 `row_map`
-    用于对能量行进行重分箱（同 channel_map 语义）。
+    用于对能量行进行重分箱（同 channel_map 语义）。`rmf_type` 指定 RMF 类型：
+    'redist'（重分布矩阵，默认）在能量行合并时把累加行除以合并行数，保持每行
+    仍是概率分布；'full'（含效率的 FULL 响应）按 HEASoft 语义直接求和不除。
 
-这些实现为简化实用版，适用于常见的重分箱场景。若需要完全还原 HEASOFT 行为，
-建议使用原始工具或基于 `external_sources` 的源实现进行逐行对比与回归测试。
+这些实现的合并语义已对齐 HEASoft 6.37（通道列求和守恒；能量行对 REDIST
+类型除以合并行数，见 `rebin_rmf` 内参考注释），但 FTOOL 的 binfile/PHA
+模板分组模式与 FULL/REDIST 之外的 RMF 变体仍未覆盖，需要严格逐行等价时
+建议与 `external_sources` 中的 HEASoft 源实现做回归对比。
 """
 from __future__ import annotations
 
@@ -70,19 +74,38 @@ def rebin_arf(elo: np.ndarray, ehi: np.ndarray, area: np.ndarray, new_elo: np.nd
     return new_area
 
 
-def rebin_rmf(matrix: np.ndarray, channel_map: np.ndarray, row_map: Optional[np.ndarray] = None) -> np.ndarray:
+def rebin_rmf(matrix: np.ndarray, channel_map: np.ndarray, row_map: Optional[np.ndarray] = None,
+              rmf_type: str = 'redist') -> np.ndarray:
     """对 RMF 矩阵进行重分箱。
 
     参数:
     - `matrix`: 2D numpy 数组，形状 (n_rows, n_old_channels)。按列表示旧通道。
     - `channel_map`: 长度 n_old_channels 的整型数组，channel_map[i] 指定旧通道 i 映射到的新通道索引（0..n_new-1）。
     - `row_map`: 可选，长度 n_rows 的整型数组，指定每行（能量行）映射到的新行索引（0..n_new_rows-1）。
+    - `rmf_type`: 'redist'（默认，重分布矩阵）或 'full'（含效率的完整响应），
+      仅影响能量行合并（见下）。
 
     返回:
     - `new_matrix`: 2D numpy 数组，形状 (n_new_rows, n_new_channels) 或 (n_rows, n_new_channels)（当 row_map 为 None 时保留原行数）。
 
-    该实现按映射索引直接对矩阵行/列求和，保持概率守恒（即把对应列累加到新列）。
+    通道（列）重分箱语义：同一新通道对应的旧通道列直接累加求和，响应
+    （概率/计数）守恒。
+    参考：HEASoft 6.37 heacore/heasp/rmf.cxx rmf::rebinChannels + heacore/heasp/
+    grouping.cxx GroupBin SumMode（组内通道值直接求和，SumMode=0）。
+
+    能量（行）重分箱语义：组内各行先逐通道累加；对 REDIST 类型 RMF，累加结果
+    要再除以合并的行数（rmf::rebinEnergies 中 `if m_RMFType == "REDIST":
+    Response[j] /= nbins`），因为每行是归一化的概率分布，直接求和会使合并行
+    的"概率"超过 1；FULL 类型则按 HEASoft 语义直接求和不除。旧版本无条件
+    求和，对常见 REDIST 响应矩阵会高估合并能箱的响应，属对 HEASoft 行为的
+    偏差（本次已修复）。
+    参考：HEASoft 6.37 heacore/heasp/rmf.cxx rmf::rebinEnergies（REDIST 除以
+    nbins）与 heasptools/ftrbnrmf/ftrbnrmf.cxx:369-380（FTOOL 分别调用
+    rebinChannels / rebinEnergies）；OGIP CAL/GEN/92-002（RSP = 重分布矩阵 ×
+    有效面积，每能量行概率归一）。
     """
+    if rmf_type not in ('redist', 'full'):
+        raise ValueError("rmf_type must be 'redist' or 'full'")
     mat = np.asarray(matrix, dtype=float)
     if mat.ndim != 2:
         raise ValueError('matrix must be 2D')
@@ -110,6 +133,12 @@ def rebin_rmf(matrix: np.ndarray, channel_map: np.ndarray, row_map: Optional[np.
             for icol in range(ncols):
                 ctarget = int(channel_map[icol])
                 new_mat[rtarget, ctarget] += mat[irow, icol]
+        if rmf_type == 'redist':
+            # REDIST：合并行除以成员行数，保持每行仍是概率分布
+            #（rmf::rebinEnergies 的 Response[j] /= nbins）
+            member_counts = np.bincount(row_map, minlength=n_new_row).astype(float)
+            member_counts[member_counts == 0] = 1.0  # 空行保持 0，避免除零
+            new_mat /= member_counts[:, None]
         return new_mat
 
 

@@ -62,6 +62,16 @@ try:
 except PackageNotFoundError:  # pragma: no cover - during editable installs
 	__version__ = "0.0.0"
 
+# ``timescale`` 只按"模块"导出（_MODULE_EXPORTS 优先于 _DATA_EXPORTS 检查）。
+# 注意：master 上 ``from jinwu.core import timescale`` 返回 data.py 里的
+# 时标分析器类 ``timescale``；beta 新增 core/timescale.py 模块后同名冲突，
+# 该类被静默遮蔽（0.2.0 破坏性变更，见 docs/changelog.rst）。现约定：
+# - ``jinwu.core.timescale`` = 模块（data.py 内部 `from . import timescale
+#   as timescale_mod` 依赖此绑定，故不可改回类）；
+# - 分析器类改从 ``jinwu.core.data.timescale`` 获取，或继续用实例方法
+#   ``lc.timescale(...)``（推荐，公开 API 不变）。
+# - ``_DATA_EXPORTS`` 中的 'timescale' 已移除：它在模块分支之后、永远不可达，
+#   留着会误导读者以为该名字仍解析到类。
 _MODULE_EXPORTS = {
 	'heasoft', 'plot', 'plotpanel', 'time', 'ops', 'io', 'lf', 'redshift', 'timescale',
 	'model_comparison', 'bxa_fit',
@@ -78,7 +88,7 @@ _BASE_EXPORTS = {
 }
 
 _DATA_EXPORTS = {
-	'ArfData', 'RmfData', 'PhaData', 'LightcurveData', 'EventData', 'timescale',
+	'ArfData', 'RmfData', 'PhaData', 'LightcurveData', 'EventData',
 }
 
 _IO_EXPORTS = {
@@ -136,8 +146,8 @@ __all__ = [
 	'ValidationReport', 'ValidationMessage', 'OgipFitsBase', 'check_response_compatibility',
 	# Time primitives
 	'Time', 'TimeDelta',
-	# Data containers
-	'EnergyBand', 'ChannelBand', 'RegionArea', 'RegionAreaSet', 'HduHeader', 'FitsHeaderDump', 'OgipMeta', 'ArfBase', 'RmfBase', 'PhaBase', 'ArfData', 'RmfData', 'PhaData', 'LightcurveDataBase', 'LightcurveData', 'EventDataBase', 'EventData', 'timescale',
+	# Data containers（'timescale' 已移除：该名字固定解析为模块，见上）
+	'EnergyBand', 'ChannelBand', 'RegionArea', 'RegionAreaSet', 'HduHeader', 'FitsHeaderDump', 'OgipMeta', 'ArfBase', 'RmfBase', 'PhaBase', 'ArfData', 'RmfData', 'PhaData', 'LightcurveDataBase', 'LightcurveData', 'EventDataBase', 'EventData',
 	# Dataset containers
 	'LightcurveDataset', 'SpectrumDataset', 'JointDataset',
 	# Multi-object plotting framework

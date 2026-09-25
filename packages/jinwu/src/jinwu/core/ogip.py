@@ -60,7 +60,7 @@ class ValidationReport:
 
 # ---------------- Base FITS Class ----------------
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class OgipFitsBase:
     path: Path
     header: Dict[str, Any]
@@ -115,7 +115,7 @@ class OgipFitsBase:
 
 # ---------------- Specialized Base Classes ----------------
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class OgipTimeSeriesBase(OgipFitsBase):
     """OGIP-93-003 风格的时间序列 (光变或事件) 基类。
 
@@ -179,6 +179,10 @@ class OgipTimeSeriesBase(OgipFitsBase):
         Default implementation searches for an extension named 'GTI' (case-insensitive) and, if
         present, returns a list of (START, STOP) pairs. Readers should call this to populate event
         objects' GTI field.
+
+        方法：GTI 扩展按 EXTNAME='GTI' 与 START/STOP 列解析（TSTART/TSTOP 为别名）。
+        参考：OGIP/93-003 "The Proposed Timing FITS File Format for High Energy
+              Astrophysics Data"（GTI 扩展含 START/STOP 两列）。
         """
         if hdul is None:
             return None
@@ -210,7 +214,7 @@ class OgipTimeSeriesBase(OgipFitsBase):
                         return None
         return None
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class OgipSpectrumBase(OgipFitsBase):
     """OGIP-92-007 / 007a PHA 能谱基类。"""
 
@@ -242,6 +246,12 @@ class OgipSpectrumBase(OgipFitsBase):
             except Exception:
                 rpt.add('WARN', 'BAD_EXPOSURE', f"Exposure not numeric: {exp_val}")
         # HDU 分类与版本（对齐 heasp pha::read：检查 HDUCLAS1=SPECTRUM）
+        # 方法：PHA 扩展要求 HDUCLAS1='SPECTRUM'（存在但不匹配则告警），
+        #       与 heasp 谱扩展的定位/写出约定一致（缺 HDUVERS 亦告警，
+        #       heasp 写出时总写 HDUVERS）。
+        # 参考：HEASoft 6.37 heacore/heasp/pha.cxx pha::write（SPwriteKey
+        #       HDUCLASS="OGIP"、HDUCLAS1="SPECTRUM"、HDUVERS="1.2.1"）；
+        #       OGIP/92-007 "The OGIP Spectral File Format"（EXTNAME=SPECTRUM）。
         clas1 = self.get_keyword_ci('HDUCLAS1', None)
         if clas1 is not None and str(clas1).upper() != 'SPECTRUM':
             rpt.add('WARN', 'BAD_HDUCLAS1', f"HDUCLAS1={clas1!r}, expected 'SPECTRUM' for a PHA.")
@@ -251,7 +261,7 @@ class OgipSpectrumBase(OgipFitsBase):
         self._validation = rpt
         return rpt
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class OgipResponseBase(OgipFitsBase):
     """CAL/GEN/92-002 响应 (ARF/RMF) 基类。"""
 
@@ -271,6 +281,13 @@ class OgipResponseBase(OgipFitsBase):
                 rpt.add('WARN', 'MISSING_KEY', f"Missing one of required keys {group} (CAL/GEN/92-002).")
         # HDU 分类与版本（对齐 heasp 扩展定位规则：HDUCLAS1=RESPONSE +
         # HDUCLAS2=SPECRESP/RSP_MATRIX；缺失时靠 EXTNAME 定位，降为 WARN）。
+        # 方法：响应扩展的定位/校验规则：HDUCLAS1='RESPONSE' 且
+        #       HDUCLAS2∈{SPECRESP(ARF), RSP_MATRIX(RMF)}；缺 HDUCLAS1 时
+        #       降级由 EXTNAME 定位（仅告警，与 heasp 的回退顺序一致）。
+        # 参考：HEASoft 6.37 heacore/heasp/rmf.cxx（readMatrix/read：先 EXTNAME，
+        #       回退 HDUCLAS1=RESPONSE + HDUCLAS2=RSP_MATRIX/EBOUNDS）与
+        #       heacore/heasp/arf.cxx（read：HDUCLAS1=RESPONSE + HDUCLAS2=SPECRESP）；
+        #       格式定义 CAL/GEN/92-002。
         clas1 = self.get_keyword_ci('HDUCLAS1', None)
         clas2 = self.get_keyword_ci('HDUCLAS2', None)
         if clas1 is None or str(clas1).upper() != 'RESPONSE':

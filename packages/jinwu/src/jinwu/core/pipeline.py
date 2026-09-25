@@ -14,13 +14,16 @@ from pathlib import Path
 import platform
 import re
 import tempfile
-from typing import Any, ClassVar, Generic, Iterator, Mapping, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Iterator, Mapping, Protocol, TypeVar
 
-from .config import InstrumentConfig
 from .products import jsonable as _jsonable
+
+if TYPE_CHECKING:
+    from .config import ExecutionConfig
 
 __all__ = [
     "InstrumentPipeline",
+    "PipelineConfigProtocol",
     "PipelineInput",
     "PipelineStage",
     "PipelineStatus",
@@ -33,6 +36,22 @@ __all__ = [
 
 InputT = TypeVar("InputT", bound="PipelineInput")
 ResultT = TypeVar("ResultT")
+
+
+class PipelineConfigProtocol(Protocol):
+    """Structural config contract required by the pipeline machinery.
+
+    Only ``name`` (error messages), ``pipeline`` (the registered key) and
+    ``execution`` (workspace/resume) are consumed by the base class.  The
+    full :class:`~jinwu.core.config.InstrumentConfig` satisfies this
+    protocol, but non-instrument pipelines (e.g. ``jinwu.gw``) may ship
+    their own lightweight frozen dataclass instead of constructing energy
+    bands and detector fields they never use.
+    """
+
+    name: str
+    pipeline: str | None
+    execution: "ExecutionConfig"
 
 
 class PipelineStatus(str, Enum):
@@ -159,7 +178,7 @@ def _discover_pipelines(key: str) -> None:
             ) from exc
 
 
-def pipeline(config: InstrumentConfig, input_data: PipelineInput, **kwargs):
+def pipeline(config: PipelineConfigProtocol, input_data: PipelineInput, **kwargs):
     """Construct the concrete pipeline selected by an instrument config."""
     if not config.pipeline:
         raise ValueError(f"Instrument {config.name} has no pipeline configured")
@@ -204,7 +223,7 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
 
     stages: ClassVar[tuple[PipelineStage, ...]] = ()
 
-    def __init__(self, input_data: InputT, *, config: InstrumentConfig):
+    def __init__(self, input_data: InputT, *, config: PipelineConfigProtocol):
         self.input = input_data
         self.config = config
         configured = config.execution.workspace

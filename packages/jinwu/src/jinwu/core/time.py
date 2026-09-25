@@ -105,6 +105,11 @@ def _utcf_correction(met_seconds):
     return corrections.reshape(met_array.shape)
 
 
+# 方法：Swift MET→UTC 正向换算：UTC = MET + UTCF(MET)，UTCF 由 swiftbat.clockinfo 逐点查询；
+#       闰秒增量用不动点迭代求解（u = MET + UTCF + leaps(u)），并约定闰秒增量在 23:59:60
+#       当秒生效——检测到 UTCF 在该秒阶跃 -1 时改用 utc(met) = utc(met-1) + 1 映射。
+# 参考：swiftbat (D. M. Palmer), https://pypi.org/project/swiftbat/；
+#       Swift 时钟修正 swifttime (HEASARC), https://heasarc.gsfc.nasa.gov/docs/software/lheasoft/help/swifttime.html
 def _apply_utcf(met_seconds, _in_leap_recurse: bool = False):
     """Apply UTCF correction to raw Swift MET seconds.
 
@@ -186,6 +191,13 @@ def _leap_seconds_from_elapsed(elapsed_seconds):
     return leaps.reshape(sec_array.shape)
 
 
+# 方法：闰秒换算采用 ERFA/astropy.time 口径：TAI−UTC（erfa.dat，等价 SOFA iauDat）在
+#       闰秒次日 00:00:00 UTC 跳变 +1 s（如 2016-12-31→2017-01-01 由 36→37）；astropy
+#       UTC 可渲染闰秒 23:59:60，故以 isot 含 ':60' 识别当秒。Swift UTCF 在该秒阶跃 −1，
+#       对 23:59:60 当秒额外 +1，保证 MET 步进 1 s 穿越闰秒时 utc(met) 逐秒连续。
+# 参考：PyERFA（SOFA iauDat）；astropy.time：Astropy Collaboration et al. 2018, AJ 156,
+#       123 (doi:10.3847/1538-3881/aabc4f)；Astropy Collaboration et al. 2022, ApJ 935,
+#       167 (doi:10.3847/1538-4357/ac7c74)。
 def _leap_seconds_from_utc_elapsed(utc_elapsed_seconds):
     """Compute leap seconds since epoch using the UTC instant, applying the
     leap increment at the start of the leap second (23:59:60) rather than at
@@ -347,24 +359,31 @@ def swift_leapseconds_met(met_seconds):
 
 class TimeFermi(TimeFromEpoch):
     """
-    Fermi MET: seconds since 2001-01-01 00:00:00 UTC
+    Fermi MET: continuous SI seconds since 2001-01-01 00:00:00 UTC.
+    The epoch is stored on the TT scale; use ``.utc`` for civil times.
     
     Reference: https://heasarc.gsfc.nasa.gov/docs/fermi/
     """
     name = 'fermi'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
-    epoch_val = '2001-01-01 00:00:00'
+    # MET is continuous SI seconds, including UTC leap seconds. Arithmetic
+    # in UTC would lose elapsed leap seconds and disagree with astro-gdt.
+    epoch_val = '2001-01-01 00:01:04.184'
     epoch_val2 = None
-    epoch_scale = 'utc'
+    epoch_scale = 'tt'
     epoch_format = 'iso'
 
 
 class TimeEP(TimeFromEpoch):
     """
     EP MET: seconds since 2020-01-01 00:00:00 UTC
-    
+
     Reference: Einstein Probe mission documentation
     """
+    # 方法：EP 任务时（MET）为自 2020-01-01T00:00:00 UTC 起算的秒数；历元取自
+    #       EP WXT 官方 DAS 管线 wxtpipeline 的 MISSIONEPOCH 参数（同值）。
+    # 参考：Einstein Probe WXTDAS wxtpipeline (MISSIONEPOCH=2020-01-01T00:00:00.000)；
+    #       Yuan et al. 2022, Handbook of X-ray and Gamma-ray Astrophysics (arXiv:2209.12828)
     name = 'ep'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
     epoch_val = '2020-01-01T00:00:00'
@@ -376,9 +395,12 @@ class TimeEP(TimeFromEpoch):
 class TimeLEIA(TimeFromEpoch):
     """
     LEIA MET: seconds since 2021-01-01 00:00:00 UTC
-    
-    Reference: LEIA (XRISM) mission documentation
+
+    Reference: LEIA (SATech-01) mission documentation
     """
+    # ❓ 待考：历元 2021-01-01 UTC 在公开文献中未查到出处（LEIA 仪器论文
+    #       Liu et al. 2023, RAA 23, 095007, arXiv:2305.14895 与 NAOC/EP 数据文档
+    #       均未给出 MET 零点）；注意 LEIA 是 SATech-01 上的龙虾眼望远镜，与 XRISM 无关。
     name = 'leia'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
     epoch_val = '2021-01-01 00:00:00'
@@ -389,14 +411,16 @@ class TimeLEIA(TimeFromEpoch):
 
 class TimeGECAM(TimeFromEpoch):
     """
-    GECAM MET: seconds since 2019-01-01 00:00:00 TT
+    GECAM MET: continuous seconds since 2019-01-01 00:00:00 UTC.
     
     Reference: GECAM mission documentation
-    Note: Uses TT (Terrestrial Time) scale, NOT UTC
+    The reference instant is stored in TT for leap-second-safe arithmetic.
     """
+    # Official GECAM data portal defines MET=0 at 2019-01-01T00:00:00 UTC:
+    # https://gecam.ihep.ac.cn/dailydatadownload.jhtml
     name = 'gecam'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
-    epoch_val = '2019-01-01 00:00:00'
+    epoch_val = '2019-01-01 00:01:09.184'
     epoch_val2 = None
     epoch_scale = 'tt'
     epoch_format = 'iso'
@@ -404,15 +428,16 @@ class TimeGECAM(TimeFromEpoch):
 
 class TimeHXMT(TimeFromEpoch):
     """
-    HXMT MET: seconds since 1998-01-01 00:00:00 TT (CXC time reference) + 441763197.0 seconds offset
+    HXMT MET: continuous seconds since 2012-01-01 00:00:00 UTC.
     
     Reference: https://heasarc.gsfc.nasa.gov/docs/hxmt/
-    Note: Uses TT (Terrestrial Time) scale, with CXC epoch offset
+    The reference instant is stored in TT for leap-second-safe arithmetic.
     """
+    # HXMT timing description defines MET against 2012-01-01T00:00:00 UTC:
+    # https://arxiv.org/abs/2109.04709
     name = 'hxmt'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
-    epoch_val = '2011-12-31 23:59:57.000'  
-    # Corresponds to 1998-01-01 TT with offset 441763197.0
+    epoch_val = '2012-01-01 00:01:06.184'
     epoch_val2 = None
     epoch_scale = 'tt'
     epoch_format = 'iso'
@@ -492,6 +517,13 @@ class TimeMAXI(TimeFromEpoch):
     Represents the number of seconds elapsed since Jan 1, 2000, 00:00:00 TT
     (leap seconds included).
     """
+    # 方法：MAXI 任务时自 2000-01-01T00:00:00 UTC 起算、按 TT 钟计数（含闰秒），历元与
+    #       尺度：TIMESYS='TT'，MJDREF=51544.00074287（=2000-01-01T00:01:04.184 TT），
+    #       与本类 epoch_val='2000-01-01 00:01:04.184' TT 一致；注意类 docstring 写作
+    #       "00:00:00 TT"，与实际 epoch_val 不符，以 epoch_val 为准。
+    # 参考：HEASARC, MAXI Archive Description（关键词表 TIMESYS='TT', MJDREFI=51544,
+    #       MJDREFF=7.4287037037037E-04），
+    #       https://heasarc.gsfc.nasa.gov/docs/maxi/archive/maxi_archive_description.pdf
     name = 'maxi'
     """(str): Name of the mission"""
 
@@ -528,6 +560,11 @@ class TimeLIGO(TimeFromEpoch):
     For details, see https://www.usno.navy.mil/USNO/time/gps/usno-gps-time-transfer
     """
 
+    # 方法：LIGO/GPS 时间为自 GPS 纪元 1980-01-06T00:00:00 UTC 起算的连续秒数（含闰秒，
+    #       GPS≈TAI−19 s）；本实现与 astropy.time.TimeGPS 相同（历元 1980-01-06 00:00:19 TAI，
+    #       GPS 630720013.0 = 2000-01-01T00:00:00 UTC）。
+    # 参考：astropy.time.formats.TimeGPS 文档；USNO GPS 时间传递，
+    #       https://www.usno.navy.mil/USNO/time/gps/usno-gps-time-transfer
     name = "ligo"
     unit = 1.0 / erfa.DAYSEC  # in days (1 day == 86400 seconds)
     epoch_val = "1980-01-06 00:00:19"
@@ -544,6 +581,12 @@ class TimeSuzaku(TimeFromEpoch):
     Represents the number of seconds elapsed since Jan 1, 2000, 00:00:00 UTC /2000-01-01 00:01:04.184 TT
     
     """
+    # 方法：Suzaku 任务时（ASTETIME）为自 2000-01-01T00:00:00 UTC 起算的连续秒数
+    #       （计数含闰秒、与 TT 恒差），该历元即时即 2000-01-01T00:01:04.184 TT，
+    #       与本类 epoch_val='2000-01-01 00:01:04.184' TT 一致。
+    # 参考：HEASARC, Suzaku ABC Guide §3.5 Timing Information
+    #       ("elapsed time in seconds from the beginning of the year 2000 ... in UTC")，
+    #       https://heasarc.gsfc.nasa.gov/docs/suzaku/analysis/abc/node6.html
     name = 'suzaku'
     """(str): Name of the mission"""
 
@@ -570,6 +613,11 @@ class TimeNewton(TimeFromEpoch):
     Represents the number of seconds elapsed since Jan 1, 1998, 00:00:00 TT
     (leap seconds included).
     """
+    # 方法：XMM-Newton 任务时为自 1998-01-01T00:00:00 TT 起算的秒数
+    #       （MJDREF=50814.0 TT；该即时即 1997-12-31T23:58:56.816 UTC，TT=UTC+63.184 s）。
+    # 参考：ESA XMM-Newton Users Handbook §6.1.4 "Time scale and Reference Time"
+    #       (TIMESYS='TT', MJDREF=50814.0)，
+    #       https://xmm-tools.cosmos.esa.int/external/xmm_user_support/documentation/uhb/reftime.html
     name = 'newton'
     """(str): Name of the mission"""
 
@@ -596,6 +644,12 @@ class TimeXRISM(TimeFromEpoch):
 
     XRISM MET: seconds since 2019-01-01 00:00:00 UTC.
     """
+    # 方法：XRISM 任务时（MET）自 2019-01-01T00:00:00 UTC 起算、按 TT 钟计数
+    #       （TIMESYS='TT'，TT−UTC=69.184 s，MJDREF=58484.00080028）；2017 年后无闰秒，
+    #       本类 utc 历元实现与该口径数值等价。
+    # 参考：XRISM Data Reduction Guide (ABC Guide) §4 "XRISM Data Specifics"
+    #       ("The MET origin, 2019-01-01 00:00:00 UTC ...")，
+    #       https://heasarc.gsfc.nasa.gov/docs/xrism/analysis/abc_guide/XRISM_Data_Specifics.html
     name = 'xrism'
     unit = 1.0 / erfa.DAYSEC  # seconds to days
     epoch_val = '2019-01-01 00:00:00'
@@ -773,8 +827,8 @@ def extract_time_interval(
     - 'swift': Swift卫星时间（秒，自2001-01-01 TT）
     - 'ep': Einstein Probe时间（秒，自2020-01-01 UTC）
     - 'fermi': Fermi卫星时间（秒，自2001-01-01 UTC）
-    - 'hxmt': HXMT时间（秒，自CXC参考时间）
-    - 'gecam': GECAM时间（秒，自2019-01-01 TT）
+    - 'hxmt': HXMT时间（秒，自2012-01-01 00:00:00 UTC）
+    - 'gecam': GECAM时间（秒，自2019-01-01 00:00:00 UTC）
     - 'leia': LEIA/XRISM时间（秒，自2021-01-01 UTC）
     - 'grid': GRID时间（Unix时间戳）
     """

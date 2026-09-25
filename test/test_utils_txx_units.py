@@ -42,10 +42,14 @@ from jinwu.core.utils import (
     li_ma_snr,
     flux_err_from_log10,
     get_asym_err,
-    generate_download_url,
     gunzip,
     extract_all_gz_recursive,
 )
+
+try:  # 0.2.0 起 generate_download_url 移植到 jinwu-fermi（可选包）
+    from jinwu.fermi.gbm import generate_download_url
+except ImportError:  # 无 fermi extra 时仍可测核心垫片的弃用告警
+    generate_download_url = None
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +351,8 @@ class TestFluxErrFromLog10:
 class TestGenerateDownloadUrl:
     """Test generate_download_url for Fermi GBM poshist file URLs.
 
-    测试 Fermi GBM poshist 文件 URL 生成。
+    测试 Fermi GBM poshist 文件 URL 生成。0.2.0 起函数移植到
+    ``jinwu.fermi.gbm``（核心包仅保留弃用垫片）。
     """
 
     def test_returns_valid_url(self):
@@ -360,6 +365,8 @@ class TestGenerateDownloadUrl:
         / Passing an astropy Time object should generate a URL pointing
         to the NASA HEASARC server.
         """
+        if generate_download_url is None:
+            pytest.skip("jinwu-fermi extra not installed")
         from astropy.time import Time
 
         t = Time("2024-06-15T12:00:00", format="isot")
@@ -397,6 +404,29 @@ class TestGenerateDownloadUrl:
         assert "2025" in url2
         assert "01" in url1
         assert "12" in url2
+
+    def test_core_shim_warns_and_delegates(self):
+        """
+        Test the deprecated core.utils shim warns and delegates to jinwu.fermi.
+
+        测试核心包垫片发出 DeprecationWarning 并委托新实现（需 fermi extra）。
+        """
+        if generate_download_url is None:
+            pytest.skip("jinwu-fermi extra not installed")
+        import warnings
+        from astropy.time import Time
+
+        from jinwu.core.utils import generate_download_url as shim
+
+        t = Time("2024-06-15T12:00:00", format="isot")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            url = shim(t)
+
+        assert any(issubclass(w.category, DeprecationWarning) for w in caught), (
+            "core shim should emit DeprecationWarning"
+        )
+        assert url == generate_download_url(t), "shim must delegate to the new home"
 
 
 # ---------------------------------------------------------------------------

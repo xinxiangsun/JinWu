@@ -193,6 +193,14 @@ class BackgroundPrior:
 		)
 
 
+# 方法：Gamma-Poisson 共轭背景模型：OFF 区计数率先验 rate ~ Gamma(a, rate=b)，
+#       观测 n_off ~ Poisson(rate*t_off) 后验 Gamma(a+n_off, b+t_off)；后验预测计数
+#       为 Gamma-Poisson 混合，等价负二项分布 NB(r=a, p=b/(b+t))。ON 区背景率按
+#       面积比缩放：rate_on = area_ratio*rate_off（期望 E[n_on] = a*area_ratio*t/b）。
+# 参考：Gelman, Carlin, Stern, Dunson, Vehtari & Rubin, 2013, "Bayesian Data Analysis"
+#       3rd ed. (CRC Press) §2.6（Gamma-Poisson 共轭）；
+#       ON/OFF 缩放 alpha = (A_on/A_off)*(t_on/t_off) 见 Li & Ma, 1983, ApJ 272, 317
+#       (doi:10.1086/161095) 中 alpha 作为 ON/OFF 区背景期望比值之定义。
 @dataclass
 class BackgroundCountsPosterior:
 	"""
@@ -444,6 +452,12 @@ class BackgroundSpectralPrior:
 				sel = (ch >= lo) & (ch <= hi) & np.isin(ch, self.channels)
 
 			n_off_obs = np.asarray(data['COUNTS'], dtype=float)[sel]
+			expected = np.asarray(self.channels, dtype=int)
+			if not (use_ebounds and ('EBOUNDS' in hdul)):
+				expected = expected[(expected >= lo) & (expected <= hi)]
+			missing = np.setdiff1d(expected, ch[sel])
+			if missing.size:
+				raise ValueError(f"Observation OFF spectrum missing prior channels: {missing.tolist()}")
 			t_off_obs = float(hdr.get('EXPOSURE', 0.0))
 			if t_off_obs <= 0:
 				raise ValueError("Observation PHA has non-positive EXPOSURE")
@@ -488,6 +502,12 @@ class BackgroundSpectralPrior:
 				sel = (ch >= lo) & (ch <= hi) & np.isin(ch, self.channels)
 
 			n_on_obs = np.asarray(data['COUNTS'], dtype=float)[sel]
+			expected = np.asarray(self.channels, dtype=int)
+			if not (use_ebounds and ('EBOUNDS' in hdul)):
+				expected = expected[(expected >= lo) & (expected <= hi)]
+			missing = np.setdiff1d(expected, ch[sel])
+			if missing.size:
+				raise ValueError(f"Observation ON spectrum missing prior channels: {missing.tolist()}")
 			t_on_obs = float(hdr.get('EXPOSURE', 0.0))
 			if t_on_obs <= 0:
 				raise ValueError("Observation PHA has non-positive EXPOSURE")
@@ -502,5 +522,3 @@ class BackgroundSpectralPrior:
 	# ---------- 快速聚合：不更新，直接返回基于先验的后验（等价于 a_total=sum(a0), b=b0） ----------
 	def as_counts_posterior(self) -> BackgroundCountsPosterior:
 		return BackgroundCountsPosterior(a_total=float(np.sum(self.a0)), b=float(self.b0), area_ratio=float(self.area_ratio))
-
-

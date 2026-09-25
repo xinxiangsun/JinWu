@@ -65,6 +65,11 @@ class GeneralRelativity:
             raise ValueError("速度必须小于光速 c")
         self._v = velocity
 
+    # 方法：狭义相对论运动学：时间膨胀 Δt = γ·Δt_rest（固有时与坐标时之比），
+    #       长度收缩 L = L_rest/γ（沿运动方向）；
+    #       关键式：γ = 1/sqrt(1 - beta^2)，beta = v/c
+    # 参考：MTW, Misner, Thorne & Wheeler, 1973, "Gravitation" (W.H. Freeman) §2；
+    #       Rindler, 2006, "Relativity: Special, General, and Cosmological" (Oxford) Ch.3
     def time_dilation(self, t_rest, frame_from="静止系", frame_to="运动系"):
         result = self.lorentz_factor * t_rest
         print(f"时间膨胀: 从 {frame_from} 到 {frame_to}，输入 {t_rest}，输出 {result}")
@@ -88,6 +93,17 @@ class GeneralRelativity:
 
     @classmethod
     def show_formula(cls, formula_type="all"):
+        # 方法：相对论多普勒/像变换公式表（展示用，不参与计算）。
+        #       多普勒因子 D = 1/[gamma*(1 - beta*cos(theta))] = gamma*(1 + beta*cos(theta'))；
+        #       光行差 cos(theta) = (cos(theta') + beta)/(1 + beta*cos(theta'))，
+        #       dcos(theta) = D^-2 dcos(theta')，d(Omega) = D^-2 d(Omega')；
+        #       不变量 I_nu/nu^3 给出 I_nu = D^3 I'_nu'；辐射转移自洽要求 ds = D ds'。
+        #       各式已由光行差公式与 I_nu/nu^3 不变性逐条数值核验。
+        # 参考：Rybicki & Lightman, 1979, "Radiative Processes in Astrophysics"
+        #       (Wiley-Interscience) §4（I_nu/nu^3 不变性与相对论变换）；
+        #       Urry & Padovani, 1995, PASP 107, 803 (doi:10.1086/133758)（多普勒 boosting）；
+        #       内激波时标比 1 : 2*gamma^2 : 2*gamma : 1 见 Piran, 2004, Rev. Mod. Phys. 76, 1143
+        #       (arXiv:astro-ph/0405503)。
         formulas = {
             "lorentz": r"\text{洛伦兹因子:}\quad \gamma = \frac{1}{\sqrt{1-\beta^2}}",
             "doppler": (r"\text{Doppler因子:}\quad "
@@ -124,6 +140,17 @@ class GeneralRelativity:
     @classmethod
     def show_radiation_transform(cls, formula_type="all"):
         """展示常用辐射变换公式"""
+        # 方法：共动系 ↔ 观测者系的辐射量变换（展示用）：不变量 I_nu/nu^3 与
+        #       j_nu/nu^2、alpha_nu*nu 的变换给出 I_nu = D^3 I'_nu'、j_nu = D^2 j'_nu'、
+        #       alpha_nu = D^-1 alpha'_nu'；真实（束流内）光度 L_nu = D L'_nu'、
+        #       L = D^2 L'；各向同性等效光度 L_nu,iso = D^3 L'_nu'、L_iso = D^4 L'
+        #       （因 nu*F_nu 不变量与 d(Omega) = D^-2 d(Omega')）；观测能流
+        #       F_nu = (1+z)*D^3*j'_nu'*V'/D_L^2（含 Hogg 宇宙学 (1+z) 因子）。
+        # 参考：Rybicki & Lightman, 1979, "Radiative Processes in Astrophysics"
+        #       (Wiley-Interscience) §4.3-4.4；
+        #       Urry & Padovani, 1995, PASP 107, 803 (doi:10.1086/133758)；
+        #       Hogg, 1999, MNRAS 310, 940 (arXiv:astro-ph/9905116)（f_nu 与 L_nu 的宇宙学变换）；
+        #       Sari, Piran & Narayan, 1998, ApJ 497, L17 (doi:10.1086/311269)（GRB 余辉中的用法）。
         formulas = {
             "flux1": (r"F_\nu(\nu_{\text{obs}}) = \frac{(1+z)\mathcal{D}^3 j'_{\nu'}(\nu')V'}{D_L^2}."),
             "flux2": (r"F_\nu(\nu_{\text{obs}}) = \frac{(1+z)L_{\nu,\text{iso}}(\nu)}{4\pi D_L^2},"),

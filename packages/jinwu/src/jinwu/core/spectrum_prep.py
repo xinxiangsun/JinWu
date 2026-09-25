@@ -191,7 +191,8 @@ def _prepared_from_bundle(
         "FXT" if bundle.module else "WXT"
     )
     cfg = instrument(instrument_name)
-    resolved_group_min = int(group_min if group_min is not None else cfg.group_min_counts or 1)
+    resolved_group_min = int(group_min if group_min is not None else cfg.spectrum.group_min_counts or cfg.group_min_counts or 1)
+    fit_energy_range = cfg.spectrum.fit_energy_range_keV or cfg.energy_range_keV
     diagnostics = list(bundle.diagnostics)
 
     if not bundle.ready or any(path is None for path in (source, background, arf, rmf)):
@@ -208,7 +209,7 @@ def _prepared_from_bundle(
             arf=arf,
             rmf=rmf,
             group_min=resolved_group_min,
-            energy_range_keV=cfg.energy_range_keV,
+            energy_range_keV=fit_energy_range,
             diagnostics=diagnostics,
             status="partial",
         )
@@ -225,6 +226,8 @@ def _prepared_from_bundle(
         rmf=rmf,
         overwrite=overwrite,
     )
+    # 方法：采用 HEASoft grppha 标准 "group min N" 最小计数分组（N 由仪器配置给出，WXT=1/FXT=3），原 PHA 的 EXPOSURE/BACKSCAL/AREASCAL 关键词保持原值、由 XSPEC 按其标准语义解释面积/背景标度；轻分组适配 Poisson 似然（cstat/wstat）拟合
+    # 参考：OGIP CAL/GEN/92-002 "The Calibration Requirements for Spectral Analysis"（EXPOSURE/BACKSCAL/AREASCAL 语义，George, Arnaud, Pence et al., HEASARC）；分组工具语义见 HEASoft ftools/grppha
     result = grppha_hsp(
         infile=source,
         outfile=grouped_pha,
@@ -257,7 +260,7 @@ def _prepared_from_bundle(
         arf=arf,
         rmf=rmf,
         group_min=resolved_group_min,
-        energy_range_keV=cfg.energy_range_keV,
+        energy_range_keV=fit_energy_range,
         diagnostics=diagnostics,
         status=status,
     )

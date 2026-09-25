@@ -1115,6 +1115,8 @@ for _strategy in (
 # Poisson TS 归一化快速拟合（移植自 HEASoft burstcube 的 FastNormFit）
 # 方法：固定背景的 Poisson 似然比（Cash C-stat 差分）快速拟合；欠涨分支按 Taylor 展开
 #       修正原实现的 TS 符号（parabola 极大值处 TS = -dts0^2/(2*ddts0) > 0，原版为负、已验证错误）；
+#       Newton 收敛判据收紧为 norm>0 且 |step/norm|<tol（原版 step/norm<tol 会被任何负步长
+#       立即误判收敛，已对照 burstcube 原文件核验）；
 #       upper_limit 解 TS(N_up) = TS_best - DeltaTS，DeltaTS 取 chi^2(1) 分位数（XSPEC 惯例，90% -> 2.7055）
 # 关键式：TS(N) = 2 * sum_i [ d_i * ln((b_i + N e_i)/b_i) - N e_i ]
 # 参考：Cash, 1979, ApJ 228, 939 (doi:10.1086/156922)；HEASoft 6.37 burstcube/lib/fast_norm_fit.py；
@@ -2542,14 +2544,23 @@ def _validate_instrument_policy(
         raise ValueError(
             "coded_mask_spectrum requires a detector-shadow or coded-mask survey-rate instrument"
         )
-    if policy.response_folding == "rsp" and instrument_config.response_type != "rsp":
-        raise ValueError("rsp upper-limit folding requires InstrumentConfig.response_type='rsp'")
-    if policy.response_folding == "rmf_arf" and instrument_config.response_type not in {
-        "rmf",
-        "rmf_arf",
+    # response_folding 与 response_type 的契约（0.2.0 词表规范化后）：
+    # - "rsp" 折叠 = 经由"自足"的计数响应（RSP/RSP2/DRM，有效面积已折算）；
+    # - "rmf_arf" 折叠 = RMF+ARF 配对（response_type 必须为 "rmf"，此时
+    #   InstrumentConfig.__post_init__ 保证 response_requires_arf=True）。
+    if policy.response_folding == "rsp" and instrument_config.response_type not in {
+        "rsp",
+        "rsp2",
+        "drm",
     }:
         raise ValueError(
-            "rmf_arf upper-limit folding requires an RMF-capable instrument config"
+            "rsp upper-limit folding requires InstrumentConfig.response_type "
+            "in {'rsp','rsp2','drm'}"
+        )
+    if policy.response_folding == "rmf_arf" and instrument_config.response_type != "rmf":
+        raise ValueError(
+            "rmf_arf upper-limit folding requires InstrumentConfig.response_type='rmf' "
+            "(an RMF must be paired with an ARF file)"
         )
 
 

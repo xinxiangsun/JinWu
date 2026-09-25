@@ -25,30 +25,27 @@ def _require_xspec():
 
 def generate_download_url(isot_time):
     """
-    根据给定的 isot (YYYY-MM-DDTHH:MM:SS) 时间生成 GBM poshist 文件的下载 URL。
+    根据给定的 isot 时间生成 GBM poshist 文件的下载 URL。
 
-    参数:
-    - isot_time (str): ISOT 格式时间字符串，例如 "2024-01-01T12:00:00"
-
-    返回:
-    - url (str): 生成的 poshist 文件下载 URL
+    .. deprecated:: 0.2.0
+        GBM 属可选仪器包，本函数已移植到 :mod:`jinwu.fermi.gbm`
+        （``from jinwu.fermi.gbm import generate_download_url``）。
+        核心包不应内置单仪器逻辑；此处仅为向后兼容保留的垫片，
+        调用时会发出 ``DeprecationWarning`` 并委托新位置（需安装
+        ``jinwu[fermi]`` extra）。
     """
-    # 解析时间
+    import warnings
 
-    # 提取年份、月份、日期
-    year = isot_time.strftime('%y')
-    yr2 = isot_time.datetime.year
-    month = f"{isot_time.datetime.month:02d}"  # 两位数格式
-    day = f"{isot_time.datetime.day:02d}"
+    warnings.warn(
+        "jinwu.core.utils.generate_download_url is deprecated since 0.2.0; "
+        "use jinwu.fermi.gbm.generate_download_url instead "
+        "(install the 'jinwu[fermi]' extra).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    from jinwu.fermi.gbm import generate_download_url as _gbm_generate_download_url
 
-    # 生成文件名
-    filename = f"glg_poshist_all_{year}{month}{day}_v00.fit"
-
-    # 生成完整的下载路径
-    # https://heasarc.gsfc.nasa.gov/FTP/fermi/data/gbm/daily/2025/01/01/current/
-    # url = f"https://heasarc.gsfc.nasa.gov/FTP/fermi/data/gbm/daily/{yr2}/{isot_time.strftime('%m/%d/')}current/{filename}"
-    url = f"https://heasarc.gsfc.nasa.gov/FTP/fermi/data/gbm/daily/{yr2}/{isot_time.strftime('%m/%d/')}current"
-    return url
+    return _gbm_generate_download_url(isot_time)
 
 
 def extract_all_gz_recursive(root_path: Union[str, os.PathLike, Path], 
@@ -149,6 +146,13 @@ def generate_xspec_result(model, spectrum) -> dict:
 
     统一委托给 :func:`jinwu.core.fit._generate_xspec_result`（含逐参数
     误差状态），避免两份实现漂移。
+
+    ⚠️ 待解决（zcode + GLM-5.3-Flash 自动检查发现，本处仅标注、未改逻辑）：
+    本包装在 beta 中未传入 ``warnings_list``，因此委托目标里 flux/rate/
+    statistics 段的静默异常（以及 master→beta 的 ``'counts'``→
+    ``'total_counts'`` 键更名，见 fit._generate_xspec_result 顶部标注）在本
+    入口完全不可见。复核方向：给本包装补一个默认 warnings 收集并放进返回
+    dict，或与 fit 层统一签名后再对外发布。
     """
     from jinwu.core.fit import _generate_xspec_result
 

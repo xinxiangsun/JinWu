@@ -706,6 +706,16 @@ class RedshiftTriggerExtrapolator:
                 params[idx] = z
 
         # -- 2. Luminosity distance ratio -------------------------------------
+        # 方法：幂律谱的红移/距离 K-correction：固定本征（静止系）光度时，观测者
+        #       框架 powerlaw 归一化按 K_obs ∝ (1+z)^(2-Gamma) / D_L^2 缩放。
+        #       推导：光子流密度 N(E_obs) = K' ((1+z)E)^(-Gamma) (1+z)^2/(4*pi*D_L^2)
+        #       （光子数守恒 + D_L=(1+z)*D_M），故等观测能段的能量流之比为
+        #       (1+z)^(2-Gamma)，即标准 X 射线 K 改正 L = 4*pi*D_L^2*F*(1+z)^(Gamma-2)。
+        #       Gamma=2 时仅 D_L^2 dilution（K 改正为 1），与代码 dist_factor 一致。
+        # 参考：Hogg, 1999, MNRAS 310, 940 (arXiv:astro-ph/9905116)（D_L 与谱量变换）；
+        #       Planck Collaboration, 2020, A&A 641, A6 (doi:10.1051/0004-6361/201833910)
+        #       （astropy Planck18 采用的 Planck 2018 cosmo 参数：H0=67.66, Omega_m=0.3111）；
+        #       XSPEC manual "powerlaw/zpowerlw"（归一化与红移约定）。
         dL0 = cosmo.luminosity_distance(self.z0).value  # Mpc
         dLz = cosmo.luminosity_distance(z).value        # Mpc
         dist_factor = (dL0 / dLz) ** 2

@@ -253,6 +253,10 @@ class GalacticAbsorptionConfig:
     use_cache: bool = True
 
 
+class _DerivedAliasFloat(float):
+    """Mark a computed alias so ``dataclasses.replace`` can recompute it."""
+
+
 @dataclass(frozen=True, slots=True)
 class UpperLimitConfig:
     """Instrument-selected policy for response-aware upper limits.
@@ -322,6 +326,10 @@ class UpperLimitConfig:
             "empirical_global_search",
         }:
             raise ValueError(f"Unknown upper-limit calibration_mode: {self.calibration_mode}")
+        if self.calibration_mode.startswith("empirical_") and self.calibration != "empirical_if_available":
+            raise ValueError("empirical calibration_mode requires calibration='empirical_if_available'")
+        if self.calibration == "empirical_if_available" and self.calibration_mode == "conditional_model":
+            object.__setattr__(self, "calibration_mode", "empirical_if_available")
         allowed_modes = {"observed_upper_bound", "detection_sensitivity"}
         unknown_modes = set(self.result_modes) - allowed_modes
         if unknown_modes:
@@ -330,19 +338,11 @@ class UpperLimitConfig:
             raise ValueError("upper-limit result_modes must not contain duplicates")
 
         sigma = float(self.default_sigma)
-        if self.upper_confidence_sigma is not None:
+        if self.upper_confidence_sigma is not None and not isinstance(self.upper_confidence_sigma, _DerivedAliasFloat):
             sigma_alias = float(self.upper_confidence_sigma)
             if not math.isfinite(sigma_alias) or sigma_alias <= 0:
                 raise ValueError("upper_confidence_sigma must be finite and positive")
-            # ``dataclasses.replace`` operates on the already-normalized
-            # object, so a fit-only override of the legacy ``default_sigma``
-            # carries the old alias value along.  Treat the unchanged
-            # baseline alias as stale in that case; otherwise require two
-            # explicit aliases to agree rather than silently choosing one.
-            baseline_sigma = 3.0
-            if sigma != baseline_sigma and sigma_alias == baseline_sigma:
-                pass
-            elif sigma == baseline_sigma and sigma_alias != baseline_sigma:
+            if sigma == 3.0:
                 sigma = sigma_alias
             elif not math.isclose(sigma, sigma_alias, rel_tol=0.0, abs_tol=1e-12):
                 raise ValueError(
@@ -360,7 +360,7 @@ class UpperLimitConfig:
             raise ValueError("upper-limit Monte Carlo trial counts must be positive")
         object.__setattr__(self, "default_sigma", sigma)
         object.__setattr__(self, "spectral_index", spectral_index)
-        object.__setattr__(self, "upper_confidence_sigma", sigma)
+        object.__setattr__(self, "upper_confidence_sigma", _DerivedAliasFloat(sigma))
         object.__setattr__(self, "detection_power", power)
         object.__setattr__(self, "null_trials", int(self.null_trials))
         object.__setattr__(self, "signal_trials", int(self.signal_trials))
@@ -369,11 +369,15 @@ class UpperLimitConfig:
         false_alarm = (
             0.5 * math.erfc(sigma / math.sqrt(2.0))
             if self.detection_false_alarm_probability is None
+            or isinstance(self.detection_false_alarm_probability, _DerivedAliasFloat)
             else float(self.detection_false_alarm_probability)
         )
         if not math.isfinite(false_alarm) or not 0.0 < false_alarm < 1.0:
             raise ValueError("detection_false_alarm_probability must be between 0 and 1")
-        object.__setattr__(self, "detection_false_alarm_probability", false_alarm)
+        if self.detection_false_alarm_probability is None or isinstance(
+            self.detection_false_alarm_probability, _DerivedAliasFloat
+        ):
+            object.__setattr__(self, "detection_false_alarm_probability", _DerivedAliasFloat(false_alarm))
 
         systematic = self.fractional_background_systematic
         if systematic is not None:
@@ -754,6 +758,7 @@ class InstrumentConfig:
     name: str
     mission: str
     energy_range_keV: tuple[float, float]
+    detector: str | None = None
     scanner: str | None = None
     modules: tuple[str, ...] = ()
     detector_pattern: str | None = None
@@ -762,7 +767,24 @@ class InstrumentConfig:
     place: str | None = "space"
     background_type: str | None = None
     stat_method: str | None = None
+    # ``response_type``＝该仪器响应文件的 OGIP 类型（0.2.0 起强制校验，只允许
+    # rsp2 / drm / rsp / rmf 之一，None=未声明）：
+    #   - "rsp" : 单窗口响应（TYPE-I RSP；一能量行一条重分布谱，有效面积已
+    #             折算在内，无需 ARF）；
+    #   - "rsp2": 多窗口响应（TYPE-II RSP；多行矩阵+时间列，时变谱标准产物，
+    #             如 Fermi/GBM CSPEC/TTE 时间分段响应）；
+    #   - "drm" : 任务自定义单窗口 DRM 文件（内容等价 RSP，如 gbm_drm_gen 产物）；
+    #   - "rmf" : 纯重分布矩阵，必须与 ARF（有效面积）配对使用——OGIP 规定
+    #             RMF 只描述光子能量→通道的重分布，有效面积存于 ARF，二者
+    #             相乘才是完整响应；此时 response_requires_arf 自动置 True。
+    # 参考：OGIP CAL/GEN/92-002 (George et al. 1992), "The Calibration
+    #       Requirements for Spectral Analysis"（RMF/ARF 格式定义）；
+    #       OGIP/92-007, "The multi-mission RMF file format"（TYPE-I/II RSP，
+    #       即 .rsp/.rsp2）。两份备忘录见 HEASARC CALDB docs/memos。
     response_type: str | None = None
+    # rmf 类型必须搭配 ARF 文件（IO/拟合层据此校验 ARF 是否在场）；
+    # 由 __post_init__ 依 response_type 自动维护，无需手工设置。
+    response_requires_arf: bool = False
     filtername: str | None = None
     pipeline: str | None = None
     extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
@@ -804,6 +826,41 @@ class InstrumentConfig:
 
     aliases: ClassVar[tuple[str, ...]] = ()
 
+    # 允许的响应文件类型（OGIP 词表；见 response_type 字段注释与参考）
+    _RESPONSE_TYPES: ClassVar[tuple[str, ...]] = ("rsp2", "drm", "rsp", "rmf")
+
+    def __post_init__(self) -> None:
+        """校验 response_type 词表并维护 rmf⇒ARF 配对约束（0.2.0）。"""
+        self.energy_range_keV = self.energy_range_keV
+        if (
+            self.response_type is not None
+            and self.response_type not in self._RESPONSE_TYPES
+        ):
+            allowed = ", ".join(self._RESPONSE_TYPES)
+            raise ValueError(
+                f"{self.name}: response_type must be one of {allowed} or None, "
+                f"got {self.response_type!r}"
+            )
+        if self.response_type == "rmf":
+            # rmf 必须有 arf 文件（OGIP CAL/GEN/92-002：RMF×ARF 才是完整响应）
+            self.response_requires_arf = True
+        else:
+            self.response_requires_arf = False
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "energy_range_keV":
+            if not isinstance(value, (tuple, list)) or len(value) != 2:
+                raise ValueError("energy_range_keV must contain two limits")
+            lo, hi = (float(x) for x in value)
+            if not (math.isfinite(lo) and math.isfinite(hi) and 0 < lo < hi):
+                raise ValueError("energy_range_keV must be finite, positive and increasing")
+            value = (lo, hi)
+        if name == "response_type":
+            if value is not None and value not in self._RESPONSE_TYPES:
+                raise ValueError(f"invalid response_type: {value!r}")
+            object.__setattr__(self, "response_requires_arf", value == "rmf")
+        object.__setattr__(self, name, value)
+
     @property
     def telescope(self) -> str:
         """Backward-compatible alias for the mission name."""
@@ -841,6 +898,7 @@ class FXT(InstrumentConfig):
             "background_type": "spatial",
             "stat_method": "wstat",
             "response_type": "rmf",
+            "spectrum": SpectrumConfig(group_min_counts=3, fit_energy_range_keV=(0.3, 10.0)),
             "upper_limit": UpperLimitConfig(
                 strategy="spatial_onoff",
                 background_likelihood="poisson_onoff",
@@ -1087,7 +1145,7 @@ class BATSurvey(InstrumentConfig):
         if profile_key == "lmjagn":
             defaults["name"] = "BATSurvey_lmjagn"
         defaults.update(kwargs)
-        if "selection" not in kwargs:
+        if supplied_selection is None:
             defaults["selection"] = defaults["survey"]
         super().__init__(**defaults)
 
@@ -1109,7 +1167,10 @@ class SwiftGRB(InstrumentConfig):
     band: str | None = "BAT+XRT"
     background_type: str | None = "xrt_event_area"
     stat_method: str | None = "cstat"
-    response_type: str | None = "rmf_arf"
+    # XRT 光谱产品为 RMF+ARF 配对（swxrt*.rmf/.arf），按 OGIP 词表声明为 "rmf"
+    # （旧值 "rmf_arf" 不在词表内，0.2.0 规范化；ARF 配对约束由
+    # response_requires_arf=True 表达）。
+    response_type: str | None = "rmf"
     pipeline: str | None = "swift.grb"
     extraction: ExtractionConfig = field(
         default_factory=lambda: ExtractionConfig(
@@ -1170,12 +1231,17 @@ class GBM(InstrumentConfig):
         defaults: dict[str, Any] = {
             "name": f"GBM_{detector}",
             "mission": "Fermi",
+            "detector": detector,
             "energy_range_keV": self.detectors[detector],
             "group_min_counts": 25,
             "band": "Gamma",
             "background_type": "temporal",
             "stat_method": "pgstat",
-            "response_type": "rsp",
+            # GBM 爆发谱（TTE/CSPEC 时间分段）的官方响应为多窗口 TYPE-II RSP
+            # （.rsp2，每时间 bin 一行 DRM）；单窗口 .rsp 亦可读取。
+            # 参考：HEASARC GBM data products 响应文件说明；OGIP/92-007。
+            "response_type": "rsp2",
+            "spectrum": SpectrumConfig(group_min_counts=25, fit_energy_range_keV=self.detectors[detector]),
             "upper_limit": UpperLimitConfig(
                 strategy="modeled_count_spectrum",
                 background_likelihood="poisson_gaussian_profile",
@@ -1237,8 +1303,11 @@ class GBMContinuous(InstrumentConfig):
             "band": "Gamma",
             "background_type": "temporal",
             "stat_method": "pgstat",
-            "response_type": "rsp",
+            # 连续数据管线按 rsp2_delta_time_s 生成时间分段响应（gbm_drm_gen
+            # 的 create_rsp2 / 官方 SA_GBM_RSP_Gen.pl），文件类型为 .rsp2。
+            "response_type": "rsp2",
             "pipeline": "fermi.gbm",
+            "spectrum": SpectrumConfig(group_min_counts=25, fit_energy_range_keV=analysis.nai_band_keV),
             "fitting": FitConfig(
                 model_name="powerlaw",
                 statistic="pgstat",
@@ -1292,12 +1361,14 @@ class GECAM(InstrumentConfig):
         defaults: dict[str, Any] = {
             "name": f"GECAM_{detector_key}",
             "mission": "GECAM",
+            "detector": detector_key,
             "energy_range_keV": (emin, emax),
             "group_min_counts": 25,
             "band": "Gamma",
             "background_type": "temporal",
             "stat_method": "pgstat",
             "response_type": "rsp",
+            "spectrum": SpectrumConfig(group_min_counts=25, fit_energy_range_keV=(emin, emax)),
             "upper_limit": UpperLimitConfig(
                 strategy="modeled_count_spectrum",
                 background_likelihood="poisson_gaussian_profile",

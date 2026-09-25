@@ -39,6 +39,10 @@ class ClusterAnalyzer:
 
     def _preprocess_data(self) -> None:
         """对数据进行标准化处理。"""
+        # 方法：z-score 标准化：x' = (x - mean(x)) / std(x)（逐特征），
+        #       使各特征等权重进入 K-Means 欧氏距离。
+        # 参考：Jolliffe, 2002, "Principal Component Analysis" 2nd ed. (Springer) §2.3
+        #       （标准化与协方差结构）；sklearn.preprocessing.StandardScaler 文档。
         print("步骤 1: 正在对数据进行标准化...")
         scaler = StandardScaler()
         self.scaled_data = scaler.fit_transform(self.data)
@@ -46,6 +50,14 @@ class ClusterAnalyzer:
 
     def find_optimal_clusters(self, max_k: int = 10) -> int:
         """使用肘部法则和轮廓系数来寻找最佳的聚类数量 (k)。"""
+        # 方法：肘部法则 + 轮廓系数联合评估最佳聚类数 k：对每个 k 拟合 K-Means
+        #       （k-means++ 初始化，多次 n_init 取最优），记录簇内误差平方和
+        #       inertia = sum_i min_c ||x_i - mu_c||^2 与平均轮廓系数
+        #       s(i) = (b(i) - a(i)) / max(a(i), b(i))（a=簇内平均距离，b=最近他簇平均距离），
+        #       自动建议取 argmax_k mean_i s(i)。
+        # 参考：Rousseeuw, 1987, J. Comput. Appl. Math. 20, 53 (doi:10.1016/0377-0427(87)90125-7)（轮廓系数）；
+        #       Arthur & Vassilvitskii, 2007, Proc. SODA, 1027（k-means++ 初始化）；
+        #       Thorndike, 1953, Psychometrika 18, 267 (doi:10.1007/BF02289263)（肘部/方差比判据）。
         apply_style()
         if self.scaled_data is None:
             self._preprocess_data()
@@ -109,6 +121,11 @@ class ClusterAnalyzer:
 
     def visualize_clusters(self):
         """使用 PCA 降维后，将聚类结果可视化，返回 matplotlib Figure。"""
+        # 方法：主成分分析（PCA）：对标准化数据 X 的协方差矩阵做特征分解，
+        #       取前两个主成分投影（解释方差比 = lambda_i / sum(lambda)）用于二维可视化；
+        #       聚类中心经同一投影矩阵映射。
+        # 参考：Pearson, 1901, Phil. Mag. 2, 559；Hotelling, 1933, J. Educ. Psych. 24, 417；
+        #       Jolliffe, 2002, "Principal Component Analysis" 2nd ed. (Springer)。
         apply_style()
         if self.kmeans_model is None or self.labels is None or self.scaled_data is None:
             raise RuntimeError("请先调用 fit_predict() 方法进行聚类，然后再进行可视化。")

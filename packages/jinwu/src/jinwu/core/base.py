@@ -96,7 +96,7 @@ class OgipMeta:
     dateobs: Optional[str]
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class ArfBase(OgipResponseBase):
     """Pure field-only base dataclass for ARF response data."""
 
@@ -110,7 +110,7 @@ class ArfBase(OgipResponseBase):
     hduvers: Optional[str] = None
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class RmfBase(OgipResponseBase):
     """Pure field-only base dataclass for RMF response data."""
 
@@ -132,7 +132,7 @@ class RmfBase(OgipResponseBase):
     det_chans: Optional[int] = None
     hduvers: Optional[str] = None
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class PhaBase(OgipSpectrumBase):
     """Pure field-only base dataclass for PHA spectrum data."""
 
@@ -158,7 +158,7 @@ class PhaBase(OgipSpectrumBase):
     det_chans: Optional[int] = None
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class LightcurveDataBase(OgipTimeSeriesBase):
     """Pure field-only base dataclass for lightcurve data."""
 
@@ -207,7 +207,7 @@ class LightcurveDataBase(OgipTimeSeriesBase):
     ratio: Optional[float] = None
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class EventDataBase(OgipTimeSeriesBase):
     """Pure field-only base dataclass for event data."""
 

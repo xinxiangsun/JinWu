@@ -126,6 +126,16 @@ def resolve_galactic_absorption(
     corresponding XSPEC TBabs value after division by 1e22.
     """
 
+    # 方法：按视线方向查询 Swift/UKSSDC nH 服务，取 Willingale 口径的全银经柱密度
+    #       NHTOT（中性氢 + 分子氢 H2 加权平均，atoms cm^-2），并把 XSPEC TBabs 的
+    #       nH 换算为 NHTOT/1e22（TBabs.nH 单位 10^22 cm^-2）；结果按坐标+服务+
+    #       算法版本缓存。注意：该口径包含 H2，与仅用 HI4PI 21cm 的 NH 不同。
+    # 参考：Willingale, Hands, Warwick, Page, O'Brien & Aungier, 2013, MNRAS 431, 394
+    #       (doi:10.1093/mnras/stt125, arXiv:1304.3330)；服务实现见本地
+    #       jinwu/core/utils.py nhtot()（swift_ukssdc_nhtot）；
+    #       HI 21cm 巡天口径另见 HI4PI Collaboration, 2016, A&A 594, A116
+    #       (doi:10.1051/0004-6361/201629178)（不含 H2，仅作对照）。
+
     ra, dec = _validate_coordinates(ra_deg, dec_deg)
     service_name = str(service).strip()
     if not service_name:
