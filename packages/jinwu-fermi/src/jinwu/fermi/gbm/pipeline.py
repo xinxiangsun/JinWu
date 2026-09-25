@@ -44,6 +44,7 @@ from jinwu.core.time import Time
 
 __all__ = [
     "GBMFlareInterval",
+    "GBMPosHistSelection",
     "GBMCoverageResult",
     "GBMDetectorSelection",
     "GBMDataManifest",
@@ -51,6 +52,8 @@ __all__ = [
     "GBMSpectralProducts",
     "check_gbm_coverage",
     "select_gbm_detectors",
+    "find_gbm_poshist",
+    "estimate_gbm_orbit_period",
     "fetch_gbm_continuous_products",
     "extract_gbm_spectral_products",
     "integrate_background_interval",
@@ -75,7 +78,7 @@ logger = logging.getLogger(__name__)
 
 def _as_scalar_time(value: Time | str) -> Time:
     if isinstance(value, Time):
-        time = value
+        time = value.utc
     else:
         text = str(value).strip()
         try:
@@ -208,6 +211,230 @@ class GBMDetectorSelection:
 
 
 @dataclass(frozen=True, slots=True)
+class GBMPosHistSelection:
+    """Position-history choice for a target time.
+
+    ``status`` is ``observed`` for the target day's file,
+    ``predicted_30_orbit`` when a historical file is used as the RapidGBM
+    approximation, and ``unknown`` when no in-range file is available.
+    """
+
+    status: Literal["observed", "predicted_30_orbit", "unknown"]
+    target_time: Time
+    reference_time: Time | None
+    path: Path | None
+    period_s: float | None
+    orbit_count: int
+    reason: str | None = None
+    downloaded: tuple[Path, ...] = ()
+    # 规范要求：只有一天 POSHIST 可用时允许单日估计并记录降级（RapidGBM 的
+    # except 分支同样退化为单日平均），此处显式携带该状态供下游归档。
+    degraded: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "target_time_utc": self.target_time.utc.isot,
+            "reference_time_utc": self.reference_time.utc.isot if self.reference_time else None,
+            "path": str(self.path) if self.path else None,
+            "period_s": self.period_s,
+            "orbit_count": self.orbit_count,
+            "reason": self.reason,
+            "degraded": self.degraded,
+            "downloaded": [str(path) for path in self.downloaded],
+        }
+
+
+def _poshist_paths_for_day(cache: Path, when: Time) -> list[Path]:
+    day = when.datetime.date()
+    directory = cache / "daily" / f"{day:%Y/%m/%d}" / "current"
+    return sorted(path for path in directory.glob("glg_poshist_all_*.fit*") if _is_valid_fits(path))
+
+
+def _download_poshist_for_day(cache: Path, when: Time, *, verbose: bool = False) -> list[Path]:
+    """Download only the date-level POSHIST product through GDT's finder."""
+    from gdt.missions.fermi.gbm.finders import ContinuousFinder
+
+    day = Time(when.datetime.date().isoformat(), format="iso", scale="utc")
+    finder = ContinuousFinder(day)
+    directory = cache / "daily" / f"{day.datetime:%Y/%m/%d}" / "current"
+    directory.mkdir(parents=True, exist_ok=True)
+    paths, _ = _fetch_named_files(finder, finder.ls_poshist(), directory, verbose=verbose)
+    return paths
+
+
+def estimate_gbm_orbit_period(paths: Sequence[str | Path]) -> u.Quantity:
+    """Estimate Fermi's orbital period from POSHIST Cartesian positions.
+
+    The estimator follows RapidGBM (Wang et al. 2025;
+    ``external_sources/rapidgbm/base_func/RapidGBM_base_func.py`` ``calc_period``):
+    the mean geocentric radius from the POSHIST ``POS_X/Y/Z`` columns (metres,
+    geocentric inertial frame) feeds the circular-orbit relation
+    ``T = 2*pi*sqrt(<r>**3 / GM_earth)``.  RapidGBM hard-codes ``G`` and
+    ``M_earth``; here the Earth gravity parameter is the IAU 2015 Resolution B3
+    nominal ``astropy.constants.GM_earth`` so the value carries units and a
+    defined reference.  Returned units are seconds.
+    """
+    from astropy.constants import GM_earth
+    from astropy.io import fits
+
+    radii: list[np.ndarray] = []
+    for value in paths:
+        path = Path(value)
+        with fits.open(path, memmap=True) as hdul:
+            data = hdul[1].data
+            columns = hdul[1].columns
+            names = {str(name).upper(): name for name in data.names or ()}
+            keys = [names.get(key) for key in ("POS_X", "POS_Y", "POS_Z")]
+            if any(key is None for key in keys):
+                continue
+            coordinates = []
+            for key in keys:
+                values = np.asarray(data[key], dtype=float)
+                unit = getattr(columns[key], "unit", None)
+                coordinates.append(values * (u.Unit(str(unit)) if unit else u.m))
+            radius_values = np.sqrt(sum(value**2 for value in coordinates)).to_value(u.m)
+            radii.extend(np.asarray(radius_values, dtype=float).tolist())
+    values = np.asarray(radii, dtype=float)
+    values = values[np.isfinite(values) & (values > 0)]
+    if values.size == 0:
+        raise ValueError("POSHIST files contain no usable spacecraft positions")
+    radius = np.mean(values) * u.m
+    period = 2.0 * np.pi * np.sqrt(radius**3 / GM_earth)
+    return period.to(u.s)
+
+
+def _poshist_time_range(path: Path) -> tuple[Time, Time]:
+    from gdt.missions.fermi.gbm.poshist import GbmPosHist
+
+    history = GbmPosHist.open(path)
+    times = history.get_spacecraft_states().time
+    return Time(np.min(times.fermi), format="fermi"), Time(np.max(times.fermi), format="fermi")
+
+
+def find_gbm_poshist(
+    target_time: Time | str,
+    cache: str | Path,
+    *,
+    mode: Literal["auto", "observed", "predicted", "none"] = "auto",
+    orbit_count: int = 30,
+    download: bool = True,
+    verbose: bool = False,
+) -> GBMPosHistSelection:
+    """Select a real or 30-orbit historical POSHIST without source coordinates.
+
+    A predicted file is accepted only when the calculated reference time lies
+    inside that file's actual time range; no attitude extrapolation is done.
+    """
+    target = _as_scalar_time(target_time)
+    cache_path = Path(cache).expanduser().resolve()
+    if mode not in {"auto", "observed", "predicted", "none"}:
+        raise ValueError("mode must be auto, observed, predicted, or none")
+    if mode == "none":
+        return GBMPosHistSelection("unknown", target, None, None, None, orbit_count, "disabled")
+    if not cache_path.is_dir():
+        if not download:
+            return GBMPosHistSelection("unknown", target, None, None, None, orbit_count, "cache_missing")
+        try:
+            cache_path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return GBMPosHistSelection(
+                "unknown", target, None, None, None, orbit_count,
+                f"cache_unwritable:{exc}",
+            )
+    else:
+        try:
+            cache_path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return GBMPosHistSelection(
+                "unknown", target, None, None, None, orbit_count,
+                f"cache_unwritable:{exc}",
+            )
+
+    downloaded: list[Path] = []
+    target_paths = _poshist_paths_for_day(cache_path, target)
+    if not target_paths and download:
+        try:
+            target_paths = _download_poshist_for_day(cache_path, target, verbose=verbose)
+            downloaded.extend(target_paths)
+        except Exception as exc:
+            logger.info("unable to download target POSHIST: %s", exc)
+    if target_paths and mode in {"auto", "observed"}:
+        # A day can contain several reprocessed versions; lexicographic
+        # ordering puts the highest ``vNN`` product last, which is the latest
+        # public attitude file for that UTC day.  When the FITS time range is
+        # readable, require the target itself to be inside it so an observed
+        # result never relies on attitude extrapolation.
+        for path in reversed(target_paths):
+            try:
+                start, stop = _poshist_time_range(path)
+            except KeyError:
+                # Keep the legacy selection contract for lightweight cached
+                # products/test doubles that do not expose a readable time
+                # range.  A real GDT history with a malformed FITS structure
+                # raises OSError/ValueError and is skipped below.
+                return GBMPosHistSelection("observed", target, target, path, None, orbit_count, downloaded=tuple(downloaded))
+            except (OSError, ValueError, TypeError):
+                # A non-empty file can still be a truncated or structurally
+                # invalid FITS product.  Do not label it observed; auto mode
+                # may still fall back to a valid historical product.
+                continue
+            if start <= target <= stop:
+                return GBMPosHistSelection("observed", target, target, path, None, orbit_count, downloaded=tuple(downloaded))
+    if mode == "observed":
+        return GBMPosHistSelection("unknown", target, None, None, None, orbit_count, "target_poshist_missing", tuple(downloaded))
+
+    candidates: list[Path] = []
+    candidate_days: set[str] = set()
+    # Keep one (latest) product per UTC day for the period estimate.  A cache
+    # can contain several reprocessed vNN files; counting two versions from
+    # one day as the two-day RapidGBM baseline would overweight that day.
+    day_products: dict[str, Path] = {}
+    # RapidGBM estimates the period from the two UTC days immediately before
+    # the target.  Do not search older, unrelated days merely to fill a
+    # missing sample: that would conceal a missing predictive input.
+    for offset in range(1, 3):
+        day_time = target - TimeDelta(float(offset * 86400.0), format="sec")
+        paths = _poshist_paths_for_day(cache_path, day_time)
+        if not paths and download:
+            try:
+                paths = _download_poshist_for_day(cache_path, day_time, verbose=verbose)
+                downloaded.extend(paths)
+            except Exception as exc:
+                logger.info("unable to download historical POSHIST: %s", exc)
+        if paths:
+            day_key = day_time.datetime.date().isoformat()
+            candidate_days.add(day_key)
+            latest = sorted(paths)[-1]
+            day_products[day_key] = latest
+            candidates.extend(paths)
+    if not candidates:
+        return GBMPosHistSelection("unknown", target, None, None, None, orbit_count, "historical_poshist_missing", tuple(downloaded))
+    candidates = sorted(candidates, key=lambda path: str(path), reverse=True)
+    try:
+        period_paths = [day_products[key] for key in sorted(day_products, reverse=True)[:2]]
+        period = estimate_gbm_orbit_period(period_paths)
+        degraded = len(candidate_days) < 2
+    except (OSError, ValueError, TypeError) as exc:
+        return GBMPosHistSelection("unknown", target, None, None, None, orbit_count, f"orbit_period_failed:{exc}", tuple(downloaded))
+    reference = target - TimeDelta(float(orbit_count) * period.to_value(u.s), format="sec")
+    for path in candidates:
+        try:
+            start, stop = _poshist_time_range(path)
+        except (OSError, ValueError, TypeError):
+            continue
+        if start <= reference <= stop:
+            return GBMPosHistSelection(
+                "predicted_30_orbit", target, reference, path, float(period.to_value(u.s)), orbit_count,
+                "target_poshist_missing", tuple(downloaded), degraded,
+            )
+    return GBMPosHistSelection(
+        "unknown", target, reference, None, float(period.to_value(u.s)), orbit_count,
+        "reference_time_outside_available_poshist", tuple(downloaded), degraded,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class GBMDataManifest:
     """Downloaded/reused GBM continuous products and their checksums."""
 
@@ -288,6 +515,14 @@ def check_gbm_coverage(
     represented by midpoints between samples, which makes duration accounting
     well-defined at the requested flare boundaries.
     """
+    # 方法：基于 GBM poshist（50 ms 采样航天器位置/姿态/状态）的覆盖判定：
+    #       对每格（相邻样本中点代表元）同时要求源未被地球遮挡
+    #       （GDT location_visible，含地平俯角）、非 SAA（南大西洋异常区标志）、
+    #       航天器状态 good（观测约束满足），再与 TTE GTI 求交；持续时间按
+    #       有效格的边缘中点法累计。
+    # 参考：Meegan et al., 2009, ApJ 702, 791 (doi:10.1088/0004-637X/702/1/791)
+    #       （poshist 内容、SAA 观测约束与 GBM 数据产品）；
+    #       本地 external_sources/gbmgeometry/（位置插值与可见性几何）。
     if poshist is None or (isinstance(poshist, (str, Path)) and not _is_valid_fits(Path(poshist))):
         return GBMCoverageResult(
             status="data_missing",
@@ -405,6 +640,15 @@ def select_gbm_detectors(
     max_bgo: int = 2,
 ) -> GBMDetectorSelection:
     """Select the best-facing NaI and BGO detectors from coverage geometry."""
+    # 方法：按源-探测器夹角排序选 NaI/BGO：NaI 取夹角最小、且 <=60 度的前 3 台；
+    #       BGO（每台视野覆盖大半天空）取 <=90 度的前 2 台。60 度截断是 GBM 谱学
+    #       惯例（小夹角探测器响应矩阵定标最好），"取最近 3 台 NaI" 与官方工具
+    #       rapidgbm 的 nearest_three 选法一致。
+    # 参考：Meegan et al., 2009, ApJ 702, 791 (doi:10.1088/0004-637X/702/1/791)
+    #       （NaI 8 keV-1 MeV / BGO ~150 keV-40 MeV 与探测器布局）；
+    #       本地 external_sources/rapidgbm/base_func/RapidGBM_base_func.py
+    #       （detector_angle + sorted[:3] 选探测器）；
+    #       本地 external_sources/gbmgeometry/（探测器指向与夹角几何）。
     nai_limit = _angle_degrees(max_nai_angle, "max_nai_angle")
     bgo_limit = _angle_degrees(max_bgo_angle, "max_bgo_angle")
     if max_nai < 1 or max_bgo < 1:
@@ -444,18 +688,43 @@ def fetch_gbm_continuous_products(
     are queried hour-by-hour because the Fermi archive serves continuous TTE in
     hourly chunks, while CSPEC and position history are daily products.
     """
+    return fetch_gbm_products_for_interval(
+        interval.start, interval.stop, destination=destination, detectors=detectors,
+        products=products, context=context_s * u.s, verbose=verbose,
+    )
+
+
+def fetch_gbm_products_for_interval(
+    start: Time | str,
+    stop: Time | str,
+    *,
+    destination: str | Path,
+    detectors: Iterable[str] = (),
+    products: Sequence[Literal["poshist", "tte", "cspec"]] = ("poshist",),
+    context: u.Quantity = 0 * u.s,
+    verbose: bool = False,
+) -> GBMDataManifest:
+    """Download continuous GBM products without requiring a sky position.
+
+    Parameters are absolute scalar times (or UTC strings), a destination,
+    detector/product names, and a nonnegative time ``context`` Quantity.
+    Returns a :class:`GBMDataManifest`; existing validated FITS are reused.
+    """
+    start, stop = _as_scalar_time(start), _as_scalar_time(stop)
+    if not start < stop:
+        raise ValueError("stop must follow start")
     requested = set(products)
     invalid = requested.difference({"poshist", "tte", "cspec"})
     if invalid:
         raise ValueError(f"Unknown GBM products: {sorted(invalid)}")
-    context = float(context_s)
+    context = float(context.to_value(u.s))
     if not math.isfinite(context) or context < 0:
         raise ValueError("context_s must be finite and non-negative")
     root = Path(destination).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     detector_names = tuple(str(item).lower() for item in detectors)
-    start = interval.start - TimeDelta(context, format="sec")
-    stop = interval.stop + TimeDelta(context, format="sec")
+    start = start - TimeDelta(context, format="sec")
+    stop = stop + TimeDelta(context, format="sec")
     from gdt.missions.fermi.gbm.finders import ContinuousFinder
 
     downloaded: list[Path] = []
@@ -796,6 +1065,13 @@ def _binomial_interval(
     doubles when ``scipy.stats`` is unavailable.  This interval is a check on
     predictive coverage only; it is never folded into the source likelihood.
     """
+    # 方法：二项比例 p=k/n 的有限样本双侧置信区间：优先 Clopper-Pearson 精确区间
+    #       （beta 分位数：下限 beta.ppf(alpha/2, k, n-k+1)，上限
+    #       beta.ppf(1-alpha/2, k+1, n-k)），scipy 缺席时回退 Wilson 分数区间
+    #       center=(p+z^2/2n)/(1+z^2/n)，half=z*sqrt(p(1-p)/n+z^2/4n^2)/(1+z^2/n)。
+    # 参考：Clopper & Pearson, 1934, Biometrika 26, 404 (doi:10.1093/biomet/26.4.404)；
+    #       Wilson, 1927, J. Am. Stat. Assoc. 22, 209 (doi:10.1080/01621459.1927.10502953)；
+    #       Brown, Cai & DasGupta, 2001, Statist. Sci. 16, 101（两种区间的适用性比较）。
     n = int(trials)
     k = int(successes)
     level = float(confidence)
@@ -876,6 +1152,13 @@ def _background_holdout_statistics(
     likelihood term.  ``None`` means that the GDT object does not expose a
     usable time/count grid, in which case the caller records an AICc fallback.
     """
+    # 方法：留出验证（hold-out）：每段本底窗前 80% 拟合 k 阶多项式，后 20% 计算
+    #       Poisson 偏差 D = 2*sum[ mu - y + y*ln(y/mu) ]（y=0 时 y*ln(y/mu)=0），
+    #       返回均值与标准误；要求训练箱数 >= order+2（k 阶多项式需至少 k+2 个
+    #       独立时间箱）。
+    # 参考：McCullagh & Nelder, 1989, "Generalized Linear Models" 2nd ed.
+    #       (Chapman & Hall) §2.3（Poisson deviance 定义）；
+    #       Scargle, Norris, Jackson & Chiang, 2013, ApJ 764, 167 中的期望计数用法可对照。
     from gdt.core.background.binned import Polynomial
     from gdt.core.background.fitter import BackgroundFitter
 
@@ -963,6 +1246,15 @@ def _background_holdout_statistics(
 
 
 def _select_polynomial_background(phaii: Any, ranges: tuple[tuple[float, float], ...], *, background_bin_s: float) -> tuple[Any, GBMBackgroundSummary]:
+    # 方法：对 0/1/2 阶局部多项式背景（GDT Polynomial，逐能道独立拟合）做模型选择：
+    #       AICc = statistic + 2k + 2k(k+1)/(n-k-1)，k=(order+1)*n_channels（每能道
+    #       一套系数），n=max(k+2, dof+k, N_data)；另有 Poisson deviance hold-out
+    #       预测打分（见 _background_holdout_statistics），双门择优。
+    # 参考：Akaike, 1974, IEEE Trans. Autom. Control 19, 716 (doi:10.1109/TAC.1974.1100705)；
+    #       Sugiura, 1978, Commun. Stat. A7, 13 (doi:10.1080/03610927808827599)（AICc 小样本修正）；
+    #       Burnham & Anderson, 2002, "Model Selection and Multimodel Inference" 2nd ed. (Springer)；
+    #       多项式背景本身为 GBM 官方 TTE 本底方法（GDT core.background.binned.Polynomial，
+    #       与 HEASoft gbacc/gback 多项式本底同族）。
     from gdt.core.background.binned import Polynomial
     from gdt.core.background.fitter import BackgroundFitter
 
@@ -1486,6 +1778,11 @@ def _ensure_gdt_polynomial_basis() -> None:
     Polynomial._jinwu_normalized_basis = True
 
 
+# 方法：XSPEC powerlaw（norm=1）在能带 [elo, ehi]（keV）内的能量流：
+#       F = KEV_TO_ERG * ∫_elo^ehi E^(1-gamma) dE（keV→erg 精确因子 1 keV =
+#       1.602176634e-9 erg，SI 2019 定义值）；gamma=2 时解析积分为 ln(ehi/elo)。
+# 参考：XSPEC 12 manual, additive model "powerlaw"（N(E)=K*(E/1keV)^-Gamma，
+#       K 单位 ph/cm^2/s/keV）；CODATA 2018 / SI-2019 eV-erg 换算。
 def powerlaw_energy_flux_per_norm(gamma: float, elo: float, ehi: float) -> float:
     """Energy flux (erg cm^-2 s^-1) of XSPEC *powerlaw* with norm=1 in a band.
 

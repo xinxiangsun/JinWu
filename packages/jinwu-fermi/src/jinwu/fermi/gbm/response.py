@@ -86,6 +86,17 @@ def build_gbm_response_command(
     supported by the official response generator.  ``start_met`` and
     ``stop_met`` are Fermi MET seconds and generate an RSP2 when appropriate.
     """
+    # 方法：按官方 GBM 响应生成器（Trigger Mode 2，任意源位置/任意时间）构造
+    #       参数向量：-C<cspec|ctime> 选数据类型（决定能道边界）；-d<N> 逐探测器，
+    #       编号 0-13（n0-n9=0..9, na=10, nb=11, b0=12, b1=13，即 12/13 为两台 BGO）；
+    #       -R/-D 为源 J2000 RA/Dec（度）；-S/-E 为 MET 起止（秒），两者同给时
+    #       输出带时间序列多矩阵的 RSP2（指向不变时为单矩阵 .rsp）；工作目录
+    #       必须作为最后一个位置参数放在所有选项之后。
+    # 参考：Fermi GBM 官方文档 "Documentation for the GBM Response Generator"
+    #       https://fermi.gsfc.nasa.gov/ssc/data/analysis/gbm/DOCUMENTATION.html
+    #       （-C/-d/-R/-D/-S/-E 语义、探测器编号、RSP2 规则、目录参数位置）；
+    #       Meegan et al., 2009, ApJ 702, 791 (doi:10.1088/0004-637X/702/1/791)
+    #       （GBM 探测器布局与 poshist/cspec 数据产品）。
     if data_type.lower() not in {"cspec", "ctime"}:
         raise ValueError("data_type must be 'cspec' or 'ctime'")
     ra = float(ra_deg)

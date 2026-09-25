@@ -98,11 +98,19 @@ class Attitude:
     def _build_interpolators(self):
         """Build interpolation functions for pointing lookup."""
         t = self.time.value
-        self._ra_interp = interp1d(t, self.ra.value, kind='linear', 
+        # 方法：RA 与 roll 是 0–360° 圆周量，线性插值前先按 360° 解缠绕
+        #       （unwrap），否则在 359.9°→0.1° 跳变处会插出 ~180° 的错误指向；
+        #       插值结果再回卷到 [0, 360)（与 astropy Longitude 的 360° 回卷
+        #       约定一致）。Dec 是 ±90° 的线性量，无需解缠绕。
+        # 参考：numpy.unwrap（相位解缠绕，period 参数语义）；
+        #       astropy.coordinates.Longitude（天球经度按 360° 回卷的规范做法）。
+        ra_unwrapped = np.rad2deg(np.unwrap(np.deg2rad(self.ra.value)))
+        roll_unwrapped = np.rad2deg(np.unwrap(np.deg2rad(self.roll.value)))
+        self._ra_interp = interp1d(t, ra_unwrapped, kind='linear',
                                    bounds_error=False, fill_value='extrapolate')
         self._dec_interp = interp1d(t, self.dec.value, kind='linear',
                                     bounds_error=False, fill_value='extrapolate')
-        self._roll_interp = interp1d(t, self.roll.value, kind='linear',
+        self._roll_interp = interp1d(t, roll_unwrapped, kind='linear',
                                      bounds_error=False, fill_value='extrapolate')
 
     @classmethod
@@ -166,6 +174,18 @@ class Attitude:
     @classmethod
     def _parse_sat(cls, all_data):
         """Parse *.sat file data."""
+        # 方法：*.sat 姿态文件解析（与 BatAnalysis Attitude.from_file 同口径）：
+        #       指向直接取官方 ACS 预计算的 POINTING 三元组 [RA, Dec, Roll]（度），
+        #       不在本模块内做四元数→天球坐标换算；QPARAM 四元数为标量在后
+        #       [x, y, z, w] 约定（仅存档，供需要时按 SOFA 约定换算）；
+        #       ACS_DATA.FLAGS 位序固定为
+        #       [10角分稳定, 稳定(settled), 在SAA, 安全模式(safehold)]。
+        # 参考：本地 external_sources/BatAnalysis-main/batanalysis/attitude.py
+        #       （Parsotan, T., BatAnalysis，Swift BAT 官方 Python 分析包；
+        #       "quarternions have scalar last" 注释与 FLAGS 列位序）；
+        #       Swift 姿态文件字段见 HEASARC sw*sat/auxil 产品文档；
+        #       四元数→方向余弦的 SOFA 约定见 IAU SOFA "Quaternions" 工具文档
+        #       (sofa_ast_f.c 系列，q2c/nutm80 等)。
         time = all_data['TIME']
         ra = all_data['POINTING'][:, 0]
         dec = all_data['POINTING'][:, 1]
@@ -266,9 +286,9 @@ class Attitude:
         else:
             t = met_time
         
-        ra = self._ra_interp(t)
+        ra = self._ra_interp(t) % 360.0  # 解缠绕插值后回卷到 [0, 360)
         dec = self._dec_interp(t)
-        
+
         return ra * u.deg, dec * u.deg
 
     def skycoord_at(self, met_time):
@@ -280,12 +300,12 @@ class Attitude:
         return SkyCoord(ra, dec, frame='icrs')
 
     def roll_at(self, met_time):
-        """Get roll angle at a specific MET time."""
+        """Get roll angle at a specific time (wrapped back to [0, 360) deg)."""
         if hasattr(met_time, 'value'):
             t = met_time.value
         else:
             t = met_time
-        return self._roll_interp(t) * u.deg
+        return (self._roll_interp(t) % 360.0) * u.deg
 
     def in_saa_at(self, met_time):
         """Check if in SAA at a specific time."""

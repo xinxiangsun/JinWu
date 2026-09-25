@@ -381,6 +381,18 @@ def signed_snr(rate: float | u.Quantity, error: float | u.Quantity) -> float:
     Rates normally have count/s units and the return value is dimensionless.
     Negative net rates remain negative; a non-positive error returns NaN.
     """
+    # 方法：带符号信噪比 SNR = rate / error（净率为负时保留符号；error<=0 返回
+    #       NaN）。全带合成 SNR 遵循 BAT 官方 batsurvey 的 TOTSNR 定义：
+    #       TOTSNR = TOTAL(RATE) / sqrt(sum(BKG_VAR**2))（8 个原生能段的本底
+    #       标准差平方和开根）；与 BatAnalysis get_count_rate 的
+    #       snr_allband = rate_tot/sqrt(sum(bkg_var^2)) 逐式一致。
+    # 参考：HEASoft batsurvey 官方文档，本地
+    #       external_sources/heasoft-6.37/swift/bat/tasks/batsurvey/batsurvey.html
+    #       （"TOTSNR ... computed as TOTAL(RATE)/SQRT(SUM(BKG_VAR**2))"）；
+    #       本地 external_sources/BatAnalysis-main/batanalysis/bat_survey.py
+    #       get_count_rate()（bkg_var_2_tot = sum(bkg_var^2)）；
+    #       Barthelmy et al., 2005, Space Sci. Rev. 120, 143
+    #       (doi:10.1007/s11214-005-5096-3)（BAT 仪器与 14-195 keV 巡天能段）。
     if isinstance(rate, u.Quantity):
         if not isinstance(error, u.Quantity):
             raise TypeError("rate and error must both be Quantity objects")
@@ -678,6 +690,14 @@ def estimate_bat_survey_sensitivity(
     otherwise the result is explicitly ``unavailable`` rather than assigning
     an unjustified Gaussian-tail sensitivity.
     """
+    # 方法：固定位置灵敏度用原生 TOTSNR 统计量在无源控制样本上的经验分布外推：
+    #       TOTSNR = RATE_TOTAL/sqrt(sum(BKG_VAR[:8]**2))（batsurvey 官方定义，
+    #       见 signed_snr 处参考）；灵敏度由控制样本的经验上尾 + 确定性源注入
+    #       达到 (false_alarm_probability, target_power) 要求，控制样本不足时
+    #       显式返回 unavailable，不用高斯尾外推。
+    # 参考：HEASoft batsurvey 文档与 BatAnalysis bat_survey.py（同 signed_snr 注释）；
+    #       注入-回收法的功效/虚警框架见 Cowan, Cranmer, Gross & Vitells, 2011,
+    #       Eur. Phys. J. C 71, 1554 (arXiv:1007.1727)。
     from jinwu.core.upperlimit import DetectionSensitivity, OneSidedLevel
 
     items = tuple(controls)
@@ -6359,7 +6379,7 @@ class BATSurveyPipeline(InstrumentPipeline[BATSurveyInput, BATSurveyResult]):
                             if self.config.plotting.enabled
                             else ()
                         ),
-                        plot_dpi=self.config.plotting.dpi,
+                        plot_density=self.config.plotting.dpi,
                         plot_required=(
                             self.config.plotting.required
                             and self.config.plotting.enabled

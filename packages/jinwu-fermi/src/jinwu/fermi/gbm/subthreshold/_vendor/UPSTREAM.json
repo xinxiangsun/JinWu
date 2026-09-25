@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/USRA-STI/gamma-ray-targeted-search",
+  "commit": "1bc1e913f97fd7195a7e297f8d6032a5c7758894",
+  "license": "Apache-2.0",
+  "original_sha256": {
+    "utils.py": "56824b102ddbdfdd03ede3be8b554baa06b9ba96f8417e364d0ade628fe12220",
+    "likelihood.py": "ceefdb71260545ddc62a4b8a351318cf2f449a7b0257d36949810a08fc22069b",
+    "response.py": "864e46d3e8ca765d89afa5196f47bbef941d37258021429ce5c9193fd8f31ae6",
+    "configuration.py": "ce359b4cad1e9eccf632e2177b5eda46435a575c07737eb94a11466d4960b633",
+    "data.py": "f04df6ddd1e05ca401ec4901ba86b487f902db40da9ee768d2c0878e8a14441b",
+    "priors.py": "c063507d27814e6c17e3c76b1f84934e300f39d92c0585f316f602364a7bb179",
+    "results.py": "98003dd3544c5aa2127f5f1a4f4aea0859791fec70d2008f7dec443c662b30ab",
+    "filters.py": "45b3ea6d704592a63fd6465f739f5c31ce026258023524a8d53dabef9ede747a",
+    "search.py": "7dcaedba589b3bc4598523979769b9c928b0893586b0fe81ec280fb7b3123b44",
+    "license.txt": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+  },
+  "changes": [
+    "Package-relative imports. Scientific corrections reside in the JinWu adapter."
+  ]
+}

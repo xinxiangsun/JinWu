@@ -744,6 +744,17 @@ def measure_region_exposure(
     mask_mode: str = "exact",
 ) -> ExposureMeasure:
     """Integrate one exposure image over the exact effective extraction region."""
+    # 方法：曝光图比值法标定 ON/OFF 背景缩放因子：把（含排除区的）有效提取区域
+    #       投影到 wxtpipeline/wxtproducts 生成的曝光图（.exp/.expcorr，单位 s）上，
+    #       逐像元积分 exposure_sum = sum(mask * expmap)；ON/OFF 缩放取
+    #       alpha = source_exposure_sum / background_exposure_sum，等价于逐像元
+    #       曝光加权的 BACKSCAL 之比（OFF 谱 BACKSCAL 随后写为 source/alpha）。
+    #       官方语义：源区为半径 67 像元的圆（对应约 9 角分）、曝光图 imgbin=16、
+    #       0.5-4.0 keV（PI 50-400，增益 10 eV/ch）。
+    # 参考：本地 external_sources/epwxtdas-runtime-reference/help/wxtproducts.html
+    #       与 help/wxtpipeline.html（曝光图/源区/PI 范围的产品定义）；
+    #       ON/OFF 缩放 alpha 的显著性用法见 Li & Ma, 1983, ApJ 272, 317
+    #       (doi:10.1086/161095)。
     path = Path(exposure_map)
     with fits.open(path, memmap=False) as hdul:
         image_hdu = next((hdu for hdu in hdul if hdu.data is not None and hdu.data.ndim == 2), None)
@@ -1161,6 +1172,18 @@ def merge_bayesian_blocks_for_spectra(
     minimum_significance: float,
 ) -> list[TimeResolvedSegment]:
     """Merge adjacent duration blocks until each segment is fit-worthy."""
+    # 方法：把贝叶斯块（Scargle 2013 变点）得到的时间块自左向右累并，直到累计
+    #       段同时满足净计数 net = n_on - alpha*n_off >= minimum_net_counts 与
+    #       有符号 Li & Ma 显著性 >= minimum_significance 才落段；尾部不足的
+    #       并入最后一段。显著性用 Li & Ma Eq.(17)：
+    #       S = sqrt(2*[n_on*ln((1+a)/a*n_on/(n_on+n_off)) + n_off*ln((1+a)*n_off/(n_on+n_off))])，
+    #       符号取 n_on - alpha*n_off。
+    # 参考：Scargle, Norris, Jackson & Chiang, 2013, ApJ 764, 167
+    #       (doi:10.1088/0004-637X/764/2/167, arXiv:1207.5578)（贝叶斯块）；
+    #       Li & Ma, 1983, ApJ 272, 317 (doi:10.1086/161095) Eq.(17)；
+    #       T90 双侧 (1-q)/2 与 1-(1-q)/2 分位口径见 Koshut et al., 1996, ApJ 463, 570
+    #       (doi:10.1086/177272)；本仓库 core/ops.py bayesian_blocks_exposure
+    #       （移植自 HEASoft 6.37 burstcube/lib/bayesian_blocks.py）。
     clipped = np.asarray(edges, dtype=float)
     clipped = clipped[np.isfinite(clipped)]
     clipped = np.clip(clipped, t_start, t_stop)
@@ -2451,7 +2474,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             plot_formats=(
                 self.config.plotting.formats if self.config.plotting.enabled else ()
             ),
-            plot_dpi=self.config.plotting.dpi,
+            plot_density=self.config.plotting.dpi,
             plot_required=self.config.plotting.enabled and self.config.plotting.required,
         )
 
@@ -2556,7 +2579,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         adopted_key = None
         for label in ("t90", "t100", "pipeline"):
             candidate = comparisons.get(label)
-            if candidate is None or "fit_error" in candidate:
+            if candidate is None or (isinstance(candidate, dict) and "fit_error" in candidate):
                 continue
             adopted_key = adopted_fit(candidate).get("model_key")
             if adopted_key:

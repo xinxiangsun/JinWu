@@ -9,4 +9,8 @@ products and spectral extraction helpers.
 pip install jinwu-ep
 ```
 
-Import as `jinwu.ep`, e.g. `from jinwu.ep.wxt import WXTObservation`.
+Import the normal-pointing workflow as
+`from jinwu.ep.wxt import WXTPointingInput, WXTPointingPipeline`.
+Run through `exposure_arm_qc`, inspect the proposed source/background regions
+and exposure diagnostics, call `approve_regions()`, then resume. Supply an
+independent `output_root` so products do not land beside the input observation.

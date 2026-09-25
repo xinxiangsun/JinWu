@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jinwu-gw"
+version = "0.2.0"
+description = "Gravitational-wave sky localization and high-energy coverage plots for jinwu."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.11"
+dependencies = [
+    "jinwu>=0.2,<0.3",
+    "jinwu-fermi>=0.2,<0.3",
+    "numpy>=1.24",
+    "astropy>=7.1",
+    "matplotlib>=3.7",
+    "requests>=2.25",
+    "astropy-healpix>=1.1",
+    "mocpy>=0.20",
+    "healpy>=1.16",
+    "ligo-gracedb>=2.15",
+    "ligo.skymap>=2.5",
+]
+keywords = ["astrophysics", "gravitational waves", "sky map", "GBM", "Einstein Probe"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+]
+
+[project.scripts]
+jinwu-gw = "jinwu.gw.cli:main"
+
+[project.entry-points."jinwu.instruments"]
+gw = "jinwu.gw"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jinwu.gw*"]

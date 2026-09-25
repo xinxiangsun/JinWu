@@ -31,6 +31,11 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+search = ["healpy>=1.17", "astropy-healpix>=1.0", "rich>=13", "PyYAML>=6"]
+# Reuse JinWu's existing flat/multi-order probability-map reader (jinwu.core.skymap).
+# Only astropy-healpix is needed; no longer depends on jinwu-gw (breaks the
+# former jinwu-fermi <-> jinwu-gw dependency cycle).
+search-skymap = ["astropy-healpix>=1.0"]
 # Pure-Python response generation stack (batteries-free alternative to the
 # official SA_GBM_RSP_Gen.pl).  Install from the xinxiangsun forks checked
 # out under external_sources/ or via git+https:
@@ -52,3 +57,6 @@ fermi = "jinwu.fermi"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["jinwu.fermi*"]
+
+[tool.setuptools.package-data]
+"jinwu.fermi.gbm.subthreshold._vendor" = ["license.txt", "UPSTREAM.json"]
