@@ -52,13 +52,33 @@ def test_flat_nested_map(tmp_path):
     assert np.array_equal(sm.ipix, np.arange(12))
 
 
-def test_nuniq_multires_map(tmp_path):
+def test_nuniq_multires_map(tmp_path, monkeypatch):
+    import astropy_healpix as ah
+
     p = tmp_path / "m.fits"
     _nuniq_map(p)
+    original = ah.uniq_to_level_ipix
+
+    def require_fits_signed_integer(uniq):
+        assert np.asarray(uniq).dtype == np.dtype("int64")
+        return original(uniq)
+
+    monkeypatch.setattr(ah, "uniq_to_level_ipix", require_fits_signed_integer)
     sm = load_skymap(p)
     assert sm.ordering == "NUNIQ"
     assert sm.total_probability == pytest.approx(1.0)
     assert set(np.unique(sm.levels)) == {2, 3}
+
+
+def test_nuniq_rejects_negative_fits_index(tmp_path):
+    p = tmp_path / "invalid.fits"
+    cols = fits.ColDefs([
+        fits.Column(name="UNIQ", format="K", array=np.array([-1], dtype=np.int64)),
+        fits.Column(name="PROBDENSITY", format="D", array=np.array([1.])),
+    ])
+    fits.HDUList([fits.PrimaryHDU(), fits.BinTableHDU.from_columns(cols)]).writeto(p)
+    with pytest.raises(ValueError, match="NUNIQ indices"):
+        load_skymap(p)
 
 
 def test_rejects_nonpositive_probability(tmp_path):

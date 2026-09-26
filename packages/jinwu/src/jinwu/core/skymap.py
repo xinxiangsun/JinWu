@@ -145,8 +145,14 @@ def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
 
         # ---- Multi-order map (NUNIQ / PROBDENSITY) ----
         if "UNIQ" in names and "PROBDENSITY" in names:
-            uniq_raw = np.asarray(table_hdu.data[names["UNIQ"]], dtype=np.uint64)
-            levels, ipix = ah.uniq_to_level_ipix(uniq_raw)
+            # FITS K stores signed int64 and astropy-healpix's bit-scan ufunc
+            # accepts that dtype.  Casting to uint64 first fails on clean CI
+            # installs even for valid positive UNIQ indices.
+            uniq_signed = np.asarray(table_hdu.data[names["UNIQ"]], dtype=np.int64)
+            if np.any(uniq_signed < 4):
+                raise ValueError("NUNIQ indices must be at least 4")
+            levels, ipix = ah.uniq_to_level_ipix(uniq_signed)
+            uniq_raw = uniq_signed.astype(np.uint64)
             density = _density_column(table_hdu, names["PROBDENSITY"])
             area = ah.nside_to_pixel_area(ah.level_to_nside(levels)).to_value(u.sr)
             return _finish(
