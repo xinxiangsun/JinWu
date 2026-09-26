@@ -1,5 +1,5 @@
 {% set name = "jinwu" %}
-{% set version = "0.2.0" %}
+{% set version = "0.2.1" %}
 {% set python_min = "3.11" %}
 
 package:
@@ -8,7 +8,8 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
-  sha256: 5eeaa86b8b8c632dbba587dd66c79a4ff3402b4b2f2cbe1842d0752c58388fdb
+  # Fill from the published 0.2.1 sdist before submitting this conda recipe.
+  sha256: placeholder
 
 build:
   noarch: python

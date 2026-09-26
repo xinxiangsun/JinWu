@@ -1,7 +1,7 @@
 Changelog
 =========
 
-v0.2.0 (unreleased)
+v0.2.1 (2026-09-26)
 -------------------
 
 Breaking changes
@@ -74,6 +74,8 @@ New and improved
   ``jinwu-gw`` and the former ``jinwu-fermi <-> jinwu-gw`` dependency cycle
   is removed.  ``jinwu.gw.skymap.load_skymap`` keeps its richer
   URL-fetching/provenance/MOC behaviour for GW workflows.
+  Multi-order FITS NUNIQ indices are decoded as signed 64-bit integers,
+  matching the FITS ``K`` column and astropy-healpix ufunc contract.
 * Added a resumable Swift BAT+XRT GRB pipeline (:mod:`jinwu.swift.grb`,
   registered ``"swift.grb"``) with CLI ``python -m jinwu.swift.grb``:
   catalog resolution with redshift priority, Burst Analyser ingestion with
@@ -98,7 +100,7 @@ New and improved
   (embedded Base64 FITS, local FITS, FITS URL and public GraceDB superevents
   with alert version/checksum provenance), multi-resolution and flat HEALPix
   sky maps with 50%/90% credible regions, MOC-refined coverage integrals
-  (order 10 -> 13, |dP| < 1e-3 convergence recorded), Fermi/GBM geometry from
+  (order 10 -> 13, ``|dP| < 1e-3`` convergence recorded), Fermi/GBM geometry from
   real POSHIST or the RapidGBM 30-orbit historical reference
   (:func:`jinwu.fermi.gbm.find_gbm_poshist`,
   :func:`jinwu.fermi.gbm.read_gbm_geometry`), time-tagged EP/BAT MOC, polygon
@@ -180,11 +182,6 @@ New and improved
   ``sphinx-automodapi>=0.21`` is required for Sphinx 8.2+/9 compatibility.
 * ``WXTPointingResult.display()`` keeps the same output contract
   (【标题】 headers first, summary last) with and without IPython.
-* Under review (annotated in code, logic unchanged): the GECAM and HXMT
-  epochs in :mod:`jinwu.core.time` look 69.184 s early relative to a
-  "UTC zero point + TT counting" convention — see the ⚠️ comments on
-  ``TimeGECAM`` / ``TimeHXMT`` and verify against official mission
-  documentation and real event files before correcting.
 
 v0.0.27 (2026-06-03)
 --------------------

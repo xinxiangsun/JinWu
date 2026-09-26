@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu-gw"
-version = "0.2.0"
+version = "0.2.1"
 description = "Gravitational-wave sky localization and high-energy coverage plots for jinwu."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
