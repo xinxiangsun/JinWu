@@ -634,10 +634,12 @@
 - `hea` Python 3.12 离线全量套件在 NUNIQ 修复后：1432 passed / 51 skipped / 6 deselected（新增通道、时间、Bayesian Blocks、OGIP、配置、GBM 有效时间及 GW 天图回归在内）；针对性天图和合并回归 23 passed。Sphinx HTML 构建成功（164 条现存 API/docstring 警告）；五个 Python wheel 构建成功。核心 wheel 首次构建发现旧 `build/lib` 残留已删除源码，清理构建缓存后重建，不再包含 `jinwu.response`。
 - **WXT 真实观测**：本地 EP260809a / `06800001692_32`，`hea`+HEASoft/XSPEC；入口为本机 `examples/wxt/pointing_pipeline.py`，独立工作区 `/tmp/jinwu-wxt-demo-validation/wxt_20260925T150838425533Z`。先停在 `needs_review`，检查任务图像、源区/背景区及 ARM；出于软件流程验证目的记录批准，然后恢复至 `completed`。源区曝光覆盖 1.0，背景有效覆盖 0.83894，`alpha=0.188032`；存在背景曝光覆盖警告，故这些拟合结果仅证明流程可运行，不能直接用于科学结论。T90 源 PHA 的 BACKFILE/RESPFILE/ANCRFILE 均指向存在的独立工作区文件；时间轴的 FITS 与任务时钟差约 `2.6e-7 s`，报告和拟合图已生成。XSPEC 参数输出仍含 `FFFFFFFFF` 状态，教学时必须展示诊断，不据此宣称参数区间可靠。
 - **GBM 真实数据局部复验**：2025-06-05 15z 连续观测，NaI n4 TTE + 当天 measured POSHIST，触发时刻 `2025-06-05T15:09:55 UTC`，独立日志 `/tmp/jinwu-gbm-real-validation.log`。背景准备覆盖 6408 个 64 ms 箱、367252 事件、409.02 s 有效曝光；35 个无源控制块的背景诊断 `passed=true`，实测姿态覆盖该窗口。缺少本地官方响应模板，未运行完整 subthreshold 候选搜索和 FAR 校准；R75 用非默认 1.024 s 窗的离线回归验证。未找到本地 GECAM/HXMT 事件产品，R32 仅由官方定义及 MET 往返回归支持。
-- **未完成/后续**：主分支前两轮 CI 失败原因及修复见 §19.3，最终重跑结果需再核对；R26–29、R38、R59–60、R70–74、R76–78 等其余性能、维护或边界建议仍作为后续项。历史证据中的“通过”仅适用于记录时的特定版本和范围。
+- **未完成/后续**：主分支前两轮 CI 失败原因、修复及最终通过结果见 §19.3；R26–29、R38、R59–60、R70–74、R76–78 等其余性能、维护或边界建议仍作为后续项。历史证据中的“通过”仅适用于记录时的特定版本和范围。
 
 ### 19.3 主分支 CI 反馈与修复
 
 首次推送 `a36c7e9` 后，[CI run 36157046191](https://github.com/xinxiangsun/JinWu/actions/runs/36157046191) 在 Python 3.11/3.12/3.13 均出现相同四个失败。原因是干净的 CI 环境不会由可选 BatAnalysis 注册 Astropy `swift` 格式，Swift/BAT survey 代码还在使用该外部别名，并在失败时静默退回 Unix 秒；这也让 PHA 时间窗筛选错位。现改用本库已注册的 `swiftmet`，并保留 `extract_time_interval(time_format="swift")` 的兼容入口。补了在刻意移除 `swift` 注册项时的回归检查。
 
 第二次推送 `54b5dad` 后，[CI run 36215029793](https://github.com/xinxiangsun/JinWu/actions/runs/36215029793) 的 Swift 时间问题已全部消失，但 3.11/3.12/3.13 仍各有一个 NUNIQ 失败。首次修复只把合成 FITS 的 UNIQ 列改为 `int64`，生产 `load_skymap` 读入时又转成 `uint64`，在 CI 安装的 astropy-healpix 版本里其位扫描 ufunc 不支持无符号类型。现改为以 FITS `K` 的有符号 64 位数解码（先拒绝 `<4`），再把有效 UNIQ 存入现有无符号结果字段；新增负索引回归。此问题影响真实多分辨率 GW 天图读取，因此是生产修复，不只是测试兼容性。
+
+推送 `fc56d70` 后，[CI run 36215364872](https://github.com/xinxiangsun/JinWu/actions/runs/36215364872) 的 Python 3.11、3.12、3.13 三个作业均完成且为 success；远端 `master` 提交号与本地一致。此次 CI 只覆盖仓库配置的自动检查，真实 WXT 和 GBM 验证范围仍以上述记录为准。
