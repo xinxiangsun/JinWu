@@ -1753,19 +1753,13 @@ def _time_value(value: Any) -> float:
     if isinstance(value, u.Quantity):
         return float(value.to_value(u.s))
     if isinstance(value, Time):
-        try:
-            return float(value.to_value("swift"))
-        except Exception:
-            return float(value.unix)
+        return float(value.to_value("swiftmet"))
     if isinstance(value, str):
         try:
             return float(value)
         except ValueError:
             parsed = Time(value, scale="utc")
-            try:
-                return float(parsed.to_value("swift"))
-            except Exception:
-                return float(parsed.unix)
+            return float(parsed.to_value("swiftmet"))
     return float(value)
 
 
@@ -1833,7 +1827,7 @@ def _time_utc_iso(value: Any) -> str:
         except Exception:
             pass
     numeric = _time_value(value)
-    return Time(numeric, format="swift").utc.isot
+    return Time(numeric, format="swiftmet").utc.isot
 
 
 def select_overlapping_pointings(

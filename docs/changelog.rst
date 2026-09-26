@@ -44,6 +44,10 @@ Breaking changes
   TT internally.  Any saved UTC labels produced from the former epochs
   should be regenerated.  Fermi/GW calendar grouping explicitly converts
   ``Time`` values to UTC before reading ``datetime``.
+* Swift/BAT survey time conversion now uses JinWu's registered ``swiftmet``
+  format.  ``extract_time_interval(time_format="swift")`` remains accepted as
+  a compatibility spelling and resolves to ``swiftmet`` without requiring an
+  optional external package to register ``swift`` with Astropy.
 * ``jinwu.ftools`` now matches HEASoft 6.37 semantics: ``rebin_pha``
   (ftrbnpha) requires the output channel count to divide the input exactly,
   renumbers output channels from the first input channel and folds the

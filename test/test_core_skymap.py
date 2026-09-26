@@ -21,7 +21,7 @@ def _flat_map(path, ordering="RING"):
 def _nuniq_map(path):
     import astropy_healpix as ah
     # two level-2 cells and one level-3 cell; density uniform per sr
-    uniq = np.array([4 * 4**2 + 0, 4 * 4**2 + 5, 4 * 4**3 + 9], dtype=np.uint64)
+    uniq = np.array([4 * 4**2 + 0, 4 * 4**2 + 5, 4 * 4**3 + 9], dtype=np.int64)
     levels, ipix = ah.uniq_to_level_ipix(uniq)
     area = ah.nside_to_pixel_area(ah.level_to_nside(levels)).to_value("sr")
     density = np.full(uniq.size, 1.0 / area.sum())

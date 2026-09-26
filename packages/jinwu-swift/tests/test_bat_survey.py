@@ -525,10 +525,10 @@ def test_mosaic_window_members_keep_full_exposure_and_mark_shared_rows(tmp_path)
         ]
     )
     fits.HDUList([fits.PrimaryHDU(), table]).writeto(inventory)
-    start1 = Time(base + 50, format="swift").utc.isot
-    stop1 = Time(base + 150, format="swift").utc.isot
-    start2 = Time(base + 150, format="swift").utc.isot
-    stop2 = Time(base + 250, format="swift").utc.isot
+    start1 = Time(base + 50, format="swiftmet").utc.isot
+    stop1 = Time(base + 150, format="swiftmet").utc.isot
+    start2 = Time(base + 150, format="swiftmet").utc.isot
+    stop2 = Time(base + 250, format="swiftmet").utc.isot
     members = BatAnalysisSurveyBackend._inventory_window_members(
         inventory,
         ((start1, stop1), (start2, stop2)),

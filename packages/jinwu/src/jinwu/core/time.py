@@ -824,7 +824,7 @@ def extract_time_interval(
       * use_gti=False: 通过 header['TSTART'] 和 header['TSTOP'] 获取总时间范围
     
     时间格式对应关系：
-    - 'swift': Swift卫星时间（秒，自2001-01-01 TT）
+    - 'swift'（兼容别名）或 'swiftmet': Swift卫星时间（秒，自2001-01-01 UTC，含 UTCF 校正）
     - 'ep': Einstein Probe时间（秒，自2020-01-01 UTC）
     - 'fermi': Fermi卫星时间（秒，自2001-01-01 UTC）
     - 'hxmt': HXMT时间（秒，自2012-01-01 00:00:00 UTC）
@@ -832,6 +832,8 @@ def extract_time_interval(
     - 'leia': LEIA/XRISM时间（秒，自2021-01-01 UTC）
     - 'grid': GRID时间（Unix时间戳）
     """
+    resolved_time_format = 'swiftmet' if time_format.lower() == 'swift' else time_format
+
     # 尝试识别数据类型
     has_gti = hasattr(data_obj, 'gti_start') and hasattr(data_obj, 'gti_stop')
     has_header = hasattr(data_obj, 'header')
@@ -856,8 +858,8 @@ def extract_time_interval(
         if len(gti_start_array) == 0:
             # GTI为空，回退到TSTART/TSTOP
             print(f"Warning: GTI is empty for {name}, using TSTART/TSTOP instead")
-            start_time = Time(tstart_met, format=time_format)
-            end_time = Time(tstop_met, format=time_format)
+            start_time = Time(tstart_met, format=resolved_time_format)
+            end_time = Time(tstop_met, format=resolved_time_format)
             
             interval = {
                 'name': name,
@@ -873,8 +875,8 @@ def extract_time_interval(
         # 返回多个GTI区间
         intervals = []
         for i, (gti_start, gti_stop) in enumerate(zip(gti_start_array, gti_stop_array)):
-            start_time = Time(gti_start, format=time_format)
-            end_time = Time(gti_stop, format=time_format)
+            start_time = Time(gti_start, format=resolved_time_format)
+            end_time = Time(gti_stop, format=resolved_time_format)
             
             # 为每个GTI创建一个名称
             gti_name = f"{name} GTI#{i+1}" if len(gti_start_array) > 1 else name
@@ -895,8 +897,8 @@ def extract_time_interval(
     
     else:
         # PHA文件或EVT文件但不使用GTI
-        start_time = Time(tstart_met, format=time_format)
-        end_time = Time(tstop_met, format=time_format)
+        start_time = Time(tstart_met, format=resolved_time_format)
+        end_time = Time(tstop_met, format=resolved_time_format)
         
         data_type = 'observation' if not has_gti else 'observation (TSTART/TSTOP)'
         
@@ -1034,7 +1036,7 @@ def compare_time_intervals(
     >>> from jinwu.core.time import Time, compare_time_intervals
     >>> intervals = [
     ...     {'name': 'WXT', 'start': Time(100, format='ep'), 'end': Time(200, format='ep')},
-    ...     {'name': 'BAT', 'start': Time(150, format='swift'), 'end': Time(250, format='swift')}
+    ...     {'name': 'BAT', 'start': Time(150, format='swiftmet'), 'end': Time(250, format='swiftmet')}
     ... ]
     >>> results = compare_time_intervals(intervals)
     """
@@ -1164,8 +1166,8 @@ def plot_time_intervals(
     >>> intervals = [
     ...     {'name': 'EP WXT', 'start': Time(100, format='ep'),
     ...      'end': Time(200, format='ep')},
-    ...     {'name': 'Swift BAT', 'start': Time(150, format='swift'),
-    ...      'end': Time(250, format='swift')}
+    ...     {'name': 'Swift BAT', 'start': Time(150, format='swiftmet'),
+    ...      'end': Time(250, format='swiftmet')}
     ... ]
     >>> fig = plot_time_intervals(intervals, save_path='time_comparison.png')
     """

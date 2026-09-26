@@ -17,6 +17,7 @@ from jinwu.core.io import read_evt, write_evt, write_pha, write_rmf
 from jinwu.core.ops import BayesianBlocksBinner, rebin_pha, slice_pha
 from jinwu.core.products import load_net_lightcurve
 from jinwu.core.time import Time
+from jinwu.core.time import extract_time_interval
 from jinwu.core.xselect import extract_image
 from jinwu.gw.gracedb import normalize_superevent_id
 from jinwu.gw.models import scalar_time
@@ -30,6 +31,17 @@ def test_met_utc_epochs_and_scalar_calendar_boundaries():
     boundary = Time("2023-12-23T23:59:50", scale="utc").tt
     assert _as_scalar_time(boundary).datetime.hour == 23
     assert scalar_time(boundary).datetime.hour == 23
+
+
+def test_swift_compatibility_label_uses_bundled_met_format(monkeypatch):
+    monkeypatch.delitem(Time.FORMATS, "swift", raising=False)
+    pha = SimpleNamespace(header={"TSTART": 100., "TSTOP": 200.})
+    interval = extract_time_interval(pha, "BAT", time_format="swift")
+    assert interval["start"].utc.isot == Time(100., format="swiftmet").utc.isot
+    from jinwu.swift.bat.survey import _time_value, _time_utc_iso
+    assert _time_value(interval["start"]) == pytest.approx(100.)
+    assert _time_value(interval["start"].utc.isot) == pytest.approx(100., abs=.001)
+    assert _time_utc_iso(100.) == interval["start"].utc.isot
 
 
 @pytest.mark.parametrize("raw,canonical", [
