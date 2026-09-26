@@ -8,8 +8,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
-  # Fill from the published 0.2.1 sdist before submitting this conda recipe.
-  sha256: placeholder
+  sha256: 8f7794557061b940fcee6d62a764791f2193fa35aebfdc79db0b766fa7dbc90c
 
 build:
   noarch: python

@@ -643,3 +643,9 @@
 第二次推送 `54b5dad` 后，[CI run 36215029793](https://github.com/xinxiangsun/JinWu/actions/runs/36215029793) 的 Swift 时间问题已全部消失，但 3.11/3.12/3.13 仍各有一个 NUNIQ 失败。首次修复只把合成 FITS 的 UNIQ 列改为 `int64`，生产 `load_skymap` 读入时又转成 `uint64`，在 CI 安装的 astropy-healpix 版本里其位扫描 ufunc 不支持无符号类型。现改为以 FITS `K` 的有符号 64 位数解码（先拒绝 `<4`），再把有效 UNIQ 存入现有无符号结果字段；新增负索引回归。此问题影响真实多分辨率 GW 天图读取，因此是生产修复，不只是测试兼容性。
 
 推送 `fc56d70` 后，[CI run 36215364872](https://github.com/xinxiangsun/JinWu/actions/runs/36215364872) 的 Python 3.11、3.12、3.13 三个作业均完成且为 success；远端 `master` 提交号与本地一致。此次 CI 只覆盖仓库配置的自动检查，真实 WXT 和 GBM 验证范围仍以上述记录为准。
+
+## 20. 0.2.1 版本与标签（2026-09-26）
+
+原有 `v0.2.0` 标签指向 `2a91dd5`，且 `jinwu 0.2.0` 已发布到 PyPI，因此合并后的版本锁步更新为 `0.2.1`，六个包、GW 运行时版本、Rust 清单与 conda 配方一致。`v0.2.1` 是带注释的标签，解引用后指向 `fda5994`；[master CI 36221285873](https://github.com/xinxiangsun/JinWu/actions/runs/36221285873) 的 Python 3.11/3.12/3.13 均通过。本地 1432 项离线测试通过，五个 Python 包 wheel/sdist 构建、隔离 wheel 门禁 25 项测试及 Linux Rust wheel 导入通过。
+
+[标签发布工作流 36221428343](https://github.com/xinxiangsun/JinWu/actions/runs/36221428343) 的 Python/Rust 构建与 wheel 门禁均通过，但 PyPI OIDC 身份只可上传既有 `jinwu` 项目；首次创建 `jinwu-ep` 时 PyPI 返回 400，故 `publish` 作业失败并跳过 GitHub Release。随后使用本机现有 PyPI 用户凭据上传**该次 CI 构建的**五个 Python 包 wheel/sdist 与两个 Rust 平台 wheel，并人工创建 [GitHub Release v0.2.1](https://github.com/xinxiangsun/JinWu/releases/tag/v0.2.1)（12 个 CI 产物）；PyPI 各文件 SHA256 与 CI 下载产物逐一一致。核心 conda 配方的 SHA256 取自 PyPI 已发布 sdist。`jinwurs` 尚未发布 sdist，其 conda 配方保持显式占位，未验收。下一次自动发布前须为每个 PyPI 项目配置 GitHub Trusted Publisher；不能把本次手工补传视为发布工作流已修复。
