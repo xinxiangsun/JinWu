@@ -105,6 +105,9 @@ rejected. Failed convergence, negative/nonfinite TS or unrepresentable tail
 probabilities raise explicit errors. Extremely small positive systematic
 sigma can also cause the frozen optimizer to lose precision; choosing sigma=0
 is a distinct explicitly known input, not an automatic fallback.
+Large deficits can also fail convergence, for example PP with ``n_on=1``,
+``background=1046``, ``alpha=1`` and ``systematic_sigma=0.1``. The error is
+preserved; callers must not replace it with a detection significance.
 
 All returned statistics are local. Searching times, bin widths, energy bands
 or detectors requires its own trials calibration. Adding this API does not

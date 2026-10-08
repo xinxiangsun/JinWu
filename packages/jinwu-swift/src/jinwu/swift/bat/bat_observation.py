@@ -48,6 +48,7 @@ try:
     HAS_GDT_SWIFT = True
 except ImportError:
     HAS_GDT_SWIFT = False
+    BatSao = None
     logger.debug("gdt-swift not available; SAO/poshist features are limited.")
 
 # Optional: ligo.skymap for advanced projections

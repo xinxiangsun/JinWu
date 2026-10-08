@@ -136,7 +136,7 @@ def test_safe_response_command_uses_native_detector_names(tmp_path):
         dec_deg=-30.0,
         start_met=100.0,
         stop_met=101.0,
-        detectors=("n0", "BGO_2"),
+        detectors=("n0", "BGO_1"),
         workdir=tmp_path,
     )
     assert command.detector_names == ("n0", "b1")

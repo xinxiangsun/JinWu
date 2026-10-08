@@ -110,9 +110,12 @@ def rebin_rmf(matrix: np.ndarray, channel_map: np.ndarray, row_map: Optional[np.
     if mat.ndim != 2:
         raise ValueError('matrix must be 2D')
     nrows, ncols = mat.shape
-    channel_map = np.asarray(channel_map, dtype=int)
-    if channel_map.size != ncols:
-        raise ValueError('channel_map length must equal number of columns in matrix')
+    channel_map = np.asarray(channel_map)
+    if (channel_map.ndim != 1 or channel_map.size != ncols
+            or np.any(~np.isfinite(channel_map)) or np.any(channel_map < 0)
+            or np.any(channel_map != np.floor(channel_map))):
+        raise ValueError('channel_map must contain one nonnegative integer per matrix column')
+    channel_map = channel_map.astype(int)
     n_new_ch = int(channel_map.max()) + 1 if channel_map.size else 0
 
     if row_map is None:
@@ -123,10 +126,13 @@ def rebin_rmf(matrix: np.ndarray, channel_map: np.ndarray, row_map: Optional[np.
             new_mat[:, tgt] += mat[:, icol]
         return new_mat
     else:
-        row_map = np.asarray(row_map, dtype=int)
-        if row_map.size != nrows:
-            raise ValueError('row_map length must equal number of rows in matrix')
-        n_new_row = int(row_map.max()) + 1
+        row_map = np.asarray(row_map)
+        if (row_map.ndim != 1 or row_map.size != nrows
+                or np.any(~np.isfinite(row_map)) or np.any(row_map < 0)
+                or np.any(row_map != np.floor(row_map))):
+            raise ValueError('row_map must contain one nonnegative integer per matrix row')
+        row_map = row_map.astype(int)
+        n_new_row = int(row_map.max()) + 1 if row_map.size else 0
         new_mat = np.zeros((n_new_row, n_new_ch), dtype=float)
         for irow in range(nrows):
             rtarget = int(row_map[irow])

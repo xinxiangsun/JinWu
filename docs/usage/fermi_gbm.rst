@@ -132,6 +132,12 @@ overridden with keywords such as
 Response backends
 ~~~~~~~~~~~~~~~~~
 
+The response-generator helpers accept canonical ``n0``--``nb``, ``b0``/``b1``
+names and zero-based FITS aliases ``NAI_00``--``NAI_11``, ``BGO_0``/``BGO_1``.
+Older one-based aliases must be migrated to canonical names: in particular,
+``BGO_2`` is invalid, and ``NAI_05`` selects ``n5``. The separate historical
+``GBM(detector=...)`` configuration convention does not change these helpers.
+
 Two interchangeable backends generate the detector response matrices:
 
 * **official** — ``SA_GBM_RSP_Gen.pl`` with CSPEC + position history; the

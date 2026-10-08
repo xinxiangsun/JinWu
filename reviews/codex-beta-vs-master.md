@@ -2079,3 +2079,47 @@ FitConfig 实际在 `jinwu.core.config`，`WXT(fitting=FitConfig(...))`
 - **修改及验收署名**：Codex 主代理 `/root`；harness＝Codex desktop；实际模型/推理档位＝未披露；记录时间＝2026-10-08T11:45:22+08:00；范围＝上述科学修复、回归、文档/版本/打包及进度记录；结果＝本节证据。由同一代理完成修复验收，不称为第二名独立 reviewer；无子代理参与。
 
 补充卫生核验：暂存新增文件后发现生成 SVG、迁移脚本/旧指南与 vendor 的历史尾空白；仅清理空白，可执行 Python AST 逐文件一致，Notebook 未改。来源 hash 保留，迁移清单补充最终 destination/script hash，MVT integration_changes 明记空白清理；随后重新构建受影响 wheel。
+
+### 21.23 2026-10-08T15:43:24+08:00 其他审查记录的非 T90 科学修复与 0.2.3 验收
+
+用户授权依其他审查修复明显影响算法和物理正确性的内容，继续合并、push；随后明确暂缓 T90，以及仅拉伸时间、未正确传递亮度衰减的红移相关内容。起点 `master=072e7376d0555ed72477a88f5dde1620064c2e88`，修复分支 `codex/non-t90-science-fixes`。本轮逐项重新确认当前源码，不以旧报告的“未修复”文字代替现状。
+
+审查来源包括本报告 §21.9–21.18，以及 `gbm-mvt-migration.md`、`gbm-mvt-pg-snr.md`、`snr-gv-significance-migration.md`、`codex-reviews-vs-origin-master-20261007.md`、`unreviewed-code-science-20261008.md`。单独的 duration/A&A 报告及红移时间/亮度算法按用户指示暂缓；已有 0.2.2 修复不重复归为新修复。以下状态覆盖相应旧记录，未列出的历史条目不自动关闭。
+
+| 旧记录 | 当前修复与证据 |
+|---|---|
+| R227 | GBM response 的 FITS 别名恢复官方零基编号：`NAI_05→n5`、`NAI_10→na`、`BGO_1→b1`；`BGO_2` 拒绝。真实 170817 TTE 的 DETNAM 与生成命令 `-d5` 一致；不冒称新 DRM 标定验收。编号依据 [GBM 官方说明](https://fermi.gsfc.nasa.gov/ssc/data/analysis/gbm/DOCUMENTATION.html)。 |
+| R132、R134 | 共用 TTE 读取器复用 Quantity/有限秒校验，提前拒绝非递增或非法时窗，异常时关闭 GDT 资源。真实事件数组、MVT 两档观测值及中间量与原版精确一致。 |
+| R85 | 缓存 FITS 校验遍历 HDU、检查完整数据跨度并读取数据块，不再只查主头。真实 TTE 完整原件通过，截断副本拒绝；没有宣称 R87 的 GTI 覆盖缺口也已修复。 |
+| R215 | PHA 显式引用的 BACKFILE/RESPFILE/ANCRFILE 缺失时返回缺失，不静默配上唯一但不相关的候选；三类引用回归通过。 |
+| R73 网格缺口 | 谱准备实际读取 ARF；要求有限非负有效面积、合法入射能量分箱与 RMF 网格一致（rtol=1e-6、atol=1e-8 keV）。错位/NaN/负面积阻止 ready；真实 FXTA/B 网格和准备流程通过。保守拒绝失配，未自动重新标定或重分箱。 |
+| R118 | 新 prepared fit 先卸载旧 XSPEC chains，再清理数据/模型。真实短 MH 链后再次拟合确认旧链已清；依据 [AllChains.clear](https://heasarc.gsfc.nasa.gov/docs/software/xspec/python/html/chainmanager.html)。 |
+| R123 | 无替换 Galactic NH 值时仍执行 freeze 标志；联合数据组显式共享 Galactic NH。两个冻结状态回归及真实两组 FXT 的 `= p1` 链接通过。冻结模型初值不等于估计或查询 Galactic NH，文档已明示。 |
+| R89 | Mosaic 目录只读取合并的 `sources_tot.cat`，缺源时不借用成员指向 catalog 的 SNR。显式 catalog 文件输入仍可用；故障回归通过，未重跑完整 BAT mosaic。 |
+| R90 | BAT TIMEUNIT 支持 h/hr/ks，TIMEZERO 同单位缩放；未知单位拒绝，GTI 读取复用同一转换。真实 BAT GTI 的等价 h/ks 副本与原秒轴一致。 |
+| R228 | 可选 gdt-swift 缺失时定义 `BatSao=None`，使既有本地 Attitude 回退可执行；直接回退回归通过，未据此宣称 R229 或 SAO/姿态标定通过。 |
+| R232 | 背景后验参数、秒曝光和计数在期望/采样/更新边界验证；拒绝负值、非有限值及正计数零曝光。潜在 Gamma 率通过 `sample_rate_off` 暴露供既有 ON/OFF 采样复用；有效输入的原采样过程不变，零 shape 的零率极限保留。真实计数驱动的 Gamma/负二项矩与独立公式相符；红移生成器仍未改为使用潜在率。 |
+| R219–R226 中的 STmag 项 | FilterInfo 和 Magnitude 均明确拒绝 STmag，避免套 Vega 零点；两个入口回归通过。旧记录没有逐项编号映射，故不凭空分配单个 R 编号。 |
+| R176–R179 | DS9 保留 +/- 和文件坐标声明，排除区域从包含区域并集中扣除；赤道六十进制经度按时角、纬度按度；四参数椭圆补零角度。天球裸尺寸按度、显式角分/角秒按后缀转换，不猜量级；区域筛选复用 `_new_event_like` 保留时间原点、位置、能量与附加列。真实 FXTA 1879456 个事件中，圆减中央圆选出 911 个，与直接掩码逐项一致，PHA 总计数 911。 |
+| R182 | RMF channel_map/row_map 在整数转换前校验一维、长度、有限、非负整数，避免负索引静默并道。真实 FXT 1024×1024 RMF 两道合并，最大行和差 2.220446049250313e-16。 |
+| R183 | 时间筛选复用 EventData.slice，曝光按裁剪后的 GTI 重叠计算；空能段不再调用空数组 min/max，指定通道数时返回零谱。真实 GBM 两秒窗计数与直接事件筛选一致，曝光 2 s。 |
+| R180 | 两种 grppha 后端共用任务返回码、FATAL/INCOMPLETE EXECUTION 和可读 GROUPING 校验；不再因非空文件存在就成功。真实 FXT 分组成功、真实坏 PHA 和 exit-zero FATAL 反例拒绝。R181 heasoftpy 超时另属未关闭项。 |
+
+**更正旧审查的 DS9 单位叙述：** §21.14/证据 54 的“arcmin 缺省”不成立。[DS9 官方格式](https://ds9.si.edu/doc/ref/region.html)规定 IMAGE/PHYSICAL 裸数为像素，天球坐标下裸数为度，单引号才是角分。因此 R178 的量级猜测问题成立，修复应遵循官方单位而非旧叙述。当前区域验证覆盖像素圆/排除/椭圆和简单未旋转 WCS 的圆尺寸；旋转天球椭圆、坐标系变换、TELDEF 畸变/姿态与 WCS 原点语义仍需独立仪器标定，不能把本轮回归当完整 sky-region 验收。
+
+SNR 移植核心及其冻结来源未变；R150 大亏损优化器无法收敛保留明确异常，补充文档反例（n_on=1、background=1046、alpha=1、systematic_sigma=0.1），未擅自生成“检测显著性”。MVT 的 PG significance helper 和冻结论文 SNR 不互换。本轮没有改动 `lf/`、`core/timescale.py`、`core/ops.py`，8 个相关 Python 文件与起点逐字一致，哈希见 `deferred-scope-unchanged.json`；T90、红移亮度缩放、其后验模拟噪声与分箱问题保持暂缓状态。
+
+**验收与可复现证据：** 独立输出根目录 `reviews/evidence/non-t90-fixes-20261008/`（依既有规则保持本地忽略，不强行提交原始数据或新测试目录）：
+
+- `validate_real.py` → `run/acceptance.json`：GBM bn170817529 的 n5 TTE；BAT 真实 master.gti；EP260119a FXT06800001128 的 FXTA/B PHA/BAK/RMF/ARF。准备→真实 grppha→兼容性检查→单谱拟合/短链→两组联合拟合→报告/图件完成。所有受保护原件 SHA256 不变。拟合仅作软件回归，无新物理结论。
+- `validate_mvt.py` → `mvt/report.json`：源窗 [-2.2,4.3] s，背景 [-62.9,-12.9]/[14.9,64.9] s，六个现有 NaI，8–900 keV、1 ms/0.1 ms、背景一阶多项式、seed=0、每档两次重采样。完整各阶段 completed，prepared_events 六组数组与旧原件精确一致。`scripts/validate_gbm_mvt.py --upstream .runtime/gbm-mvt-validation/upstream/MVTfermi --report reviews/evidence/non-t90-fixes-20261008/mvt/report.json --output reviews/evidence/non-t90-fixes-20261008/mvt-reference.json --max-samples 2` 核验冻结上游 AST、观测返回/八类中间量和重采样逐项相等。不是全部300次或最细亮源重算，不升级经验分类的物理证明强度。
+- `validate_region.py` → `region/acceptance.json` 与原始通道 `region_spectrum.pha`：只读 FXTA 事件/已有像素区域，附加中央排除圆；直接掩码、事件时间/通道及完整4096道计数守恒。记录数据原件哈希与既有 FITS 时间头警告；不将该提取谱冒充已响应标定的拟合产物。
+- hea Python3.12.14：最终重点回归 **81 passed**；此前 broader core batch 232 passed。首次失败来自本地 mock 缺 AllChains、角度断言未允许浮点尾差、诊断脚本错误参数/通道数，修正后实际验收通过，未用失败日志冒充成功。真实工具须在 hea 激活后设置当前 HEADAS 并执行已有 heainit，PyXspec/XSPEC12.15.1 可用；未替换 HOME，未重新安装 HEASoft。
+- 独立 Python3.12 venv 安装五个本地 wheel，全部 Python 源逐字匹配；受控跟踪测试 + Swift 包内 CI 范围 **429 passed, 1 skipped, 1 deselected**，跳过缺可选 gwpy，network/heasoft/real_data 由真实验收单独覆盖受影响入口。`pip check` 无缺口；0.2.3 安装版五包版本/导入检查及发布专用三文件门禁25 passed。wheel/source 验证见 `validate_wheels.py` 和 `release-0.2.3-equivalence.json`。
+- 项目 Sphinx fail-on-warning 模式（`-W --keep-going`）全量构建零警告；额外尝试 nitpicky `-n` 暴露347个既有未解析引用，不属于项目既定门禁，未报告其通过。文档资产检查、变更源码编译、`git diff --check` 通过。
+- 五个 Python 包构建 0.2.3 sdist/wheel，锁步同步仪器包、可选 Rust 元数据与两份 conda 配方；核心配方 SHA256 对应本次 sdist。未构建 Rust 扩展，jinwurs 配方仍明确占位/未发布；没有 PyPI 上传或发布 tag。
+
+适用规则：[AGENTS.md:59–65](../AGENTS.md#real-data-validation) 的真实流程、输入保护及未验证范围要求，和 [AGENTS.md:75–83](../AGENTS.md#code-migration-acceptance) 的冻结来源/同输入比较要求均已按上述边界执行。复用函数登记于 `REUSABLE_FUNCTIONS.md`。历史全部开放条目未一概关闭：尤其 R87 GTI 覆盖、R174/R175/R184 坐标标定与缓存、host 查询/目录版本及其他未列项继续保留；T90/红移排除范围维持用户暂缓。
+
+- **历史审查复核署名**：Codex 主代理 `/root`；harness＝Codex desktop；运行环境实际模型标识＝未披露；推理档位＝未披露；记录时间＝2026-10-08T15:43:24+08:00；范围＝以上其他审查记录及当前缺陷落点；结果＝表中重新确认与处置，保留旧作者署名，未虚称全仓无缺陷。
+- **修改及验收署名**：Codex 主代理 `/root`；harness＝Codex desktop；实际模型/推理档位＝未披露；记录时间＝2026-10-08T15:43:24+08:00；范围＝上述非 T90 修复、跟踪回归、文档、0.2.3 元数据与本地科学证据；结果＝上述验收。由同一代理修复与自查，无新独立 reviewer 或子代理参与。

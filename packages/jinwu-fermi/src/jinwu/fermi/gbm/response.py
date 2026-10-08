@@ -38,9 +38,12 @@ def _normalise_detector(detector: str | int) -> tuple[str, int]:
         return name, detector
     name = str(detector).strip().lower()
     if name.startswith("nai_"):
-        name = f"n{int(name.split('_', 1)[1]) - 1}"
+        number = int(name.split('_', 1)[1])
+        if number not in range(12):
+            raise ValueError("NaI FITS detector number must be in [0, 11]")
+        name = f"n{number:x}"
     elif name.startswith("bgo_"):
-        name = f"b{int(name.split('_', 1)[1]) - 1}"
+        name = f"b{int(name.split('_', 1)[1])}"
     if name not in _DETECTOR_NUMBERS:
         choices = ", ".join(_DETECTOR_NUMBERS)
         raise ValueError(f"Unknown GBM detector {detector!r}; expected one of {choices}")

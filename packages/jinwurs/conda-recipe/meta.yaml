@@ -1,5 +1,5 @@
 {% set name = "jinwurs" %}
-{% set version = "0.2.2" %}
+{% set version = "0.2.3" %}
 
 package:
   name: {{ name|lower }}
@@ -7,7 +7,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwurs-{{ version }}.tar.gz
-  # No jinwurs 0.2.2 sdist is published; this recipe is not yet submit-ready.
+  # No jinwurs 0.2.3 sdist is published; this recipe is not yet submit-ready.
   sha256: placeholder
 
 build:

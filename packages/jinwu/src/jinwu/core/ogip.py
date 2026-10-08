@@ -371,7 +371,7 @@ class OgipResponseBase(OgipFitsBase):
 # 具体数据类将继承上述基类并在自身 validate() 中补充列检查。
 
 
-def check_response_compatibility(spectrum: Any, response: Any) -> ValidationReport:
+def check_response_compatibility(spectrum: Any, response: Any, *, arf: Any = None) -> ValidationReport:
     """谱 ↔ 响应兼容性检查（对齐 heasp "checking an RMF and an ARF/spectrum
     for compatibility" 语义）。
 
@@ -383,9 +383,11 @@ def check_response_compatibility(spectrum: Any, response: Any) -> ValidationRepo
     Check available spectrum CHANNEL bounds against response TLMIN/DETCHANS.
     A range mismatch is ERROR; differing declared channel counts are WARN.
     Missing response bounds produce INFO, and unexpected check failures produce
-    WARN. Thus ok=True means no detected ERROR, not that every compatibility
-    check was possible. No energy-grid, matrix-normalization or calibration check
-    is performed; inputs are left unchanged.
+    WARN. When ``arf`` is supplied, require finite, increasing incident-energy
+    bins (keV) matching the RMF to relative tolerance 1e-6 and absolute tolerance
+    1e-8 keV, and finite nonnegative effective areas (cm²). This conservative
+    check does not rebin mismatched grids. Matrix normalization and calibration
+    validity are not checked; inputs are left unchanged.
     """
     rpt = ValidationReport(kind='compatibility', path=Path(str(getattr(spectrum, 'path', '<in-memory>'))), ok=True)
     try:
@@ -409,5 +411,25 @@ def check_response_compatibility(spectrum: Any, response: Any) -> ValidationRepo
                     'Response TLMIN/DETCHANS unavailable; channel compatibility not checked.')
     except Exception as exc:
         rpt.add('WARN', 'COMPAT_CHECK_FAILED', f"Compatibility check failed: {exc}")
+    if arf is not None:
+        try:
+            r_lo, r_hi = np.asarray(response.energ_lo), np.asarray(response.energ_hi)
+            a_lo, a_hi = np.asarray(arf.energ_lo), np.asarray(arf.energ_hi)
+            area = np.asarray(arf.specresp)
+            grids = ((r_lo, r_hi), (a_lo, a_hi))
+            for lo, hi in grids:
+                if (lo.ndim != 1 or hi.shape != lo.shape or not lo.size
+                        or np.any(~np.isfinite(lo)) or np.any(~np.isfinite(hi))
+                        or np.any(lo < 0) or np.any(hi <= lo)
+                        or np.any(lo[1:] < hi[:-1] - 1e-8)):
+                    raise ValueError('RMF/ARF incident-energy bins must be finite, ordered and nonoverlapping')
+            if (area.shape != a_lo.shape or np.any(~np.isfinite(area)) or np.any(area < 0)):
+                raise ValueError('ARF effective areas must be finite, nonnegative and match its energy bins')
+            if (r_lo.shape != a_lo.shape
+                    or not np.allclose(r_lo, a_lo, rtol=1e-6, atol=1e-8)
+                    or not np.allclose(r_hi, a_hi, rtol=1e-6, atol=1e-8)):
+                raise ValueError('RMF and ARF incident-energy grids do not match; explicitly rebin before fitting')
+        except (AttributeError, TypeError, ValueError) as exc:
+            rpt.add('ERROR', 'INCOMPATIBLE_ARF', str(exc))
     rpt.ok = len(rpt.errors()) == 0
     return rpt

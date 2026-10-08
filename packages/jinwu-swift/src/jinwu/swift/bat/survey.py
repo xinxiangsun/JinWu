@@ -1672,8 +1672,8 @@ def _mosaic_source_measurements(
         candidates = [root] if _has_suffix(root, (".cat", ".fits", ".fit")) else []
     elif root.is_dir():
         candidates = sorted(
-            (item for item in root.rglob("*") if item.is_file() and _has_suffix(item, (".cat", ".fits", ".fit"))),
-            key=lambda item: (0 if item.name.lower() == "sources_tot.cat" else 1, str(item)),
+            (item for item in root.rglob("*") if item.is_file() and item.name.lower() == "sources_tot.cat"),
+            key=str,
         )
     else:
         candidates = []
@@ -1768,14 +1768,14 @@ def _timeunit_scale(value: Any) -> float:
     """Return the seconds multiplier for an OGIP ``TIMEUNIT`` card.
 
     Swift survey timing is stored on a mission-elapsed axis.  FITS permits
-    seconds, milliseconds, microseconds, and days; unknown cards are rejected
-    to seconds by the same conservative convention used for older products.
+    seconds, milliseconds, microseconds, hours, kiloseconds, and days.
+    Unknown units raise ValueError rather than silently changing the time axis.
     ``TIMEZERO`` is expressed in the same unit and is scaled by the caller.
     """
     decoded = _decode(value)
     token = str(decoded if decoded is not None else "s").strip().lower()
     token = token.strip("'\"").replace(" ", "")
-    return {
+    scales = {
         "s": 1.0,
         "sec": 1.0,
         "secs": 1.0,
@@ -1787,10 +1787,18 @@ def _timeunit_scale(value: Any) -> float:
         "us": 1.0e-6,
         "microsecond": 1.0e-6,
         "microseconds": 1.0e-6,
+        "h": 3600.0,
+        "hr": 3600.0,
+        "hour": 3600.0,
+        "hours": 3600.0,
+        "ks": 1000.0,
         "d": 86400.0,
         "day": 86400.0,
         "days": 86400.0,
-    }.get(token, 1.0)
+    }
+    if token not in scales:
+        raise ValueError(f"Unsupported OGIP TIMEUNIT {value!r}")
+    return scales[token]
 
 
 def _mjd_value(value: Any) -> float | None:
@@ -1937,16 +1945,7 @@ def read_gti_intervals(path: str | Path) -> tuple[tuple[float, float], ...]:
                     if "TIMEUNIT" in hdu.header
                     else primary_header.get("TIMEUNIT", "s")
                 ).strip().lower()
-                unit_scale = {
-                    "s": 1.0,
-                    "sec": 1.0,
-                    "second": 1.0,
-                    "ms": 1.0e-3,
-                    "millisecond": 1.0e-3,
-                    "us": 1.0e-6,
-                    "d": 86400.0,
-                    "day": 86400.0,
-                }.get(timeunit, 1.0)
+                unit_scale = _timeunit_scale(timeunit)
                 for row in data:
                     start = _scalar_value(row[names["START"]])
                     stop = _scalar_value(row[names["STOP"]])

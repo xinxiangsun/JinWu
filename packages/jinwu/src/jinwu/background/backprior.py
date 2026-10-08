@@ -228,15 +228,51 @@ class BackgroundCountsPosterior:
 	b: float
 	area_ratio: float
 
+	def __post_init__(self):
+		self._validate()
+
+	def _validate(self):
+		if not np.isfinite(self.a_total) or self.a_total < 0:
+			raise ValueError('a_total must be finite and nonnegative')
+		if not np.isfinite(self.b) or self.b <= 0:
+			raise ValueError('b must be finite and positive (seconds)')
+		if not np.isfinite(self.area_ratio) or self.area_ratio <= 0:
+			raise ValueError('area_ratio must be finite and positive (ON/OFF)')
+
+	@staticmethod
+	def _exposure(t):
+		t = float(t)
+		if not np.isfinite(t) or t < 0:
+			raise ValueError('exposure must be finite and nonnegative (seconds)')
+		return t
+
+	@classmethod
+	def _observation(cls, counts, exposure):
+		counts, exposure = float(counts), cls._exposure(exposure)
+		if not np.isfinite(counts) or counts < 0 or (counts > 0 and exposure == 0):
+			raise ValueError('background counts must be finite, nonnegative and have positive exposure')
+		return counts, exposure
+
 	# ---- 期望值 ----
 	def expected_off(self, t: float) -> float:
-		return float(self.a_total) * float(t) / float(self.b)
+		self._validate()
+		return float(self.a_total) * self._exposure(t) / float(self.b)
 
 	def expected_on(self, t: float) -> float:
-		return float(self.a_total) * float(self.area_ratio) * float(t) / float(self.b)
+		return self.expected_off(t) * float(self.area_ratio)
+
+	def sample_rate_off(self, size: int = 1, rng: Optional[np.random.Generator] = None) -> np.ndarray:
+		"""Draw latent OFF background rates (cts/s), without Poisson observation noise.
+
+		One draw may be shared by all bins of an ON/OFF realization. The ON rate
+		is ``area_ratio`` times this rate. Zero shape retains the explicit zero-rate
+		limit; positive shape uses Gamma(shape=a_total, rate=b in seconds).
+		"""
+		return self._sample_lambda_off(size=size, rng=rng)
 
 	# ---- 采样器（后验预测）----
 	def _sample_lambda_off(self, size: int = 1, rng: Optional[np.random.Generator] = None) -> np.ndarray:
+		self._validate()
 		if rng is None:
 			rng = np.random.default_rng()
 		# Gamma(shape=a, rate=b) -> numpy 用 scale=1/rate；当 a 非正时退化为 0
@@ -249,19 +285,21 @@ class BackgroundCountsPosterior:
 		"""采样 OFF 区域在曝光 t 的后验预测计数。"""
 		if rng is None:
 			rng = np.random.default_rng()
-		lam = self._sample_lambda_off(size=size, rng=rng)
-		return rng.poisson(lam * float(t))
+		lam = self.sample_rate_off(size=size, rng=rng)
+		return rng.poisson(lam * self._exposure(t))
 
 	def sample_on(self, t: float, size: int = 1, rng: Optional[np.random.Generator] = None) -> np.ndarray:
 		"""采样 ON 区域（仅背景）在曝光 t 的后验预测计数。"""
 		if rng is None:
 			rng = np.random.default_rng()
-		lam = self._sample_lambda_off(size=size, rng=rng)
-		return rng.poisson(lam * float(self.area_ratio) * float(t))
+		lam = self.sample_rate_off(size=size, rng=rng)
+		return rng.poisson(lam * float(self.area_ratio) * self._exposure(t))
 
 	# ---- 增量式共轭更新 ----
 	def update_with_off_counts(self, n_off: float, t_off: float, *, inplace: bool = False) -> "BackgroundCountsPosterior":
 		"""用额外的 OFF 观测（总计数与曝光）进行一次共轭更新。"""
+		self._validate()
+		n_off, t_off = self._observation(n_off, t_off)
 		a_new = float(self.a_total) + float(n_off)
 		b_new = float(self.b) + float(t_off)
 		if inplace:
@@ -272,6 +310,8 @@ class BackgroundCountsPosterior:
 
 	def update_with_on_bg_counts(self, n_on_bg: float, t_on_bg: float, *, inplace: bool = False) -> "BackgroundCountsPosterior":
 		"""用额外的 ON 背景-only 观测进行更新（等效 OFF 曝光为 area_ratio*t_on_bg）。"""
+		self._validate()
+		n_on_bg, t_on_bg = self._observation(n_on_bg, t_on_bg)
 		a_new = float(self.a_total) + float(n_on_bg)
 		b_new = float(self.b) + float(self.area_ratio) * float(t_on_bg)
 		if inplace:

@@ -47,7 +47,7 @@ except Exception:
     _HAVE_MPL = False
 
 
-def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
+def _parse_ds9_region_shape(line: str) -> Optional[Dict[str, Any]]:
     """解析 DS9 region 文件中的一行，返回 shape dict 或 None（注释/空行）。
 
     支持语法示例：
@@ -75,7 +75,7 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
     parts_raw = [p.strip() for p in re.split(r",|\s+", args) if p.strip()]
     parts = list(parts_raw)
 
-    def _parse_token(tok: str):
+    def _parse_token(tok: str, index: int):
         # handle sexagesimal RA/DEC like 12:34:56.78 using astropy if available
         if ':' in tok:
             try:
@@ -85,9 +85,14 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
                 pass
             else:
                 try:
-                    return float(Angle(tok).degree)
+                    import astropy.units as u
+                    is_longitude = index % 2 == 0 if typ == 'polygon' else index == 0
+                    unit = u.hourangle if is_longitude and coordsys not in ('galactic', 'ecliptic') else u.deg
+                    return float(Angle(tok, unit=unit).degree)
                 except (ValueError, TypeError, UnitsError):
                     pass
+        if tok.endswith("'") or tok.lower().endswith('arcmin'):
+            return float(re.sub(r'[^0-9.+\-eE]', '', tok))
         # handle units: trailing double-quote for arcsec or 'arcsec'/'deg'
         if tok.endswith('"') or tok.lower().endswith('arcsec'):
             try:
@@ -107,12 +112,14 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
         except (TypeError, ValueError):
             return tok
 
-    vals = [_parse_token(p) for p in parts]
+    vals = [_parse_token(p, i) for i, p in enumerate(parts)]
     # keep unit hints by inspecting raw tokens
     def _unit_of(tok: str) -> Optional[str]:
         s = str(tok).strip().lower()
         if s.endswith('"') or 'arcsec' in s:
             return 'arcsec'
+        if s.endswith("'") or 'arcmin' in s:
+            return 'arcmin'
         if s.endswith('deg') or s.endswith('d') or 'degree' in s:
             return 'deg'
         # pixel-like tokens often contain 'pix' or 'pixel'
@@ -185,8 +192,8 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
             return d
     if typ == 'ellipse':
         # ellipse(xc,yc, a, b, angle)
-        if len(vals) >= 5:
-            d = {'type': 'ellipse', 'x': vals[0], 'y': vals[1], 'a': vals[2], 'b': vals[3], 'angle': vals[4]}
+        if len(vals) in (4, 5):
+            d = {'type': 'ellipse', 'x': vals[0], 'y': vals[1], 'a': vals[2], 'b': vals[3], 'angle': vals[4] if len(vals) == 5 else 0.}
             try:
                 ua = _unit_of(parts_raw[2])
                 ub = _unit_of(parts_raw[3])
@@ -203,17 +210,47 @@ def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
     return {'type': typ, 'args': vals}
 
 
+def parse_ds9_region_line(line: str) -> Optional[Dict[str, Any]]:
+    """Parse one DS9 shape, preserving +/- inclusion and explicit coordinates.
+
+    Equatorial sexagesimal longitude is hours, latitude is degrees. Explicit
+    size suffixes retain arcsec/arcmin/degree units. Empty/header lines return None.
+    """
+    text = line.strip()
+    prefix = ''
+    if ';' in text and text.index(';') < text.find('('):
+        prefix, text = text.split(';', 1)
+        prefix += ';'
+        text = text.strip()
+    include = not text.startswith('-')
+    if text.startswith(('-', '+')):
+        text = text[1:].lstrip()
+    shape = _parse_ds9_region_shape(prefix + text)
+    if shape is not None:
+        if shape['type'] not in ('circle', 'annulus', 'box', 'ellipse', 'polygon', 'point') or 'args' in shape:
+            raise ValueError(f'Unsupported or malformed DS9 region: {line.strip()}')
+        shape['include'] = include
+    return shape
+
+
 def parse_ds9_region_file(path: str | Path) -> List[Dict[str, Any]]:
-    """解析一个 region 文件（多行），返回 shape dict 列表（按顺序）。"""
+    """Parse DS9 shapes, preserving coordinate declarations and exclusions.
+
+    Malformed supported shapes raise ValueError instead of silently disappearing.
+    """
     p = Path(path)
     shapes: List[Dict[str, Any]] = []
     with p.open('r', encoding='utf-8', errors='ignore') as fh:
+        coordsys = None
         for line in fh:
-            try:
-                r = parse_ds9_region_line(line)
-            except Exception:
-                r = None
+            token = line.strip().lower()
+            if token in ('image', 'physical', 'fk4', 'fk5', 'icrs', 'galactic', 'ecliptic'):
+                coordsys = token
+                continue
+            r = parse_ds9_region_line(line)
             if r:
+                if coordsys and 'coordsys' not in r:
+                    r = parse_ds9_region_line(f'{coordsys};{line}')
                 shapes.append(r)
     return shapes
 
@@ -423,13 +460,14 @@ def points_in_shape(xs: np.ndarray, ys: np.ndarray, shape: Dict[str, Any]) -> np
 
 
 def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool = False):
-    """对 EventData 应用一组 shapes（OR 组合），返回新的 EventData（保留 GTI 等元信息）。
+    """对 EventData 应用区域并集减排除区域，返回新的 EventData（保留 GTI 等元信息）。
 
-    shapes: list of shape dicts; 点满足任一 shape 即被视为 inside（逻辑 OR）。
+    shapes: includes are ORed, then all exclusions are removed. Exclusions alone
+    start from all events. With no shapes, the selection remains empty.
     invert: 若为 True，则返回 outside 的事件。
     """
     # try to read X/Y from ev (prefer attributes), fall back to reading FITS columns
-    if hasattr(ev, 'x') and hasattr(ev, 'y'):
+    if getattr(ev, 'x', None) is not None and getattr(ev, 'y', None) is not None:
         xs = np.asarray(getattr(ev, 'x'), dtype=float)
         ys = np.asarray(getattr(ev, 'y'), dtype=float)
     else:
@@ -494,6 +532,8 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
         mask = np.zeros(xs.size, dtype=bool)
     else:
         mask = np.zeros(xs.size, dtype=bool)
+        excluded = np.zeros(xs.size, dtype=bool)
+        has_include = any(sh.get('include', True) for sh in shapes)
         # If astropy WCS available, try to get WCS from event file headers and use it
         wcs_obj = None
         if _HAVE_WCS:
@@ -547,10 +587,9 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
                                 unit = None
                                 if unit_key is not None:
                                     unit = sh.get(unit_key)
-                                # default DS9 behaviour: sky numeric radii are arcsec unless explicit deg
+                                # DS9: pure numbers in celestial systems are degrees.
                                 if unit is None:
-                                    # heuristics: values > 1 likely arcsec; tiny values maybe degrees
-                                    unit = 'arcsec' if v > 1e-3 else 'deg'
+                                    unit = 'deg'
                                 # fetch approximate pixel scale from WCS: use CDELT or CD
                                 pixscale_deg = None
                                 try:
@@ -566,6 +605,8 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
                                     return v
                                 if unit == 'arcsec':
                                     return (v / 3600.0) / pixscale_deg
+                                if unit == 'arcmin':
+                                    return (v / 60.0) / pixscale_deg
                                 if unit == 'deg':
                                     return v / pixscale_deg
                                 if unit == 'pix' or unit == 'pixel':
@@ -621,11 +662,13 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
                                     return None
                                 unit = sh.get(unit_key) if unit_key is not None else None
                                 if unit is None:
-                                    unit = 'arcsec' if fv > 1e-3 else 'deg'
+                                    unit = 'deg'
                                 if tel.pixscale_deg is None:
                                     return fv
                                 if unit == 'arcsec':
                                     return (fv / 3600.0) / float(tel.pixscale_deg)
+                                if unit == 'arcmin':
+                                    return (fv / 60.0) / float(tel.pixscale_deg)
                                 if unit == 'deg':
                                     return fv / float(tel.pixscale_deg)
                                 return fv
@@ -663,19 +706,28 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
                     sh2 = sh
             try:
                 m = points_in_shape(xs, ys, sh2)
-            except Exception:
-                m = np.zeros(xs.size, dtype=bool)
-            mask |= m
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f'Cannot evaluate region {sh}') from exc
+            if sh.get('include', True):
+                mask |= m
+            else:
+                excluded |= m
+        if not has_include:
+            mask[:] = True
+        mask &= ~excluded
 
     if invert:
         mask = ~mask
 
     # build new EventData
-    from ..core.data import EventData
     t = np.asarray(ev.time, dtype=float)
     new_time = t[mask]
     new_pi = None if ev.pi is None else np.asarray(ev.pi)[mask]
     new_ch = None if ev.channel is None else np.asarray(ev.channel)[mask]
-    return EventData(path=ev.path, time=new_time, pi=new_pi, channel=new_ch,
-                     gti_start=ev.gti_start, gti_stop=ev.gti_stop,
-                     header=ev.header, meta=ev.meta, columns=ev.columns, headers_dump=ev.headers_dump)
+    from ..core.xselect import _new_event_like
+    raw = getattr(ev, 'raw_columns', None)
+    raw = None if raw is None else {key: np.asarray(value)[mask] for key, value in raw.items()}
+    energy = getattr(ev, 'energy', None)
+    return _new_event_like(ev, time=new_time, pi=new_pi, channel=new_ch,
+                           x=xs[mask], y=ys[mask], raw_columns=raw,
+                           energy=None if energy is None else np.asarray(energy)[mask])

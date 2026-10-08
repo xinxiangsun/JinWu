@@ -392,6 +392,198 @@ def test_simulation_removes_input_background_before_response_scaling(tmp_path, m
     np.testing.assert_array_equal(pair.counts_off, np.full(4, 20))
 
 
+@pytest.mark.parametrize('index', range(12))
+def test_gbm_fits_detector_aliases_are_zero_based(index):
+    from jinwu.fermi.gbm.response import _normalise_detector
+    assert _normalise_detector(f'NAI_{index:02d}') == (f'n{index:x}', index)
+    assert _normalise_detector('BGO_0') == ('b0', 12)
+    assert _normalise_detector('BGO_1') == ('b1', 13)
+
+
+@pytest.mark.parametrize('keyword', ['BACKFILE', 'ANCRFILE', 'RESPFILE'])
+def test_explicit_missing_spectrum_link_does_not_select_another_candidate(keyword):
+    from jinwu.core.instruments import _choose_related
+    source = SimpleNamespace(path=Path('source.pha'), header={keyword: 'missing.fits'})
+    candidate = SimpleNamespace(path=Path('another.fits'))
+    diagnostics = []
+    assert _choose_related(source, [candidate], relation=keyword, label='auxiliary', diagnostics=diagnostics) is None
+    assert 'references missing' in diagnostics[0]
+    source.header = {}
+    assert _choose_related(source, [candidate], relation=keyword, label='auxiliary', diagnostics=[]) is candidate
+
+
+@pytest.mark.parametrize('unit,scale', [('h', 3600), ('hr', 3600), ('ks', 1000), ('d', 86400), ('ms', .001)])
+def test_bat_timeunit_is_explicit(unit, scale):
+    from jinwu.swift.bat.survey import _timeunit_scale
+    assert _timeunit_scale(unit) == scale
+    with pytest.raises(ValueError, match='TIMEUNIT'):
+        _timeunit_scale('fortnight')
+
+
+@pytest.mark.parametrize('unit,scale', [('h', 3600.), ('ks', 1000.), ('s', 1.)])
+def test_bat_gti_timeunit_and_timezero_are_scaled_together(tmp_path, unit, scale):
+    from jinwu.swift.bat.survey import read_gti_intervals
+    table = fits.BinTableHDU.from_columns([
+        fits.Column(name='START', format='D', array=[1.]),
+        fits.Column(name='STOP', format='D', array=[2.]),
+    ])
+    table.header['TIMEUNIT'] = unit
+    table.header['TIMEZERO'] = 10.
+    path = tmp_path / 'time.gti'
+    fits.HDUList([fits.PrimaryHDU(), table]).writeto(path)
+    assert read_gti_intervals(path) == ((11.*scale, 12.*scale),)
+
+
+def test_mosaic_missing_source_never_uses_pointing_catalog(tmp_path, monkeypatch):
+    import jinwu.swift.bat.survey as survey
+    mosaic = tmp_path / 'sources_tot.cat'
+    member = tmp_path / 'point_123' / 'sources.cat'
+    mosaic.touch()
+    member.parent.mkdir()
+    member.touch()
+    visited = []
+    def read(path, **kwargs):
+        visited.append(path)
+        if path == mosaic:
+            return []
+        pytest.fail('member pointing catalog must not determine mosaic detection')
+    monkeypatch.setattr(survey, 'read_bat_survey_rates', read)
+    result = survey._mosaic_source_measurements(tmp_path, source_name='absent', detection_threshold=5.)
+    assert visited == [mosaic]
+    assert result[0]['status'] == 'not_detected'
+
+
+def test_extract_exposure_tracks_selected_time_and_empty_energy_band():
+    from jinwu.ftools.fextract import extract
+    ev = EventData(path=Path('synthetic.evt'), time=np.array([1., 3., 6., 8.]),
+                   pi=np.array([20, 30, 40, 50]), channel=None,
+                   gti_start=np.array([0., 5.]), gti_stop=np.array([4., 10.]),
+                   header={}, meta=None, columns=(), headers_dump={})
+    pha = extract(ev, tmin=2., tmax=7.)
+    assert pha.exposure == 4.
+    assert pha.counts.sum() == 2
+    empty = extract(ev, tmin=2., tmax=7., ch_min=100)
+    assert empty.exposure == 4.
+    assert len(empty.channels) == 0
+    fixed = extract(ev, tmin=2., tmax=7., ch_min=100, nbins=128)
+    assert len(fixed.channels) == 128 and fixed.counts.sum() == 0
+
+
+@pytest.mark.parametrize('bad_map', [[-1, 0], [0, .5], [0, np.nan], [[0, 1]]])
+def test_rmf_rebin_rejects_invalid_channel_or_row_maps(bad_map):
+    from jinwu.ftools.ftrbnrmf import rebin_rmf
+    with pytest.raises(ValueError, match='channel_map'):
+        rebin_rmf(np.eye(2), bad_map)
+    with pytest.raises(ValueError, match='row_map'):
+        rebin_rmf(np.eye(2), [0, 1], row_map=bad_map)
+
+
+def test_cached_fits_requires_all_data_blocks(tmp_path):
+    from jinwu.fermi.gbm.pipeline import _is_valid_fits
+    good = tmp_path / 'complete.fit'
+    table = fits.BinTableHDU.from_columns([fits.Column(name='TIME', format='D', array=np.arange(1000.))])
+    fits.HDUList([fits.PrimaryHDU(), table]).writeto(good)
+    assert _is_valid_fits(good)
+    truncated = tmp_path / 'truncated.fit'
+    truncated.write_bytes(good.read_bytes()[:-2880])
+    assert not _is_valid_fits(truncated)
+    empty = tmp_path / 'primary.fit'
+    fits.PrimaryHDU().writeto(empty)
+    assert not _is_valid_fits(empty)
+
+
+def test_grppha_exit_zero_fatal_and_empty_output_are_failures(tmp_path):
+    from jinwu.ftools.grppha_hsp import _grppha_output_error
+    output = tmp_path / 'grouped.pha'
+    fits.PrimaryHDU().writeto(output)
+    assert _grppha_output_error(output, 0, 'UPDPHA: FATAL ERROR') is not None
+    assert _grppha_output_error(output, 0, 'grppha: INCOMPLETE EXECUTION') is not None
+    assert _grppha_output_error(output, 0, '') is not None
+
+
+def test_background_posterior_rejects_unphysical_inputs_and_samples_latent_rate():
+    from jinwu.background.backprior import BackgroundCountsPosterior
+    for args in [(-1, 1, .5), (1, 0, .5), (1, 1, 0), (np.nan, 1, .5)]:
+        with pytest.raises(ValueError):
+            BackgroundCountsPosterior(*args)
+    posterior = BackgroundCountsPosterior(20., 10., .5)
+    with pytest.raises(ValueError):
+        posterior.update_with_off_counts(-1, 1)
+    with pytest.raises(ValueError):
+        posterior.update_with_on_bg_counts(1, 0)
+    with pytest.raises(ValueError):
+        posterior.sample_off(-1)
+    draws = posterior.sample_rate_off(size=100000, rng=np.random.default_rng(741))
+    assert np.mean(draws) == pytest.approx(2., abs=.01)
+    assert np.var(draws) == pytest.approx(.2, abs=.005)
+
+
+def test_stmag_is_not_silently_treated_as_vega():
+    from jinwu.core.units import FilterInfo, Magnitude
+    filt = FilterInfo('test', 5000*u.AA, 1000*u.AA, 3000*u.Jy)
+    with pytest.raises(ValueError, match='STmag'):
+        filt * (20*u.STmag)
+    with pytest.raises(ValueError, match='STmag'):
+        Magnitude(20*u.STmag, filt)
+
+
+@pytest.mark.parametrize('interval', [(0, 1), [0, np.nan]*u.s, [1, 0]*u.s, [0, 1, 2]*u.s])
+def test_tte_reader_rejects_bad_interval_before_opening_data(interval):
+    from jinwu.fermi.gbm.tte import read_detector_events
+    with pytest.raises((ValueError, TypeError)):
+        read_detector_events([], Time(0, format='fermi'), interval)
+
+
+@pytest.mark.parametrize('invalid', ['shifted', 'nonfinite', 'negative_area'])
+def test_response_compatibility_checks_arf_physical_grid(invalid):
+    from jinwu.core.ogip import check_response_compatibility
+    pha = SimpleNamespace(path=Path('s.pha'), channels=np.arange(2))
+    rmf = SimpleNamespace(tlmin=0, det_chans=2, energ_lo=np.array([.1, .2]), energ_hi=np.array([.2, .3]))
+    arf = SimpleNamespace(energ_lo=rmf.energ_lo.copy(), energ_hi=rmf.energ_hi.copy(), specresp=np.array([10., 20.]))
+    assert check_response_compatibility(pha, rmf, arf=arf).ok
+    if invalid == 'shifted':
+        arf.energ_lo += .01
+        arf.energ_hi += .01
+    elif invalid == 'nonfinite':
+        arf.energ_lo[0] = np.nan
+    else:
+        arf.specresp[0] = -1
+    report = check_response_compatibility(pha, rmf, arf=arf)
+    assert not report.ok
+    assert report.errors()[0].code == 'INCOMPATIBLE_ARF'
+
+
+def test_galactic_absorption_is_shared_across_model_groups():
+    from jinwu.core.fit import _link_default_prepared_model_groups
+    ref = SimpleNamespace(componentNames=['TBabs'], TBabs=SimpleNamespace(nH=SimpleNamespace(index=1, frozen=False)))
+    second = SimpleNamespace(componentNames=['TBabs'], TBabs=SimpleNamespace(nH=SimpleNamespace(index=4, frozen=False)))
+    _link_default_prepared_model_groups([ref, second], 'tbabs*powerlaw')
+    assert second.TBabs.nH.link is ref.TBabs.nH
+
+
+@pytest.mark.parametrize('freeze', [False, True])
+def test_galactic_absorption_freeze_honored_without_replacing_initial_value(freeze):
+    from jinwu.core.fit import _configure_prepared_model
+    nh = SimpleNamespace(frozen=not freeze, values=[.2])
+    model = SimpleNamespace(TBabs=SimpleNamespace(nH=nh))
+    _configure_prepared_model(model, model_name='tbabs*powerlaw', emin=.3, emax=10.,
+                              redshift=0., galactic_nh_1e22=None, freeze_galactic_nh=freeze)
+    assert model.TBabs.nH is nh
+    assert nh.values == [.2]
+    assert nh.frozen is freeze
+
+
+def test_bat_sao_fallback_when_optional_backend_missing(monkeypatch):
+    import jinwu.swift.bat.bat_observation as mod
+    monkeypatch.setattr(mod, 'BatSao', None)
+    observation = mod.BATObservation()
+    calls = []
+    monkeypatch.setattr(observation, '_load_from_attitude', calls.append)
+    with pytest.warns(UserWarning, match='Attitude'):
+        observation._load_from_sao('observation.sao')
+    assert calls == ['observation.sao']
+
+
 def test_netdata_rejects_misaligned_absolute_time_and_bin_width():
     from jinwu.core.datasets import netdata
     def curve(time, width=1., origin=0.):
@@ -429,3 +621,48 @@ def test_bxa_flux_chain_restores_model_even_on_failure(flux_failure):
         assert chain is None
     else:
         np.testing.assert_array_equal(chain, [1., 2.])
+
+
+def test_ds9_exclusions_and_four_parameter_ellipse(tmp_path):
+    from jinwu.core.data import EventData
+    from jinwu.ftools.region import parse_ds9_region_file, apply_region_mask_to_events, points_in_shape
+    path = tmp_path/'mask.reg'
+    path.write_text('physical\ncircle(10,10,4)\n-circle(10,10,1)\nellipse(20,20,3,2)\n')
+    shapes = parse_ds9_region_file(path)
+    assert shapes[1]['include'] is False
+    assert shapes[2]['angle'] == 0
+    assert shapes[2]['x'] == 20
+    np.testing.assert_array_equal(points_in_shape(np.array([20,0]),np.array([20,0]),shapes[2]),[True,False])
+    ev = EventData(path=Path('dummy.evt'),time=np.arange(4.),x=np.array([10,12,20,30]),y=np.array([10,10,20,30]),pi=np.arange(4),channel=None,gti_start=None,gti_stop=None,header={},meta=None,columns=(),headers_dump={})
+    selected = apply_region_mask_to_events(ev, shapes)
+    np.testing.assert_array_equal(selected.pi,[1,2])
+    np.testing.assert_array_equal(apply_region_mask_to_events(ev,[shapes[1]]).pi,[1,2,3])
+
+
+def test_ds9_sexagesimal_and_coordinate_header(tmp_path):
+    from jinwu.ftools.region import parse_ds9_region_file
+    path=tmp_path/'sky.reg'
+    path.write_text("fk5\ncircle(12:30:00,-30:00:00,2')\n")
+    shape,=parse_ds9_region_file(path)
+    assert shape['coordsys']=='fk5'
+    assert shape['x']==pytest.approx(187.5,abs=1e-12)
+    assert shape['y']==-30
+    assert shape['r_unit']=='arcmin'
+    assert shape['r']==2
+
+
+@pytest.mark.parametrize('size',['0.01',"0.6'",'36"'])
+def test_ds9_sky_size_equivalent_units(tmp_path,size,monkeypatch):
+    from astropy.wcs import WCS
+    from jinwu.core.data import EventData
+    from jinwu.ftools.region import parse_ds9_region_line, apply_region_mask_to_events
+    import jinwu.ftools.teldef as td
+    wcs=WCS(naxis=2)
+    wcs.wcs.crpix=[11,11];wcs.wcs.crval=[100,20];wcs.wcs.cdelt=[-.01,.01];wcs.wcs.ctype=['RA---TAN','DEC--TAN']
+    table=fits.BinTableHDU.from_columns([fits.Column(name='TIME',format='D',array=[0,1,2])])
+    table.header.update(wcs.to_header())
+    path=tmp_path/'sky.evt';fits.HDUList([fits.PrimaryHDU(),table]).writeto(path)
+    ev=EventData(path=path,time=np.arange(3.),x=np.array([10,10.5,12]),y=np.array([10,10,10]),pi=np.arange(3),channel=None,gti_start=None,gti_stop=None,header={},meta=None,columns=(),headers_dump={})
+    monkeypatch.setattr(td,'find_teldef_from_event',lambda ev:None)
+    selected=apply_region_mask_to_events(ev,[parse_ds9_region_line(f'fk5;circle(100,20,{size})')])
+    np.testing.assert_array_equal(selected.pi,[0,1])

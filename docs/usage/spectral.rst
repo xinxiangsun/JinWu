@@ -22,6 +22,15 @@ Prepare and Fit
 The canonical flow is ``prepare_spectra`` → ``fit_prepared`` (single spectrum)
 or ``fit_xray_models`` (multi-candidate comparison):
 
+An explicit missing ``BACKFILE``/``RESPFILE``/``ANCRFILE`` reference blocks
+automatic pairing with a different file. Preparation also checks the ARF's
+finite nonnegative effective areas and its incident-energy grid against the
+RMF (relative tolerance 1e-6, absolute tolerance 1e-8 keV). Mismatched grids
+require an explicit, validated rebin before fitting. A new prepared fit clears
+previous XSPEC chains; joint data groups share the Galactic absorption column.
+``freeze_galactic_nh`` applies even when no replacement value is supplied, in
+which case it freezes the model's initial column rather than estimating one.
+
 .. code-block:: python
 
     from jinwu.core.spectrum_prep import prepare_spectra

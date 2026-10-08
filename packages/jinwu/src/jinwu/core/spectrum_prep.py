@@ -337,11 +337,12 @@ def _prepared_from_bundle(
             status = "partial"
 
         try:
-            from .io import read_pha, read_rmf
+            from .io import read_pha, read_rmf, read_arf
             from .ogip import check_response_compatibility
 
             compatibility = check_response_compatibility(
-                read_pha(grouped_pha), read_rmf(staged_files["RESPFILE"])
+                read_pha(grouped_pha), read_rmf(staged_files["RESPFILE"]),
+                arf=read_arf(staged_files["ANCRFILE"]),
             )
             diagnostics.extend(
                 f"response compatibility {message.level.lower()} [{message.code}]: {message.message}"
@@ -355,7 +356,7 @@ def _prepared_from_bundle(
             ) and status != "failed":
                 status = "partial"
         except Exception as exc:
-            diagnostics.append(f"failed to check grouped PHA/RMF channel compatibility: {exc}")
+            diagnostics.append(f"failed to check grouped PHA/RMF/ARF compatibility: {exc}")
             if status != "failed":
                 status = "partial"
 

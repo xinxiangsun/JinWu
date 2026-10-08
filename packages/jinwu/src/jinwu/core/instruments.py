@@ -638,10 +638,11 @@ def _choose_related(
     if len(related) > 1:
         diagnostics.append(f"{label} relation {relation} resolves to multiple files")
         return None
-    if has_relation and candidates:
+    if has_relation:
         diagnostics.append(
             f"{source.path.name} references missing {label} file {relation_value}"
         )
+        return None
     if len(candidates) == 1:
         return candidates[0]
     if not candidates:

@@ -121,16 +121,19 @@ class FilterInfo:
 
         裸数按 Vega 星等解释；含 'mag' 的 Quantity 提取 value，并根据单位
         名是否含 AB 选择 AB/Vega。不会执行光度单位等价转换，也不传递误差；
-        不含星等单位的 Quantity 抛 TypeError。返回新的 Magnitude。
+        STmag 抛 ValueError；不含星等单位的 Quantity 抛 TypeError。返回新的 Magnitude。
         Bare numbers imply Vega. A magnitude-like Quantity supplies its value;
         a unit name containing AB selects AB, otherwise Vega. No logarithmic-unit
-        conversion or uncertainty transfer is performed. Other units raise TypeError.
+        conversion or uncertainty transfer is performed. STmag raises ValueError;
+        other units raise TypeError.
         Return a new Magnitude instance."""
         if isinstance(other, Quantity):
             # Handle astropy Quantity (e.g., Magnitude(22, filt) * u.ABmag)
             # Check if unit is magnitude-like
             unit_str = str(other.unit).lower()
             if other.unit == u.mag or 'mag' in unit_str:
+                if other.unit == u.STmag:
+                    raise ValueError("STmag is not a Vega magnitude; convert its flux with Astropy first")
                 # Extract numeric value
                 mag_value = other.value
                 # Try to detect system from unit (e.g., ABmag → 'AB')
@@ -345,14 +348,18 @@ class Magnitude:
         """保存星等、系统与可选误差 / Initialize a magnitude and its calibration.
 
         magnitude/error 的裸数分别按星等和星等标准误差解释；Quantity 仅取
-        value，不校验或转换单位。filter_info 提供零点，system 精确为 AB/Vega；
+        value，不转换单位；STmag 不属于 AB/Vega，抛 ValueError。
+        filter_info 提供零点，system 精确为 AB/Vega；
         非法系统由 get_zero_point 报错。误差仅保存，不校验正值或分布。
         Bare magnitude/error mean magnitudes and magnitude standard error. Quantities
-        supply value without unit validation/conversion. filter_info supplies the zero
+        supply value without unit conversion; STmag raises ValueError.
+        filter_info supplies the zero
         point; system must be AB/Vega. Invalid systems raise through get_zero_point.
         Uncertainty is stored without positivity/distribution validation."""
         # Normalize magnitude to float value
         if isinstance(magnitude, Quantity):
+            if magnitude.unit == u.STmag:
+                raise ValueError("STmag is not an AB/Vega magnitude; convert its flux with Astropy first")
             self.magnitude = magnitude.value
         else:
             self.magnitude = float(magnitude)

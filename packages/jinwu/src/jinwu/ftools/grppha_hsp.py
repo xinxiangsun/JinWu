@@ -14,6 +14,7 @@ import os
 import shutil
 import subprocess
 import warnings
+import re
 from typing import Any
 
 try:
@@ -82,6 +83,20 @@ def _result(
     return result
 
 
+def _grppha_output_error(outfile: Path, returncode: int, transcript: str) -> str | None:
+    """Validate task status and the grouped PHA, including exit-zero FATAL errors."""
+    if returncode != 0 or re.search(r'\bfatal\b|incomplete execution', transcript, re.IGNORECASE):
+        return transcript.strip() or f'grppha exited with status {returncode}'
+    try:
+        from jinwu.core.io import read_pha
+        pha = read_pha(outfile)
+        if not len(pha.channels) or pha.grouping is None:
+            return 'grppha output lacks spectrum channels or GROUPING'
+    except Exception as exc:
+        return f'grppha output is not a readable grouped PHA: {exc}'
+    return None
+
+
 def _subprocess_grppha(
     *,
     infile: Path,
@@ -126,19 +141,19 @@ def _subprocess_grppha(
             backend="subprocess",
         )
 
-    if outfile.exists() and outfile.stat().st_size > 0:
+    error = _grppha_output_error(outfile, proc.returncode, (proc.stdout or '') + '\n' + (proc.stderr or ''))
+    if error is None:
         return _result(
             success=True,
             outfile=outfile,
             message="Success: grppha completed",
             backend="subprocess",
         )
-    stderr = (proc.stderr or proc.stdout or "").strip()
     return _result(
         success=False,
         outfile=outfile,
         message="Failed",
-        error=stderr or f"grppha exited with status {proc.returncode}",
+        error=error,
         backend="subprocess",
     )
 
@@ -208,19 +223,20 @@ def grppha_hsp(
                     verbose=verbose,
                     allow_failure=True,
                 )
-            if target.exists() and target.stat().st_size > 0:
+            detail = str(getattr(result, "stdout", '') or '') + '\n' + str(getattr(result, "stderr", '') or '') + '\n' + str(getattr(result, "messages", '') or '')
+            error = _grppha_output_error(target, getattr(result, 'returncode', 0), detail)
+            if error is None:
                 return _result(
                     success=True,
                     outfile=target,
                     message="Success: heasoftpy grppha completed",
                     backend="heasoftpy",
                 )
-            detail = getattr(result, "stderr", None) or getattr(result, "messages", None)
             return _result(
                 success=False,
                 outfile=target,
                 message="Failed",
-                error=str(detail or "heasoftpy grppha did not create output PHA"),
+                error=error,
                 backend="heasoftpy",
             )
         except Exception as exc:

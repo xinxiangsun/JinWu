@@ -6,7 +6,6 @@ available there. Times are Fermi MET internally and relative seconds at output.
 from pathlib import Path
 import re
 import numpy as np
-import astropy.units as u
 from .pipeline import _merge_intervals
 
 def latest_products(paths):
@@ -60,30 +59,33 @@ def read_detector_events(paths, trigger_time, interval):
     Native channel boundaries and dead-time settings must agree across files.
     Returns event arrays in relative seconds plus merged GTIs and metadata.
     """
-    from gdt.missions.fermi.gbm.tte import GbmTte
+    from .subthreshold.models import seconds
     t0 = float(trigger_time.to_value("fermi"))
-    lo, hi = np.asarray(interval.to_value(u.s), dtype=float) + t0
+    relative = seconds(interval)
+    if not np.isfinite(t0) or relative.shape != (2,) or relative[0] >= relative[1]:
+        raise ValueError("TTE interval requires two increasing finite seconds and a finite trigger time")
+    lo, hi = relative + t0
+    from gdt.missions.fermi.gbm.tte import GbmTte
     events, intervals, reference = [], [], None
     for path in latest_products(paths):
-        tte = GbmTte.open(str(path))
-        offset = float(tte.trigtime or 0.)
-        bounds = np.array(tte.ebounds.as_list(), dtype=float)
-        metadata = (bounds, float(tte.event_deadtime), float(tte.overflow_deadtime))
-        if reference is not None and (not np.array_equal(bounds, reference[0]) or metadata[1:] != reference[1:]):
-            raise ValueError("TTE energy calibration or dead times change across files")
-        reference = metadata
-        times = np.asarray(tte.data.times, dtype=float) + offset
-        channels = np.asarray(tte.data.channels, dtype=int)
-        if len(bounds) != 128 or np.any((channels < 0) | (channels >= 128)):
-            raise ValueError("GTS templates require the native 128-channel GBM TTE layout")
-        gti = [(max(lo, a + offset), min(hi, b + offset)) for a, b in tte.gti.as_list()
-               if min(hi, b + offset) > max(lo, a + offset)]
-        mask = np.zeros(times.size, dtype=bool)
-        for a, b in gti:
-            mask |= (times >= a) & (times < b)
-        events.append((times[mask], channels[mask]))
-        intervals.extend(gti)
-        tte.close()
+        with GbmTte.open(str(path)) as tte:
+            offset = float(tte.trigtime or 0.)
+            bounds = np.array(tte.ebounds.as_list(), dtype=float)
+            metadata = (bounds, float(tte.event_deadtime), float(tte.overflow_deadtime))
+            if reference is not None and (not np.array_equal(bounds, reference[0]) or metadata[1:] != reference[1:]):
+                raise ValueError("TTE energy calibration or dead times change across files")
+            reference = metadata
+            times = np.asarray(tte.data.times, dtype=float) + offset
+            channels = np.asarray(tte.data.channels, dtype=int)
+            if len(bounds) != 128 or np.any((channels < 0) | (channels >= 128)):
+                raise ValueError("GTS templates require the native 128-channel GBM TTE layout")
+            gti = [(max(lo, a + offset), min(hi, b + offset)) for a, b in tte.gti.as_list()
+                   if min(hi, b + offset) > max(lo, a + offset)]
+            mask = np.zeros(times.size, dtype=bool)
+            for a, b in gti:
+                mask |= (times >= a) & (times < b)
+            events.append((times[mask], channels[mask]))
+            intervals.extend(gti)
     if reference is None:
         raise ValueError("no TTE files for detector")
     times, channels = merge_tte_events(events)

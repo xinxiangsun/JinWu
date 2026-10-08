@@ -2582,7 +2582,7 @@ def _configure_prepared_model(
             if not np.isfinite(galactic_nh_1e22) or galactic_nh_1e22 < 0:
                 raise ValueError("galactic_nh_1e22 must be finite and non-negative")
             model.TBabs.nH = float(galactic_nh_1e22)
-            model.TBabs.nH.frozen = bool(freeze_galactic_nh)
+        model.TBabs.nH.frozen = bool(freeze_galactic_nh)
 
     if "ztbabs" in model_name.lower():
         absorbers = _prepared_ztbabs_components(model)
@@ -2781,6 +2781,8 @@ def _link_default_prepared_model_groups(models, model_name: str) -> None:
         return
     reference = models[0]
     for model in models[1:]:
+        if hasattr(reference, "TBabs") and hasattr(model, "TBabs"):
+            _link_parameter(model.TBabs.nH, reference.TBabs.nH)
         reference_absorbers = _prepared_ztbabs_components(reference)
         absorbers = _prepared_ztbabs_components(model)
         if len(reference_absorbers) != len(absorbers):
@@ -3028,6 +3030,7 @@ def fit_prepared(
     first_key = _prepared_spectrum_key(prepared_spectra[0])
     fit_emin, fit_emax = fit_ranges[first_key]
 
+    xspec.AllChains.clear()
     xspec.AllData.clear()
     xspec.AllModels.clear()
     xspec.Xset.abund = abundance

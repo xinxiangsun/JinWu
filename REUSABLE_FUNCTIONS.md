@@ -148,3 +148,7 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `_evaluate_expression` | `packages/jinwu/src/jinwu/ftools/ftselect.py` | 按语法树保留优先级并逐元素计算事件筛选表达式 | 是 |
 | `_load_signal_counts_npz` | `packages/jinwu/src/jinwu/lf/lcfake.py` | 从显式净计数或 ON/OFF 模板提取带符号源计数，避免模拟背景双计 | 是 |
 | `_create_flux_chain_at_best_fit` | `packages/jinwu/src/jinwu/core/bxa_fit.py` | 计算后验通量后恢复 XSPEC 最佳拟合；可选通量失败与状态恢复失败分开处理 | 是 |
+| `BackgroundCountsPosterior.sample_rate_off` | `packages/jinwu/src/jinwu/background/backprior.py` | 从 Gamma 后验直接抽取 OFF 潜在背景率（cts/s），与后验预测 Poisson 计数分开；共用于 ON/OFF 采样 | 是 |
+| `BackgroundCountsPosterior._observation` / `_exposure` / `_validate` | `packages/jinwu/src/jinwu/background/backprior.py` | 在采样、期望值和更新边界校验背景计数、秒曝光和后验参数 | 是 |
+| `_grppha_output_error` | `packages/jinwu/src/jinwu/ftools/grppha_hsp.py` | 共用于两种 HEASoft 后端，检查任务状态、FATAL 信息与分组 PHA 结构 | 是 |
+| `_parse_ds9_region_shape` / `parse_ds9_region_line` | `packages/jinwu/src/jinwu/ftools/region.py` | 解析 DS9 区域、保留排除符号及坐标系统；赤道六十进制坐标和显式角秒/角分尺寸 | 是 |

@@ -1649,13 +1649,22 @@ def _is_valid_fits(path: Path) -> bool:
     try:
         from astropy.io import fits
 
-        # FIX(H3): use memmap + lazy_load to avoid loading entire file into memory
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            with fits.open(path, memmap=True, lazy_load_hdus=True) as hdul:
-                _ = hdul[0].header
+            warnings.filterwarnings("error", message=".*(?:truncated|Truncated).*")
+            with fits.open(path, memmap=True, lazy_load_hdus=False) as hdul:
+                hdul.verify("exception")
+                if len(hdul) < 2:
+                    return False
+                for hdu in hdul:
+                    info = hdu.fileinfo()
+                    if info and not path.name.lower().endswith('.gz'):
+                        if info['datLoc'] + info['datSpan'] > path.stat().st_size:
+                            return False
+                    # Access each data block, not merely the primary header.
+                    if hdu.data is not None:
+                        _ = hdu.data.shape
                 return len(hdul) > 0
-    except (OSError, TypeError, ValueError, EOFError):
+    except (OSError, TypeError, ValueError, EOFError, Warning, fits.verify.VerifyError):
         return False
 
 

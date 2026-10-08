@@ -18,18 +18,27 @@ from ..core.io import read_evt
 from ..core import gti as gtimod
 from . import region as regionmod
 
-def _estimate_exposure_from_eventdata(ev: EventData) -> float:
+def _estimate_exposure_from_eventdata(ev: EventData, *, tmin=None, tmax=None) -> float:
+    def clipped_width(starts, stops):
+        starts = np.asarray(starts, dtype=float)
+        stops = np.asarray(stops, dtype=float)
+        if tmin is not None:
+            starts = np.maximum(starts, float(tmin))
+        if tmax is not None:
+            stops = np.minimum(stops, float(tmax))
+        return float(np.maximum(stops - starts, 0.0).sum())
+
     if ev.gti_start is not None and ev.gti_stop is not None:
         ms, me = gtimod.merge_gti(ev.gti_start, ev.gti_stop)
         if ms is not None and me is not None and ms.size > 0:
-            return float(np.sum(me - ms))
+            return clipped_width(ms, me)
     if ev.meta is not None and isinstance(ev.meta, OgipMeta):
         tstart = getattr(ev.meta, 'tstart', None)
         tstop = getattr(ev.meta, 'tstop', None)
         if tstart is not None and tstop is not None:
-            return float(tstop - tstart)
+            return clipped_width([tstart], [tstop])
     if hasattr(ev, 'time') and ev.time is not None and getattr(ev.time, 'size', 0) > 0:
-        return float(np.max(ev.time) - np.min(ev.time))
+        return clipped_width([np.min(ev.time)], [np.max(ev.time)])
     return 0.0
 
 def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None,
@@ -47,19 +56,9 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
 
     # 时间过滤
     if tmin is not None or tmax is not None:
-        t = np.asarray(ev.time, dtype=float)
-        mask = np.ones(t.size, dtype=bool)
-        if tmin is not None:
-            mask &= (t >= float(tmin))
-        if tmax is not None:
-            mask &= (t <= float(tmax))
-        # apply mask to fields
-        new_time = t[mask]
-        new_pi = None if ev.pi is None else np.asarray(ev.pi, dtype=int)[mask]
-        new_ch = None if ev.channel is None else np.asarray(ev.channel, dtype=int)[mask]
-        ev = EventData(path=ev.path, time=new_time, pi=new_pi, channel=new_ch,
-                       gti_start=ev.gti_start, gti_stop=ev.gti_stop, header=ev.header, meta=ev.meta,
-                       columns=ev.columns, headers_dump=ev.headers_dump)
+        if tmin is not None and tmax is not None and tmin > tmax:
+            raise ValueError('tmin must not exceed tmax')
+        ev = ev.slice(tmin=tmin, tmax=tmax)
 
     # region 过滤（简单 dict 区域）
     if region is not None:
@@ -79,19 +78,18 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
         else:
             raise ValueError('No PI/CHANNEL column available for extraction')
 
-    if arr.size == 0:
-        exposure = _estimate_exposure_from_eventdata(ev)
+    if ch_min is not None:
+        arr = arr[arr >= int(ch_min)]
+    if ch_max is not None:
+        arr = arr[arr <= int(ch_max)]
+
+    if arr.size == 0 and nbins is None:
+        exposure = _estimate_exposure_from_eventdata(ev, tmin=tmin, tmax=tmax)
         # PhaData.kind 是 ClassVar，不需要在构造函数中传入
         return PhaData(path=ev.path, channels=np.array([], dtype=int), counts=np.array([], dtype=float),
                        stat_err=None, exposure=exposure, backscal=None, areascal=None,
                        quality=None, grouping=None, ebounds=None, header=ev.header, meta=ev.meta,
                        headers_dump=ev.headers_dump, columns=())
-
-    # apply channel truncation
-    if ch_min is not None:
-        arr = arr[arr >= int(ch_min)]
-    if ch_max is not None:
-        arr = arr[arr <= int(ch_max)]
 
     if nbins is None:
         ch_lo = int(arr.min())
@@ -105,7 +103,7 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
         counts, _ = np.histogram(arr, bins=bins)
 
     stat_err = np.sqrt(counts.astype(float))
-    exposure = _estimate_exposure_from_eventdata(ev)
+    exposure = _estimate_exposure_from_eventdata(ev, tmin=tmin, tmax=tmax)
 
     # 构造 PhaData 时同样不需要传入 kind
     pha = PhaData(path=ev.path, channels=channels, counts=counts.astype(float), stat_err=stat_err,
