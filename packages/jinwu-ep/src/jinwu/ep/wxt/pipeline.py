@@ -18,7 +18,7 @@ from astropy.io import fits
 from astropy.time import Time, TimeDelta
 from astropy.wcs import WCS
 import astropy.units as u
-from ...core.config import InstrumentConfig, get_fit_settings
+from ...core.config import InstrumentConfig
 from ...core.galactic import resolve_galactic_absorption
 from ...core.instruments import Catalog, DataFile, Manifest, SpectrumBundle, scan
 from ...core.time import mission_time_format, time_from_mission_seconds
@@ -1377,7 +1377,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         - duration 经 ``...core.ops.txx`` 使用 ops，而 ops 仅从 timescale
           重导出（真实算法在 timescale.py），两者都须登记；
         - fit 经 ``_fit_one`` 使用 fit/spectrum_prep，method 为 ``"bxa"`` 时
-          再经 bxa_fit；config 提供 get_fit_settings 的生效方法。
+          再经 bxa_fit。
         """
         import inspect
 
@@ -1460,25 +1460,6 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             "report": (core["products.py"],),
         }
         return dependencies.get(stage.name, ())
-
-    def stage_config_dependencies(self, stage: PipelineStage) -> Any:
-        """把生效的全局拟合方法纳入 fit 阶段指纹（Major B 修复）。
-
-        ``_fit_one`` 的有效 method 在 ``config.fitting.method`` 停留在默认
-        ``"mle"`` 时会回退到进程级 ``get_fit_settings().method``；而默认指纹只由
-        config + 实现文件 SHA 构成，导致全局 mle 与全局 bxa 的 fit 指纹相同、
-        缓存被跨方法错误复用。这里仅对 fit 阶段追加“生效 method”，使全局
-        切换触发 fit 缓存失效，同时不影响 discover/regions 等无关阶段。该钩子
-        在 ``_load_cached_stage``（检查）与 ``_write_stage_manifest``（写入）两处
-        一致调用，故检查/写入指纹对称，resume 契约稳定。
-        """
-        base = super().stage_config_dependencies(stage)
-        if stage.name == "fit":
-            return {
-                "config": base,
-                "effective_fit_method": self._effective_fit_method(),
-            }
-        return base
 
     @property
     def approval_path(self) -> Path:
@@ -2342,20 +2323,6 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         _json_dump(segments_path, segment_payload)
         return StageResult(outputs=outputs, data={"segments": segment_payload})
 
-    def _effective_fit_method(self) -> str:
-        """解析驱动 ``_fit_one`` 路由的生效拟合方法（mle/chain/bxa）。
-
-        优先级：per-instrument ``config.fitting.method`` 显式取 ``chain``/``bxa``
-        时直接生效；当其停留在打包默认 ``"mle"``（无法与“未显式设置”区分）时
-        回退到进程级 ``get_fit_settings().method``，使 ``set_fit_method(...)`` 能真正
-        驱动 pipeline。默认全局亦为 ``"mle"`` → 与现状完全一致（零回归）。
-        同时供 ``stage_config_dependencies`` 复用，保证路由与指纹使用同一生效值。
-        """
-        method = str(getattr(self.config.fitting, "method", "") or "").strip().lower()
-        if method in ("", "mle"):
-            method = str(get_fit_settings().method).strip().lower()
-        return method
-
     def _fit_one(
         self,
         label: str,
@@ -2417,8 +2384,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             raise RuntimeError(f"Unable to prepare {label} spectrum: {detail}")
         prepared = prepared_catalog.spectra[0]
 
-        # 变更 6：按“有效 method”路由拟合后端（解析见 _effective_fit_method）。
-        method = self._effective_fit_method()
+        method = self.config.fitting.method
         effective_candidate_keys = (
             candidate_keys
             if candidate_keys is not None

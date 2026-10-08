@@ -1,6 +1,12 @@
 Changelog
 ============
 
+Unreleased
+----------
+
+* WXT 拟合方法始终取仪器配置，包括默认或显式 ``method="mle"``；进程级
+  ``set_fit_method("bxa")`` 不再覆盖 WXT。需要 BXA 时设置 ``config.fitting.method="bxa"``。
+
 v0.2.3 (2026-10-08)
 -------------------
 

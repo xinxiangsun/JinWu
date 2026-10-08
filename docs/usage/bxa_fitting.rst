@@ -99,30 +99,19 @@ raises ``ValueError``.
 Choosing the fit method (four ways)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are four levels at which you can select ``method="bxa"``, from the most
-local to the most persistent.  All of them funnel through
-:func:`jinwu.core.fit.fit_spectral`, whose **effective method** resolves with
-the following precedence (highest first):
+Select the method for one call, through process-wide defaults, through an
+instrument config, or with a temporary context manager.
+:func:`jinwu.core.fit.fit_spectral` resolves an explicit ``method=`` first,
+then ``settings.method`` when a settings snapshot is supplied, and otherwise
+uses the process-wide fit settings. Its packaged default is ``"mle"``.
 
-1. Explicit keyword arguments passed at the fit call site.
-2. ``fit_spectral(method=...)`` / ``fit_spectral(settings=...)`` arguments.
-3. The pipeline's per-instrument ``config.fitting.method`` (explicitly
-   destructured and passed to the fit call).
-4. The process-wide global settings (:func:`jinwu.core.set_fit_method` /
-   :func:`jinwu.core.set_fit_settings`).
-5. The :class:`jinwu.core.FitConfig` dataclass default (``method="mle"``).
-
-.. note::
-
-   A pipeline cannot tell an *explicitly chosen* ``method="mle"`` apart from
-   the *default* ``"mle"``.  So when an instrument's ``config.fitting.method``
-   is left at its default ``"mle"`` (never explicitly set), a process-wide
-   ``set_fit_method("bxa")`` **will** drive that pipeline's fit stage to BXA --
-   the global setting (level 4) is the only method signal available.  Pin
-   ``config.fitting.method="mle"`` explicitly on the instrument config if you
-   want that pipeline to stay MLE regardless of the global setting.  (The
-   pipeline freezes the *effective* method into its configuration fingerprint;
-   this precedence is the intended behaviour.)
+The WXT pointing pipeline always uses its own ``config.fitting.method``,
+including the default ``"mle"``. Process-wide ``set_fit_method("bxa")`` does
+not change WXT routing or its configuration fingerprint. To run WXT with BXA,
+set ``config.fitting.method="bxa"`` on the instrument config, as shown below.
+This replaces the previous default-MLE fallback to process-wide settings,
+which could also override an explicitly selected ``"mle"``. Other pipelines
+may resolve defaults differently; consult their documentation.
 
 **(1) Single call** (highest priority, temporary) -- affects only this call:
 
@@ -134,14 +123,14 @@ the following precedence (highest first):
     # -> a BXAFitResult
 
 **(2) Process-wide** (persistent) -- set once at the top of a script/notebook;
-every subsequent bare call defaults to BXA until you reset it:
+every subsequent bare ``fit_spectral`` call defaults to BXA until you reset it:
 
 .. code-block:: python
 
     from jinwu.core import set_fit_method, set_fit_settings, reset_fit_settings
 
     set_fit_method("bxa")                       # shortcut for method only
-    # ...or update several basic settings at once:
+    # BXA also reads global defaults for its unspecified fitting settings:
     set_fit_settings(method="bxa", statistic="cstat")
 
     result = fit_spectral(prepared, outdir="fit/bxa")   # routes to BXA
@@ -160,7 +149,7 @@ block and restores the previous settings on exit, even if the block raises:
     # settings are back to whatever they were before the block
 
 **(4) Pipeline level** -- pass a :class:`jinwu.core.FitConfig` into the
-instrument config, or rely on the global default:
+instrument config. WXT uses its instrument default when no method is supplied:
 
 .. code-block:: python
 
@@ -182,23 +171,27 @@ instrument config, or rely on the global default:
 Scope of the global settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The process-wide settings are **process-level and cross-call-site** -- they are
-not scoped to BXA.  Calling ``set_fit_settings(statistic=..., abundance=...,
-cross_section=...)`` changes the defaults seen by **every** later
-:func:`jinwu.core.fit.fit_prepared`, :func:`jinwu.core.fit.fit`, and
-:func:`jinwu.core.fit.fit_xray_models` call in the same process that **omits**
-those arguments: the resolved values are silently applied to the XSPEC session
-(``Xset.abund``, ``Xset.xsect`` and ``Fit.statMethod``).  A bare
-``fit_prepared(...)`` therefore behaves exactly as before *unless* you changed
-the global settings.
+The process-wide settings are **process-level and cross-call-site**. A bare
+:func:`jinwu.core.fit.fit_spectral` call reads the global default for ``method``.
+For MLE and chain, unspecified ``stat_method``, ``abundance`` and
+``cross_section`` retain :func:`jinwu.core.fit.fit_prepared` defaults
+(``cstat``, ``wilm`` and ``vern``). When ``settings=`` is supplied explicitly,
+``fit_spectral`` uses that snapshot for those three defaults as well.
+
+BXA differs: :func:`jinwu.core.bxa_fit.fit_prepared_bxa` resolves unspecified
+statistic, abundance and cross-section from the process-wide settings, whether
+called directly or through ``fit_spectral``. Explicit call arguments take
+precedence. Direct :func:`jinwu.core.fit.fit_prepared` and
+:func:`jinwu.core.fit.fit_xray_models` calls use their own function defaults;
+the WXT pipeline passes its instrument settings explicitly for either backend.
 
 Two ways to keep a change from leaking across call sites:
 
 * **Isolate it** with the :func:`jinwu.core.fit_settings` context manager,
   which restores the previous settings on exit (even if the block raises).
 * **Override at the call site** -- passing ``stat_method=`` / ``abundance=`` /
-  ``cross_section=`` explicitly always wins over the global default (see the
-  precedence above).
+  ``cross_section=`` explicitly takes precedence over the supplied settings
+  or backend defaults.
 
 Reserve the persistent :func:`jinwu.core.set_fit_settings` /
 :func:`jinwu.core.set_fit_method` for when you intend the whole
