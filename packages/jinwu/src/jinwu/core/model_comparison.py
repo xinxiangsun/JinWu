@@ -21,6 +21,10 @@ _NORMAL = NormalDist()
 
 
 def _probability(value: float, *, name: str = "p") -> float:
+    """校验有限概率 / Validate and return a finite probability in [0, 1].
+
+    先转换 float；越界或非有限时抛 ValueError，name 仅用于报错。
+    Convert to float; nonfinite/out-of-range input raises ValueError using name."""
     value = float(value)
     if not np.isfinite(value) or not 0.0 <= value <= 1.0:
         raise ValueError(f"{name} must be finite and in [0, 1]")
@@ -28,7 +32,20 @@ def _probability(value: float, *, name: str = "p") -> float:
 
 
 def p_to_sigma(p: float, *, sided: str = "one") -> float:
-    """Convert a tail probability to a Gaussian-equivalent sigma."""
+    """尾概率转高斯等效显著性 / Convert a tail probability to Gaussian-equivalent z.
+
+    p 为 [0, 1] 无量纲概率；sided='one' 使用 Phi^-1(1-p)，'two' 使用
+    Phi^-1(1-p/2)。单侧 p=0/1 返回 +inf/-inf；双侧 p=1 返回 0。
+    单侧 p>0.5 的 z 为负；不会校准搜索次数或赋予 Bayes 因子 p 值语义。
+    p is dimensionless in [0, 1]. 'one' uses Phi^-1(1-p), 'two' Phi^-1(1-p/2).
+    One-sided endpoints give +inf/-inf; two-sided p=1 gives 0. Negative one-sided
+    z is valid for p>0.5. No trials calibration or Bayes-factor reinterpretation.
+
+    极小非零 p 的 1-p 可能舍入到 1，引发底层 StatisticsError；输入或
+    sided 无效抛 ValueError。返回 float，不保证极端尾概率的数值精度。
+    Very small nonzero p can round 1-p to 1 and raise StatisticsError. Invalid p
+    or sided raises ValueError. Return float; extreme-tail precision is limited.
+    参考 / Reference: https://docs.python.org/3/library/statistics.html#statistics.NormalDist.inv_cdf"""
 
     p = _probability(p)
     if sided not in {"one", "two"}:
@@ -47,7 +64,13 @@ def p_to_sigma(p: float, *, sided: str = "one") -> float:
 
 
 def sigma_to_p(sigma: float, *, sided: str = "one") -> float:
-    """Convert a Gaussian-equivalent sigma to a tail probability."""
+    """高斯 z 转尾概率 / Convert finite Gaussian z to a tail probability.
+
+    单侧为 1-Phi(sigma)，双侧为 2*(1-Phi(abs(sigma)))；返回无量纲 float。
+    非有限 sigma 或非法 sided 抛 ValueError；大 sigma 可能因相减消失为 0。
+    Use 1-Phi(sigma) for one side, 2*(1-Phi(abs(sigma))) for two sides. Return
+    float probability. Nonfinite sigma/unknown sided raises ValueError. CDF
+    subtraction may round extreme tails to zero; no detection-trials correction."""
 
     sigma = float(sigma)
     if not np.isfinite(sigma):
@@ -76,6 +99,10 @@ class EmpiricalTailResult:
     sided: str
 
     def as_dict(self) -> dict[str, float | int | str]:
+        """导出经验尾概率结果 / Return a shallow dictionary of empirical-tail fields.
+
+        保留样本数、点估计、区间、方向与置信度；不重新计算统计量。
+        Preserve trial counts, estimates, intervals and conventions; no recalculation."""
         return self.__dict__.copy()
 
 
@@ -87,7 +114,45 @@ def empirical_tail_probability(
     confidence: float = 0.95,
     sided: str = "one",
 ) -> EmpiricalTailResult:
-    """Estimate an empirical tail with ``(k+1)/(B+1)`` and exact CI."""
+    """用模拟统计量估计尾概率 / Estimate an empirical tail and binomial interval.
+
+    Parameters
+    ----------
+    statistics : array-like
+        同一统计量的参考模拟样本，展开为一维并去除非有限值。
+        Reference samples of the same statistic; flattened, nonfinite values removed.
+    observed_statistic : float
+        有限的观测统计量，单位/定义须与样本一致。
+        Finite observed statistic, matching the sample definition and unit.
+    tail : {'greater', 'less'}
+        greater 计 >= observed，less 计 <= observed；包含平局。
+        Count >= or <= observed respectively, including ties.
+    confidence : float
+        二项区间置信度，要求 0 < confidence <= 1，默认 0.95。
+        Binomial interval confidence, 0 < confidence <= 1; default 0.95.
+    sided : {'one', 'two'}
+        只决定 p_to_sigma 转换，不改变所选经验尾的计数。
+        Gaussian conversion convention only; does not change the empirical tail.
+
+    Returns
+    -------
+    EmpiricalTailResult
+        B 为有限样本数，k 为越界数；p_hat=(k+1)/(B+1)。区间是基于原始
+        (k, B) 的双侧 Clopper-Pearson 区间，并非给伪计数加一后的区间。
+        z 区间由 p 区间反序换算；无足够有效输入时抛 ValueError。
+        B finite trials and k exceedances give p_hat=(k+1)/(B+1). The two-sided
+        Clopper-Pearson interval uses original (k, B), not added pseudocounts.
+        Transform probability bounds in reverse order for z bounds. Invalid/empty
+        samples raise ValueError; extreme Gaussian conversions can also fail.
+
+    Notes
+    -----
+    参考分布的生成与搜索校准由调用者负责；不能仅凭此函数证明模拟代表
+    真实零假设。此置信区间描述有限模拟对尾概率的抽样不确定度。
+    The caller supplies a valid null/reference distribution and search calibration.
+    This interval describes finite-simulation uncertainty in its tail probability.
+    参考二项精确区间 / Exact binomial interval reference:
+    https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binomtest.html"""
 
     values = np.asarray(statistics, dtype=float).reshape(-1)
     values = values[np.isfinite(values)]
@@ -142,6 +207,10 @@ class BayesFactorResult:
     numerical_error: float | None
 
     def as_dict(self) -> dict[str, Any]:
+        """导出证据比较结果 / Export evidence comparison and numerical-error fields.
+
+        不把 numerical_error 或其区间改称模型后验可信区间。
+        Preserve numerical-error terminology; these are not model posterior intervals."""
         return {
             "log_evidence_h0": self.log_evidence_h0,
             "log_evidence_h1": self.log_evidence_h1,
@@ -155,6 +224,12 @@ class BayesFactorResult:
 
 
 def _confidence_z(confidence: float) -> float:
+    """取对称高斯区间系数 / Return the symmetric Gaussian interval multiplier.
+
+    使用 Phi^-1(0.5+confidence/2)，要求 confidence>0.5；confidence=1
+    会由 NormalDist 的端点校验报错。返回无量纲 float。
+    Use Phi^-1(0.5+confidence/2), requiring confidence>0.5. confidence=1 triggers
+    the NormalDist endpoint error. Return dimensionless float."""
     confidence = _probability(confidence, name="confidence")
     if confidence <= 0.5:
         raise ValueError("confidence must be greater than 0.5")
@@ -171,13 +246,25 @@ def summarize_bayes_factor(
     log_evidence_error_h1: float | None = None,
     confidence: float = 0.95,
 ) -> BayesFactorResult:
-    """Compare two nested-sampling evidences in log space.
+    """比较两个自然对数证据 / Compare two natural-log model evidences.
 
-    Parameters are dimensionless natural logarithms.  The returned Bayes
-    factor is ``Z1/Z0`` and is safely allowed to underflow/overflow to zero or
-    infinity for very decisive comparisons.  If both evidence errors are
-    provided, their quadrature is used for a symmetric numerical interval.
-    """
+    log_evidence_h0/h1 为有限无量纲 ln Z。返回 ln B10=ln Z1-ln Z0
+    及 B10，极端比值按当前浮点阈值置为 0 或 inf。
+    Inputs are finite, dimensionless ln Z. Return ln B10=ln Z1-ln Z0 and B10;
+    extreme factors are set to 0/inf according to the floating-point thresholds.
+
+    若指定数值误差，须同时给出两项非负有限的 ln Z 标准误差。按独立
+    误差平方和计算 ln B 的数值区间，不包含先验敏感性或模型不确定性；
+    此时置信度须使对称高斯分位数有效。无误差时不生成区间。
+    Supply both nonnegative finite ln Z standard errors or neither. Their independent
+    quadrature gives a symmetric numerical interval in ln B, excluding prior/model
+    uncertainty. Confidence must support a finite Gaussian quantile when errors
+    are given. Without errors, no interval is produced.
+
+    返回 BayesFactorResult；非法输入抛 ValueError 或底层分位数异常。
+    Bayes 因子本身不是频率学检测 p 值。
+    Return BayesFactorResult; invalid input raises ValueError or a quantile error.
+    A Bayes factor is not a frequentist detection p-value."""
 
     logz0 = float(log_evidence_h0)
     logz1 = float(log_evidence_h1)
@@ -223,12 +310,14 @@ def model_posterior_probability(
     *,
     prior_h1: float = 0.5,
 ) -> dict[str, float]:
-    """Return posterior probabilities for H0/H1 from a Bayes factor.
+    """用模型先验与 Bayes 因子更新模型概率 / Compute posterior model probabilities.
 
-    ``prior_h1`` is the prior probability of H1 before seeing the data.  The
-    calculation uses a log-sum-exp form and remains stable for extreme Bayes
-    factors.
-    """
+    log_bayes_factor_10 为有限 ln B10；prior_h1 严格介于 0 和 1，默认 0.5。
+    使用 logsumexp 归一化，返回 {'p_h0', 'p_h1'} 无量纲概率；非法输入
+    抛 ValueError。模型参数先验已属于证据计算，不在此重新积分。
+    Require finite ln B10 and 0 < prior_h1 < 1 (default 0.5). Normalize with
+    logsumexp and return dimensionless p_h0/p_h1. Invalid input raises ValueError.
+    Parameter priors belong to the supplied evidences, not a new integration here."""
 
     logbf = float(log_bayes_factor_10)
     if not np.isfinite(logbf):
@@ -247,12 +336,18 @@ def model_averaged_direction_probabilities(
     *,
     prior_h1: float = 0.5,
 ) -> dict[str, float]:
-    """Combine H1's posterior direction probability with model averaging.
+    """把条件方向概率纳入模型平均 / Average a conditional direction over H0/H1.
 
-    ``direction_given_h1`` is the posterior probability of a decrease (or
-    another predeclared direction) conditional on H1.  Under H0 the strict
-    direction event has probability zero, so ``p_decrease = p_h1 * q``.
-    """
+    direction_given_h1=q 是 H1 下预先定义方向的后验概率，范围 [0,1]。
+    假设 H0 的严格方向事件概率为 0，返回 p_decrease=p_h1*q，
+    p_increase=p_h1*(1-q)，并保留模型概率；H0 的质量未分配到两方向。
+    q in [0,1] is the posterior of a predeclared direction conditional on H1.
+    Assume a strict direction has zero probability under H0. Return p_decrease
+    =p_h1*q and p_increase=p_h1*(1-q), plus model probabilities. H0 mass is
+    not assigned to either direction. Invalid inputs propagate validation errors.
+
+    两个方向的名称沿用接口；调用者须明确 q 对应的实际科学事件。
+    Names follow the public API; callers define the actual scientific direction."""
 
     q = _probability(direction_given_h1, name="direction_given_h1")
     model = model_posterior_probability(log_bayes_factor_10, prior_h1=prior_h1)
@@ -273,15 +368,19 @@ def model_averaged_direction_probability_interval(
     *,
     prior_h1: float = 0.5,
 ) -> dict[str, float]:
-    """Propagate conservative numerical intervals to model-averaged odds.
+    """传播数值范围到模型平均概率 / Propagate bounded numerical ranges to averaged probabilities.
 
-    The inputs are ordered numerical (not posterior-credible) intervals.  The
-    posterior model probability is monotone in ``log B10`` and the directional
-    probability is monotone in ``q``; consequently the corner values give a
-    conservative interval for ``P(H1 | D)`` and ``P(decrease | D)``.  Keeping
-    this operation in the reusable core prevents individual analyses from
-    silently reporting a conditional ``q`` as a model-averaged probability.
-    """
+    ln B 和 q 的上下界须有序，ln B 有限、q 在 [0,1]。由单调性使用
+    两个边角给出 p_h1 和 p_decrease 范围；prior_h1 为固定模型先验。
+    返回对应 *_low/*_high dict；非法输入抛 ValueError。
+    Require ordered finite ln B bounds and ordered q bounds within [0,1]. Use
+    monotonic corner values to return *_low/*_high for p_h1 and p_decrease with
+    fixed prior_h1. Invalid inputs raise ValueError.
+
+    输入是数值误差范围，输出不自动成为联合后验可信区间，也不估计
+    两个输入的相关分布或覆盖率。
+    Numerical ranges are not automatically joint posterior credible intervals;
+    this operation does not estimate their correlation or coverage probability."""
 
     low_bf = float(log_bayes_factor_low)
     high_bf = float(log_bayes_factor_high)
@@ -302,6 +401,12 @@ def model_averaged_direction_probability_interval(
 
 
 def _as_count_array(value: Any, name: str) -> np.ndarray:
+    """校验并展开原始整数计数 / Validate and flatten raw nonnegative integer counts.
+
+    输入转 float 一维数组，须非空且有限；与最近整数偏差不超过 1e-9。
+    返回 int64 数组；无效值抛 ValueError，不执行计数率或曝光换算。
+    Flatten as float; require nonempty finite nonnegative values within 1e-9 of
+    integers. Return int64 counts or raise ValueError. No rate/exposure conversion."""
     array = np.asarray(value, dtype=float).reshape(-1)
     if array.size == 0 or np.any(~np.isfinite(array)):
         raise ValueError(f"{name} must be a finite non-empty vector")
@@ -317,40 +422,25 @@ def recover_raw_off_counts(
     *,
     tolerance: float = 1.0e-6,
 ) -> np.ndarray:
-    r"""Recover raw OFF-region PHA counts from a source-scaled background rate.
+    """从源区缩放背景率恢复 OFF 计数 / Recover raw OFF counts from source-scaled rates.
 
-    PyXspec exposes ``Spectrum.background.values`` in counts s\ :sup:`-1`
-    *scaled to the ON/source extraction region*.  For the standard ON/OFF
-    convention
+    输入 source_scaled_background_rate 是已缩放到 ON 区的 counts/s，
+    source_exposure_s 是 ON 曝光秒数，alpha 为 ON/OFF 曝光-面积比例。
+    三者按 NumPy 广播，计算 raw=rate*exposure/alpha，再校验其整数性。
+    Rates are counts/s already scaled to ON, exposure is ON seconds, and alpha
+    is the positive dimensionless ON/OFF exposure-area ratio. Broadcast them,
+    compute raw=rate*exposure/alpha, then require recoverable integer values.
 
-    .. math:: n \sim \mathrm{Pois}(s + \alpha b),\qquad m \sim \mathrm{Pois}(b),
+    返回保留广播形状的非负 int64 ndarray。tolerance 为绝对计数残差
+    容差（默认 1e-6），不是相对误差；超容差不静默四舍五入。非有限、
+    非法曝光/比例、超 int64 或不可广播时抛 ValueError。
+    Return nonnegative int64 ndarray with broadcast shape. tolerance is absolute
+    count residual (default 1e-6), not relative error; reject nonintegral recovery
+    beyond it. Invalid values, overflow or nonbroadcastable inputs raise ValueError.
 
-    the raw OFF count vector is therefore
-
-    .. math:: m = \operatorname{round}(r_{\rm bkg,src} t_{\rm on}/\alpha).
-
-    Parameters
-    ----------
-    source_scaled_background_rate
-        Scalar or array of source-region-scaled background rates in counts/s.
-    source_exposure_s
-        Positive ON/source exposure in seconds.  It may be scalar or
-        broadcastable to the rate array.
-    alpha
-        Positive ON/OFF scale ``BACKSCAL_on * EXPOSURE_on /
-        (BACKSCAL_off * EXPOSURE_off)``.  It may be scalar or broadcastable.
-    tolerance
-        Absolute numerical tolerance (in counts) for the required integer
-        recovery.  A non-integral result is a data-contract failure, not a
-        quantity to round silently.  An absolute tolerance prevents a
-        relative allowance from hiding metadata mistakes at large counts.
-
-    Returns
-    -------
-    numpy.ndarray
-        Raw non-negative OFF counts as ``int64``, with the broadcast shape of
-        the inputs.
-    """
+    输入缩放语义由读取端确认，不能把原始 OFF 区 rate 当作源区缩放 rate。
+    Readers must establish scaling semantics; raw OFF rates are not interchangeable
+    with source-scaled background rates. This function does not read OGIP metadata."""
 
     rate = np.asarray(source_scaled_background_rate, dtype=float)
     exposure = np.asarray(source_exposure_s, dtype=float)
@@ -398,20 +488,31 @@ def onoff_log_marginal_likelihood(
     background_prior_shape: float = 0.5,
     background_prior_rate: float = 1.0e-6,
 ) -> float:
-    r"""Marginalize a Poisson ON/OFF background analytically.
+    """解析边际化 Poisson ON/OFF 背景 / Analytically integrate an ON/OFF background.
 
-    The source-region (ON) counts and background-region (OFF) counts obey
+    source_counts=n 是 ON 总观测计数，background_counts=m 是独立 OFF
+    原始计数；source_model_counts=s 是预期纯源计数（已按观测/响应折叠），
+    alpha=a 是正的无量纲 ON/OFF 比例。模型为 n~Pois(s+a*b)，m~Pois(b)，
+    b~Gamma(shape, rate)，这里 rate 是率参数而非 scale。
+    n is total observed ON counts, m raw independent OFF counts, s expected
+    source-only counts after observation/response folding, and a positive ON/OFF
+    ratio. Use n~Pois(s+a*b), m~Pois(b), b~Gamma(shape, rate), with a rate rather
+    than scale parameter. All inputs use count numbers, not rates or net counts.
 
-    .. math:: n_i\sim\operatorname{Pois}(s_i+\alpha_i b_i),\quad
-              m_i\sim\operatorname{Pois}(b_i),
+    将输入展开为等长一维数组，alpha 可为正标量或等长数组；观测计数
+    须为非负整数，源期望非负，Gamma 两参数有限且正。默认 shape=0.5、
+    rate=1e-6，属于所选背景先验，证据解释须保留这两个设置。
+    Flatten equal-length vectors; alpha may be scalar or matching vector. Observed
+    counts are nonnegative integers, s nonnegative, Gamma parameters finite/positive.
+    Defaults shape=0.5, rate=1e-6 define the background prior and affect evidence.
 
-    while ``b_i ~ Gamma(shape, rate)``.  The expansion of
-    ``(s + alpha*b)**n`` makes the integral exact and stable in log space.
-    ``source_model_counts`` are expected *source* counts, not background
-    subtracted counts.  This is a reusable likelihood primitive; instrument
-    code remains responsible for deriving and validating ``alpha`` from OGIP
-    metadata.
-    """
+    返回含 Poisson 与归一化 Gamma 常数的标量自然对数似然，以逐通道
+    有限多项展开与 logsumexp 积分。非法输入报错；不生成响应、不减背景，
+    也不计算模型参数先验或完整模型证据。
+    Return a scalar natural-log likelihood including normalized Poisson/Gamma
+    constants, integrating a finite per-channel expansion with logsumexp. Invalid
+    inputs raise; no response generation, background subtraction, parameter-prior
+    integration or complete model evidence is performed."""
 
     on = _as_count_array(source_counts, "source_counts")
     off = _as_count_array(background_counts, "background_counts")
@@ -469,16 +570,22 @@ def onoff_log_profile_likelihood(
     source_model_counts: Any,
     alpha: Any,
 ) -> float:
-    r"""Profile (rather than marginalize) the Poisson ON/OFF background.
+    """对 ON/OFF 背景取剖面似然 / Profile a nonnegative Poisson ON/OFF background.
 
-    This is a normalized Poisson likelihood with the non-negative background
-    expectation profiled independently in each channel.  It is provided as a
-    diagnostic bridge to XSPEC W-stat: for a fixed source model, differences
-    between this value and the W-stat log likelihood should be data-only
-    constants (up to the convention used by the XSPEC build).  It is not the
-    formal evidence likelihood; use :func:`onoff_log_marginal_likelihood` for
-    that purpose.
-    """
+    输入契约同边际化函数的计数/alpha 部分：ON 总计数、原始 OFF 计数、
+    预期纯源计数，以及正 ON/OFF 比例。逐通道求 b_hat>=0 的解析二次根，
+    返回含 Poisson 归一化常数的标量自然对数似然。
+    Use total ON counts, raw OFF counts, expected source-only counts and positive
+    ON/OFF ratio. Solve a per-channel quadratic for b_hat>=0 and return the
+    normalized scalar Poisson log likelihood. No background-prior integration.
+
+    作为 XSPEC W-stat 的诊断桥；不能把剖面似然当作边际证据。含正计数
+    而相应期望为零时返回 -inf，非法数据抛异常。实际 W-stat 常数约定须
+    依据使用的 XSPEC 版本及同输入对照核验。
+    Use as a diagnostic bridge to W-stat, not marginalized evidence. Positive counts
+    with zero expectation return -inf; invalid inputs raise. Verify XSPEC constants
+    against the actual build with identical inputs.
+    参考 / Reference: https://heasarc.gsfc.nasa.gov/docs/software/xspec/manual/XSappendixStatistics.html"""
 
     on = _as_count_array(source_counts, "source_counts")
     off = _as_count_array(background_counts, "background_counts")
@@ -540,6 +647,19 @@ class PreparedOnOffMarginalLikelihood:
     def __init__(self, source_counts: Any, background_counts: Any, alpha: Any,
                  *, background_prior_shape: float = 0.5,
                  background_prior_rate: float = 1e-6, max_terms: int = 1_000_000):
+        """缓存数据项以重复计算边际似然 / Prepare exact data-dependent ON/OFF coefficients.
+
+        复制非负整数 ON/OFF 计数，检查等长，广播正 alpha；Gamma 参数约定
+        同 onoff_log_marginal_likelihood。max_terms 为正整数，限制单个系数
+        块的元素数，不是总体内存上限；更大的单 bin 保留为参考实现回退。
+        Copy and validate matching integer counts and broadcast positive alpha. Gamma
+        conventions match the reference marginal likelihood. max_terms is a positive
+        integer limiting each coefficient block, not total memory. Oversized individual
+        bins use the reference implementation when called.
+
+        只缓存数据组合系数，尚未计算某个源模型的似然或证据；非法输入报错。
+        Cache only combinatorial data terms, not any source-model likelihood/evidence.
+        Invalid input raises; input arrays are copied before storage."""
         self.on = _as_count_array(source_counts, "source_counts").copy()
         self.off = _as_count_array(background_counts, "background_counts").copy()
         if self.on.shape != self.off.shape:
@@ -588,6 +708,15 @@ class PreparedOnOffMarginalLikelihood:
             start = end
 
     def __call__(self, source_model_counts: Any) -> float:
+        """计算给定源期望的精确边际似然 / Evaluate the prepared marginal likelihood.
+
+        source_model_counts 为有限非负纯源期望计数，与初始化的 ON 向量等长。
+        缓存块使用 logsumexp/xlogy；超块限制的 bin 调用参考边际化函数。
+        返回标量 ln L；不修改输入模型、不做拟合或模型参数先验积分。
+        Supply finite nonnegative expected source-only counts matching prepared ON
+        length. Use logsumexp/xlogy blocks and reference integration for fallback bins.
+        Return scalar ln L without fitting or parameter-prior integration. Invalid
+        input raises ValueError; cached arrays are used without revalidating their state."""
         from scipy.special import xlogy
         source = np.asarray(source_model_counts, dtype=float).reshape(-1)
         if source.shape != self.on.shape or np.any(~np.isfinite(source)) or np.any(source < 0):

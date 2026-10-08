@@ -1,5 +1,8 @@
-Swift BAT+XRT GRB Pipeline
-==========================
+Swift BAT + XRT GRB 流程
+========================
+
+以本地研究数据布局中的 catalog、Burst Analyser 表与 XRT 产品为输入，
+逐阶段生成光变、prompt 判断、分段谱、XSPEC 拟合与摘要。缺失输入应保留状态，14 列 ECF 表限制见已知问题。
 
 :mod:`jinwu.swift.grb` analyses a single gamma-ray burst using Swift BAT
 Burst Analyser products together with XRT data.  It is a resumable,
@@ -21,7 +24,7 @@ dependency.  The ``fit`` stage additionally requires a working
 HEASoft/PyXspec environment.
 
 Stages
-~~~~~~
+~~~~~~~~~~~~
 
 ::
 
@@ -100,7 +103,7 @@ The CLI works against a research-style workspace:
        --request-xrt --xrt-user "$SWIFT_XRT_USER"
 
 Python API
-~~~~~~~~~~
+~~~~~~~~~~~~
 
 The :class:`jinwu.core.config.SwiftGRB` preset carries the instrument
 configuration; the input dataclass is
@@ -143,7 +146,7 @@ data are added locally, rerunning the same command resumes from the
 interrupted point.  Use ``--no-resume`` to force a full recompute.
 
 See also
-~~~~~~~~
+~~~~~~~~~~~~
 
 * :doc:`bxa_fitting` — Bayesian fitting of the per-segment spectra.
 * :doc:`upperlimits` — bound/sensitivity semantics used across pipelines.

@@ -1,5 +1,19 @@
 # JinWu agent guidance
 
+## Progress and AI attribution
+
+- 所有项目任务在暂停、受阻或达到重要里程碑时，更新现有 Obsidian 笔记库的
+  `Progress/` 文件夹：同一任务维护一篇可独立续做的摘要，更新顶部状态、追加
+  带日期的记录，并同步 `00-进度索引.md`。仓库内保留代码、正式审查报告和科学
+  证据原件；Obsidian 笔记链接到原件，不逐条记录日常对话。
+- 每名参与修改的 AI 按每项修改任务、每名参与独立 review 的 AI 按每项 review，
+  分别在进度笔记留下署名；正式 review 报告也应分别署名。不把模型信息散写进
+  生产代码。
+- 每条署名写明 AI 名称或子代理标识、harness、运行环境实际报告的模型标识及
+  推理档位、带时区的记录时间（本机使用 `+08:00`）、修改或审查范围、结果与
+  证据。历史实际工作时间若无法还原，写“历史时间不详”；模型或档位未由
+  运行环境披露时写“未披露”，不能根据派工偏好或文件修改时间猜测。
+
 ## Python environment
 
 日常开发暂以 Python 3.12 为基准。这是当前工作环境约定，不是永久架构限制。
@@ -55,6 +69,18 @@ the migration path, and update relevant examples and documentation.
 但离线检查通过不能替代真实数据流程验收。纯文档改动无需重跑科学流程。
 
 ## Exploration and independent technical judgment
+
+### Code migration acceptance
+
+For code migrations, preserve the original algorithm core, scientific
+computation procedure, intermediate quantities, and final results. Pin and
+record the source version, inputs, settings, environment, and randomness;
+compare the original and migrated implementations on identical inputs,
+including representative real data. State numerical tolerances and explain
+every difference. Interface, packaging, and execution changes are acceptable
+when these comparisons establish equivalence. Algorithm corrections, new
+scientific assumptions, and upstream version updates must be separate changes
+with their own validation, rather than silently included in a migration.
 
 For exploratory, scientific, architectural, or open-ended tasks, apply the
 global independent-judgment principles: treat historical conventions as defaults,

@@ -138,6 +138,8 @@ def _infer_dt(time: np.ndarray) -> float:
 	dt = float(np.median(np.diff(time)))
 	if not np.isfinite(dt) or dt <= 0:
 		raise ValueError("failed to infer a positive dt from time array")
+	if not np.all(np.isfinite(time)) or not np.allclose(np.diff(time), dt, rtol=1e-7, atol=1e-7):
+		raise ValueError("NPZ simulation requires a finite, uniformly spaced time grid")
 	return dt
 
 
@@ -198,6 +200,34 @@ def load_counts_npz(npz_path: str, *, area_ratio: Optional[float] = None) -> Tup
 _K_FACTORY = XspecKFactory()
 
 
+def _load_signal_counts_npz(npz_path: str, *, area_ratio: Optional[float],
+                            input_background_rate: Optional[float] = None):
+	"""Return time, signed source-count estimate and bin width in seconds.
+
+	Use explicit net counts when present; otherwise subtract scaled OFF counts
+	from ON counts, or an explicitly supplied input ON-background rate (cts/s).
+	Absent background information means a background-free input template.
+	"""
+	time, counts, dt = load_counts_npz(npz_path, area_ratio=area_ratio)
+	with np.load(npz_path, allow_pickle=False) as data:
+		if 'corrected_counts' in data:
+			counts = np.asarray(data['corrected_counts'], dtype=float)
+		elif 'corrected_counts_back' in data:
+			if area_ratio is None or not np.isfinite(area_ratio) or area_ratio <= 0:
+				raise ValueError('A finite positive area_ratio is required to subtract OFF counts')
+			back = np.asarray(data['corrected_counts_back'], dtype=float)
+			if back.shape != counts.shape or np.any(~np.isfinite(back)) or np.any(back < 0):
+				raise ValueError('OFF counts must be finite, nonnegative and match the ON grid')
+			counts = counts - float(area_ratio) * back
+		elif input_background_rate is not None:
+			if not np.isfinite(input_background_rate) or input_background_rate < 0:
+				raise ValueError('input_background_rate must be finite and nonnegative (cts/s)')
+			counts = counts - float(input_background_rate) * dt
+	if counts.shape != time.shape or np.any(~np.isfinite(counts)):
+		raise ValueError('Source counts must be finite and match the time grid')
+	return time, counts, dt
+
+
 # ------------------------------ 主流程 API ------------------------------
 
 def build_fake_from_npz(
@@ -212,6 +242,7 @@ def build_fake_from_npz(
 	target_dt: Optional[float] = None,
 	add_poisson: bool = True,
 	background_rate: Optional[float] = None,
+	input_background_rate: Optional[float] = None,
 	output_total_rate: bool = False,
 ) -> LCSimResult:
 	"""
@@ -221,10 +252,14 @@ def build_fake_from_npz(
 	- cfg_tgt: 用于把 flux→rate'(得到 K_tgt）；若 None，则使用 cfg_ref
 	- z0,z,T0: 若提供，则按 S_t=(1+z)/(1+z0) 拉伸时间轴；否则不改变时间。
 	- background_rate: 常数背景率(cts/s);  若 output_total_rate=False，则输出净源率
+	- 输入 ON 总计数先减去 NPZ 中按 area_ratio 缩放的 OFF 背景；已有 corrected_counts
+	  则直接使用净计数。没有这些键时，可用 input_background_rate 指定输入 ON 背景率。
+	  background_rate 只指定目标观测背景，不参与源光谱/红移缩放。
 	- 返回：`LCSimResult(time, counts, dt, rate, error, meta)`
 	"""
 	# 1) 读入 NPZ 计数光变 | Read counts LC
-	time, counts, dt_in = load_counts_npz(npz_path, area_ratio=area_ratio)
+	time, counts, dt_in = _load_signal_counts_npz(
+		npz_path, area_ratio=area_ratio, input_background_rate=input_background_rate)
 	rate_in = np.asarray(counts, dtype=float) / float(dt_in)
 
 	# 2) 计算 K_ref 并得到 flux(t) | Compute K_ref and flux(t)
@@ -337,6 +372,7 @@ def build_fake_on_off_from_npz(
 	background_rate_off: Optional[float] = None,
 	# 源区常数本底率（cts/s，ON 区）；若提供则优先，若未提供且 background_rate_off 提供，则按 alpha 缩放：ON = alpha * OFF
 	background_rate_on: Optional[float] = None,
+	input_background_rate: Optional[float] = None,
 	z0: Optional[float] = None,
 	z: Optional[float] = None,
 	T0: Optional[float] = None,
@@ -354,7 +390,8 @@ def build_fake_on_off_from_npz(
 	"""
 
 	# 1) 读入 NPZ（只用时间轴与源区域输入的计数来推导源信号形状）
-	time, counts, dt_in = load_counts_npz(npz_path, area_ratio=alpha)
+	time, counts, dt_in = _load_signal_counts_npz(
+		npz_path, area_ratio=alpha, input_background_rate=input_background_rate)
 	rate_in = np.asarray(counts, dtype=float) / float(dt_in)
 
 	# 2) K_ref → flux
@@ -743,4 +780,3 @@ __all__ = [
     'load_on_off_lightcurve',
     'generate_redshift_lightcurves',
 ]
-

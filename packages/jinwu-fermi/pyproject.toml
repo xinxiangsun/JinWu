@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu-fermi"
-version = "0.2.1"
+version = "0.2.2"
 description = "Fermi/GBM instrument support for the jinwu analysis toolkit."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -60,3 +60,4 @@ include = ["jinwu.fermi*"]
 
 [tool.setuptools.package-data]
 "jinwu.fermi.gbm.subthreshold._vendor" = ["license.txt", "UPSTREAM.json"]
+"jinwu.fermi.gbm.mvt._vendor" = ["LICENSE.txt", "NOTICE", "UPSTREAM.json", "mvt_snr_fit_model.npz"]

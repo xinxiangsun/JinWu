@@ -55,6 +55,13 @@ class SkyMapData:
     total_probability: float = field(init=False)
 
     def __post_init__(self) -> None:
+        """规范化数组并检查概率字段 / Coerce and validate map columns.
+
+        各字段须为同形状非空一维数组；密度、面积和概率按各自规则校验。
+        记录概率总和，但不在此自动归一化或核验 UNIQ 与像素层级的对应。
+        Require equally shaped, nonempty 1-D columns and valid density, area,
+        and mass. Store the total; do not normalize or cross-check UNIQ encoding.
+        """
         uniq = np.asarray(self.uniq, dtype=np.uint64)
         levels = np.asarray(self.levels, dtype=np.int64)
         ipix = np.asarray(self.ipix, dtype=np.int64)
@@ -85,6 +92,12 @@ class SkyMapData:
 
 
 def _unit_density(values: Any) -> np.ndarray:
+    """将角概率密度换算为 sr^-1 / Convert probability density to sr^-1.
+
+    无单位数组按 sr^-1 解释；带单位值必须与逆立体角等价，否则报错。
+    Bare arrays are interpreted as sr^-1. Unit-bearing input must convert to
+    inverse solid angle; unsupported units raise ValueError.
+    """
     unit = getattr(values, "unit", None)
     if unit is None:
         return np.asarray(values, dtype=float)
@@ -97,7 +110,11 @@ def _unit_density(values: Any) -> np.ndarray:
 
 
 def _density_column(table_hdu: Any, name: Any) -> np.ndarray:
-    """Read a FITS density column while honoring its optional TUNIT card."""
+    """读取并换算 FITS 密度列 / Read a FITS density column in sr^-1.
+
+    有 TUNIT 时按列单位换算，无 TUNIT 时按 sr^-1；返回浮点数组。
+    Honor a present TUNIT card; otherwise assume sr^-1. Return a float array.
+    """
     values = np.asarray(table_hdu.data[name], dtype=float)
     unit = getattr(table_hdu.columns[name], "unit", None)
     if unit:
@@ -106,6 +123,14 @@ def _density_column(table_hdu: Any, name: Any) -> np.ndarray:
 
 
 def _finish(uniq, levels, ipix, density, area, *, ordering, source, normalize) -> SkyMapData:
+    """从像素密度构造概率图 / Build a probability map from density and area.
+
+    density 单位 sr^-1，area 单位 sr；概率质量为两者乘积。normalize=True
+    且总概率为正时，同时缩放质量与密度；最终交给 SkyMapData 校验。
+    Density is sr^-1 and area is sr; mass is their product. Normalize both
+    mass and density when requested and the total is positive, then validate
+    through SkyMapData. Input/source/order metadata are preserved.
+    """
     density = np.asarray(density, dtype=float)
     area = np.asarray(area, dtype=float)
     probability = density * area
@@ -122,11 +147,33 @@ def _finish(uniq, levels, ipix, density, area, *, ordering, source, normalize) -
 
 
 def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
-    """Read a local LVK multi-order (NUNIQ) or flat HEALPix FITS probability map.
+    """读取本地 HEALPix 概率 FITS / Read a local HEALPix probability FITS.
 
-    Remote URLs are intentionally **not** supported here; fetching untrusted
-    alert URLs with per-redirect validation lives in :mod:`jinwu.gw.alert` and
-    :mod:`jinwu.gw.skymap`.  Density is always returned in sr^-1.
+    Parameters
+    ----------
+    path : str or Path
+        本地文件，支持 UNIQ/PROBDENSITY 多阶图，或含 PROB、PROBABILITY、
+        PROBDENSITY 的平面图；URL 获取由 jinwu.gw 的告警层负责。
+        Local multi-order UNIQ/PROBDENSITY or flat PROB/PROBABILITY/PROBDENSITY
+        file. Remote fetching belongs to the jinwu.gw alert layer.
+    normalize : bool
+        默认 True，将正的总概率缩放到 1，并同步密度。
+        Default True: scale a positive total mass to 1 and update density.
+
+    Returns
+    -------
+    SkyMapData
+        统一为 nested UNIQ，密度单位 sr^-1、面积单位 sr，像素概率无量纲。
+        ordering 保留原平面图排序信息；source 为绝对路径。
+        Nested UNIQ representation with density in sr^-1, area in sr and
+        dimensionless pixel mass. Retain original flat ordering and source path.
+
+    Raises
+    ------
+    FileNotFoundError, ValueError
+        文件缺失、列/NSIDE/排序不兼容或概率字段无效；FITS 读取异常也上抛。
+        Missing file or invalid columns, NSIDE, ordering or probabilities.
+        FITS read errors propagate. Requires optional astropy-healpix at call time.
     """
     import astropy_healpix as ah
 
@@ -198,13 +245,20 @@ def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
 def sky_map_pixel_vectors(
     skymap: SkyMapData, *, max_order: int = DEFAULT_VECTOR_ORDER
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Expand a map into per-(sub)pixel ICRS unit vectors and probability mass.
+    """生成 ICRS 像素向量与概率质量 / Expand a map into vectors and masses.
 
-    Cells coarser than ``max_order`` are subdivided with constant density; finer
-    cells keep their original mass.  This is the representation consumed by the
-    GBM targeted search's spatial prior.  Returns ``(unit_vectors, masses)``
-    with ``unit_vectors`` of shape ``(N, 3)`` and ``masses`` summing to
-    ``skymap.total_probability``.
+    skymap 为 SkyMapData；max_order 为细分目标阶数，默认 6。粗于该阶的
+    像素按均匀密度细分，较细像素保留原质量。返回 ``(unit_vectors, masses)``，
+    形状为 (N, 3) 与 (N,)，均无量纲，质量总和保留原图总概率。
+    ``skymap`` is SkyMapData; ``max_order`` defaults to 6. Coarser cells split
+    at constant density; finer cells retain their mass. Return dimensionless
+    ICRS Cartesian unit vectors (N, 3) and masses (N,), preserving total mass.
+
+    输出按原像素层级分组，不能假定与输入数组一一对应；提高阶数会按
+    4 的幂增加细分像素数量和内存需求。用于 GBM 搜索的空间先验。
+    Output is grouped by original level, not necessarily input order. Higher
+    orders increase subdivisions and memory by powers of 4. Used by GBM spatial
+    priors; requires optional astropy-healpix at call time.
     """
     import astropy_healpix as ah
 

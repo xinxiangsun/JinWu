@@ -1,55 +1,30 @@
+Galactic NH 查询与 XSPEC 单位
+=============================
 
-Galactic NH (nhtot)
-===================
-
-.. warning::
-
-   This page is a work in progress.  See :func:`jinwu.core.utils.nhtot` for
-   the complete API.
-
-The ``nhtot`` function queries the Swift UKSSDC nhtot web service to obtain
-the **total** Galactic hydrogen column density using the method of
-Willingale et al. (2013, MNRAS, 431, 394).
-
-This includes:
-- **NHI** — atomic hydrogen (from 21-cm surveys)
-- **NH₂** — molecular hydrogen (estimated from dust reddening E(B-V))
-- **NH,tot** = NHI + 2×NH₂
-
-Why nhtot?
-~~~~~~~~~~
-
-HEASoft's ``nh`` tool returns NHI **only** (from the HI4PI map).
-At low Galactic latitudes (\|b\| < 20°), molecular hydrogen contributes
-significantly, and using NHI-only values in ``tbabs`` (which assumes
-20% molecular fraction) systematically underestimates Galactic absorption.
-
-The Swift community (including Valan et al. 2023) uses ``nhtot`` for the
-Galactic component of X-ray spectral fitting.
-
-Usage
-~~~~~
+``nhtot`` 查询 Swift UKSSDC 服务，返回 Willingale et al. (2013) 方法的
+Galactic 氢柱密度，包括 HI 和估计的分子成分。
+返回列密度的单位为 **cm⁻²**；总氢为 :math:`N_{H,tot}=N_{HI}+2N_{H_2}`。
+服务依赖网络，应保存查询坐标、日期、原始响应与结果。
 
 .. code-block:: python
 
-    from jinwu.core.utils import nhtot
+   from jinwu.core.utils import nhtot
+   result = nhtot(ra=159.386, dec=56.171)  # 十进制度
+   print(result['nhi_weighted'])
+   print(result['nh2_weighted'])
+   print(result['nhtot_weighted'])
+   # XSPEC tbabs 参数单位为 10^22 cm^-2
+   nh_gal_1e22 = result['nhtot_weighted'] / 1.0e22
 
-    # Decimal degrees
-    result = nhtot(ra=159.386, dec=56.171)
-    print(f"N_HI       = {result['nhi_weighted']:.2e} cm⁻²")
-    print(f"N_H₂       = {result['nh2_weighted']:.2e} cm⁻²")
-    print(f"N_H,tot    = {result['nhtot_weighted']:.2e} cm⁻²")
-    print(f"E(B-V)     = {result['ebv_weighted']:.3f} mag")
+也可使用性角坐标字符串：``nhtot('10:37:32.6', '+56:10:15.6')``。
+``fit_prepared(galactic_nh_1e22=...)`` 与 ``tbabs.nH`` 接受的是转换后的数值。
+不要把 cm⁻² 原始值直接写入 XSPEC，也不要把本例坐标的查询结果用到其他视线。
 
-    # Sexagesimal coordinates also accepted
-    result = nhtot("10:37:32.6", "+56:10:15.6")
+选择 Galactic NH 估计需核查所用地图、分子气体假设和吸收模型，
+并在科学报告中说明来源；不同估计不能只因名称相近而直接替换。
 
-    # For XSPEC tbabs:
-    nh_gal = result["nhtot_weighted"]  # Use this, not nh!
-
-Reference
-~~~~~~~~~
-
-Willingale, R., Starling, R. L. C., Beardmore, A. P., Tanvir, N. R., &
-O'Brien, P. T. 2013, MNRAS, 431, 394
-(`arXiv:1303.0843 <https://arxiv.org/abs/1303.0843>`_)
+来源：Willingale et al. (2013)，MNRAS 431, 394，
+`arXiv:1303.0843 <https://arxiv.org/abs/1303.0843>`_；
+`UKSSDC nhtot <https://www.swift.ac.uk/analysis/nhtot/>`_；
+`XSPEC tbabs 模型单位 <https://heasarc.gsfc.nasa.gov/docs/software/xspec/manual/XSmodelTbabs.html>`_。
+API：:func:`jinwu.core.utils.nhtot`。

@@ -1,17 +1,23 @@
-/* JinWu custom styles */
-
-/* Slightly tighter code blocks */
-pre {
-    padding: 1em;
-    border-radius: 4px;
-}
-
-/* Better API signature readability */
-dt.sig {
-    margin-bottom: 0.5em;
-}
-
-/* Make module/subpackage names stand out */
-.py.class, .py.function, .py.method, .py.module {
-    margin-bottom: 1em;
+/* Responsive reading layout; tables and signatures scroll locally. */
+html { --pst-font-family-base: system-ui, -apple-system, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+.bd-article { line-height: 1.8; }
+.bd-article-container { max-width: 68rem; }
+.bd-article h1 { letter-spacing: -.025em; margin-bottom: 1.2rem; overflow-wrap: anywhere; }
+.bd-article h2 { margin-top: 2.2rem; }
+.bd-article p { overflow-wrap: anywhere; }
+.jinwu-start-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.7rem 0; }
+.bd-article .jinwu-start-card { border: 1px solid var(--pst-color-border); border-radius: .7rem; padding: 1.1rem 1.3rem; background: var(--pst-color-surface); }
+.jinwu-start-card p:last-child { margin-bottom: 0; }
+.jinwu-start-card strong { font-size: 1.1rem; }
+.bd-article div.highlight { border-radius: .45rem; }
+.bd-article pre { padding: 1rem; line-height: 1.55; }
+dl.py > dt.sig { display: block; overflow-x: auto; max-width: 100%; padding: .65rem; }
+dl.py { margin-bottom: 1.5rem; }
+.bd-article table { font-size: .94rem; line-height: 1.65; }
+.bd-article .table-wrapper { overflow-x: auto; }
+.bd-article img { max-width: 100%; height: auto; }
+@media (max-width: 767px) {
+ .jinwu-start-grid { grid-template-columns: 1fr; }
+ .bd-article { font-size: 1rem; }
+ .bd-article pre { font-size: .82rem; }
 }

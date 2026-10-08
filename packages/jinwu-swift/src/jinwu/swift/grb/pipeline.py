@@ -300,11 +300,14 @@ def read_burst_analyser_dat(path: str | Path) -> dict[str, Any]:
     # 14-column tables lack a native rate; their ECF maps flux to rate.
     # 15-column tables contain native rate and asymmetric rate uncertainties.
     if data.shape[1] == 14:
-        ecf = data[:, 6]
+        # UKSSDC XRTBand schema: column 6 is FluxPosWithECFErr;
+        # the flux/count-rate conversion factor is column 11 (zero based).
+        ecf = data[:, 11]
+        valid_ecf = np.isfinite(ecf) & (ecf > 0)
         out["ECF"] = ecf
-        out["rate"] = np.divide(data[:, 3], ecf, out=np.full(len(data), np.nan), where=ecf != 0)
-        out["rate_err_low"] = np.divide(np.abs(data[:, 5]), np.abs(ecf), out=np.full(len(data), np.nan), where=ecf != 0)
-        out["rate_err_high"] = np.divide(np.abs(data[:, 4]), np.abs(ecf), out=np.full(len(data), np.nan), where=ecf != 0)
+        out["rate"] = np.divide(data[:, 3], ecf, out=np.full(len(data), np.nan), where=valid_ecf)
+        out["rate_err_low"] = np.divide(np.abs(data[:, 5]), ecf, out=np.full(len(data), np.nan), where=valid_ecf)
+        out["rate_err_high"] = np.divide(np.abs(data[:, 4]), ecf, out=np.full(len(data), np.nan), where=valid_ecf)
         out["rate_source"] = "flux_over_ecf"
     elif data.shape[1] >= 15:
         out["rate"] = data[:, 6]
@@ -1571,11 +1574,11 @@ class SwiftGRBPipeline(InstrumentPipeline[SwiftGRBInput, SwiftGRBResult]):
                     bkg_counts = float(((bkg_times >= start) & (bkg_times < stop)).sum())
                     alpha = _read_area_ratio(bkg, start, stop)
                     if not np.isfinite(alpha) and area_file is not None:
-                        t0_met = _event_trigger_met(bkg)
+                        background_origin = _event_trigger_met(bkg)
                         alpha = _alpha_from_area_file(
                             area_file,
                             source_area=_source_area_from_event(bkg, start, stop),
-                            time_s=((start + stop) / 2.0 - t0_met) if t0_met is not None else None,
+                            time_s=((start + stop) / 2.0 - background_origin) if background_origin is not None else None,
                         )
                     if not np.isfinite(alpha) or alpha <= 0:
                         warnings.append(f"{mode}: missing valid area scaling for {start:.6f}--{stop:.6f}")

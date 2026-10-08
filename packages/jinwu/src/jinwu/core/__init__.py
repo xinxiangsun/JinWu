@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 	from . import ops as ops
 	from . import io as io
 	from . import timescale as timescale
+	from .significance import snr, li_ma_snr
 	from .base import (
 		EnergyBand, ChannelBand, RegionArea, RegionAreaSet,
 		HduHeader, FitsHeaderDump, OgipMeta,
@@ -121,6 +122,8 @@ _TIME_EXPORTS = {
 	'Time', 'TimeDelta',
 }
 
+_SIGNIFICANCE_EXPORTS = {'snr', 'li_ma_snr'}
+
 # Process-wide fit settings API (from .config); never imports bxa/xspec.
 _FIT_SETTINGS_EXPORTS = {
 	'get_fit_settings', 'set_fit_settings', 'reset_fit_settings',
@@ -158,6 +161,7 @@ __all__ = [
 	'ArfReader', 'RmfReader', 'RspReader', 'LightcurveReader',
 	# Utilities
 	'band_from_arf_bins', 'channel_mask_from_ebounds',
+	'snr', 'li_ma_snr',
 	# Unified helpers
 	'PhaWriter', 'ArfWriter', 'RmfWriter', 'LightcurveWriter', 'EventWriter',
 	'OgipData', 'guess_ogip_kind', 'readfits', 'read_arf', 'read_rmf', 'read_pha', 'read_lc', 'read_evt',
@@ -182,6 +186,20 @@ __all__ = [
 
 
 def __getattr__(name: str):
+	"""延迟加载 core 公共导出 / Lazily resolve a public core export.
+
+	按导出集合导入所属模块，返回模块、类或函数并缓存到 globals；避免
+	基础导入时立即加载所有可选后端。未知名称抛 AttributeError，后端
+	导入错误向上传递。首次访问可能触发目标模块的导入副作用。
+	Resolve modules/classes/functions via their export sets and cache in globals.
+	Avoid eager loading of optional backends. Unknown names raise AttributeError;
+	backend import errors propagate and first access can trigger module side effects."""
+	if name in _SIGNIFICANCE_EXPORTS:
+		mod = import_module('.significance', __name__)
+		value = getattr(mod, name)
+		globals()[name] = value
+		return value
+
 	if name in _MODULE_EXPORTS:
 		mod = import_module(f'.{name}', __name__)
 		globals()[name] = mod
@@ -263,4 +281,9 @@ def __getattr__(name: str):
 
 
 def __dir__() -> list[str]:
+	"""列出模块可发现名称 / Return sorted names from globals and declared exports.
+
+	不强制加载延迟模块；列表包含私有已加载名称，也不证明可选后端可用。
+	Do not load lazy modules. Include private loaded globals; listing a name does
+	not establish availability of its optional backend."""
 	return sorted(set(globals().keys()) | set(__all__))

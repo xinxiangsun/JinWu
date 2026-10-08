@@ -176,16 +176,43 @@ def read_gbm_geometry(
     ``get_spacecraft_frame``/``get_spacecraft_states`` surface.  Geometry uses
     GDT's Slerp/linear interpolation (``SpacecraftFrame.at``); the SAA/good
     flags come from the nearest state sample.  ``t`` must lie inside the
-    file's validity range: attitude extrapolation is forbidden.
+    file's validity range: attitude extrapolation is forbidden. File paths are
+    opened and closed here; a supplied POSHIST object remains caller-owned.
     """
     when = _as_scalar_time(t)
-    path: Path | None = None
-    history = poshist
     if not hasattr(poshist, "get_spacecraft_frame"):
         from gdt.missions.fermi.gbm.poshist import GbmPosHist
 
         path = Path(poshist).expanduser().resolve()
-        history = GbmPosHist.open(path)
+        with GbmPosHist.open(path) as history:
+            return _read_gbm_geometry_from_history(
+                history,
+                when,
+                source=source,
+                reference_time=reference_time,
+                max_interpolation_gap=max_interpolation_gap,
+                path=path,
+            )
+    return _read_gbm_geometry_from_history(
+        poshist,
+        when,
+        source=source,
+        reference_time=reference_time,
+        max_interpolation_gap=max_interpolation_gap,
+        path=None,
+    )
+
+
+def _read_gbm_geometry_from_history(
+    history: Any,
+    when: Time,
+    *,
+    source: str,
+    reference_time: Time | str | None,
+    max_interpolation_gap: u.Quantity,
+    path: Path | None,
+) -> GBMGeometryState:
+    """Build one geometry snapshot while the caller owns the open file."""
     frame = history.get_spacecraft_frame()
     samples = frame.obstime
     met = float(when.to_value("fermi"))

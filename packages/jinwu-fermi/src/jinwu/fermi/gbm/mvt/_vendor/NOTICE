@@ -1,0 +1,20 @@
+GBM MVT paper snapshot adaptation
+Copyright 2023, Universities Space Research Association (USRA). All rights reserved.
+Authors named by the snapshot: Suman Bala, Narayana Bhat.
+Original Haar method and code provenance: Nathaniel R. Butler; Golkhou & Butler (2014)
+and Golkhou, Butler & Littlejohns (2015).
+
+The snapshot explicitly declares Apache License 2.0 in MVTfermi/__init__.py,
+pyproject.toml and docs/README.md. It does not contain a standalone LICENSE or NOTICE.
+The included LICENSE.txt is the unmodified Apache-2.0 text from apache.org.
+The original nrbutler/mvt repository has no independent license declaration found
+in this audit. These declarations do not independently establish its permission
+chain; resolve that provenance caveat before publishing the derivative files.
+No permissions or copyright ownership beyond the snapshot declarations are asserted.
+
+JinWu modifications: relative imports; removal of process-global matplotlib backend
+and warning filters; lazy plotting imports; optional explicit diagnostic outputs.
+The original mathematical expressions and numerical sequence are retained.
+The validation model is copied from MVTfermi/mvt_snr_fit_model.npz in the frozen fork;
+it is byte-identical to the model corrected in the parent commit a61d84c in
+results/0_plots/mvt_snr_fit_model.npz. No calibration update is applied silently.

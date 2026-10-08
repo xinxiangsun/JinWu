@@ -1,3 +1,9 @@
+# === Hidden folders (any depth) ===
+# Covers .venv/, .idea/, .zcode/, .agents/, .codex/, .github/, .mimosa/,
+# .hermes/, .runtime/, .pytest_cache/, etc. Tracked files inside them
+# (e.g. .github/workflows/*.yml) stay tracked; gitignore never untracks.
+.*/
+
 # === Python ===
 __pycache__/
 *.py[cod]
@@ -18,8 +24,6 @@ dist/
 # === Virtual Environments ===
 venv/
 env/
-.venv/
-.pyenv/
 
 # === Sphinx Documentation ===
 docs/_build/
@@ -27,21 +31,11 @@ docs/api/
 docs/**/*.automodapi
 
 # === Testing & Coverage ===
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .coverage
 htmlcov/
 *.prof
 
-# === Jupyter ===
-.ipynb_checkpoints/
-
-# === IDE ===
-.vscode/
-.idea/
-
-# === macOS ===
+# === macOS / editor droppings ===
 .DS_Store
 .AppleDouble
 .LSOverride
@@ -49,40 +43,17 @@ Icon?
 ._*
 *.swp
 
-# === Environment ===
+# === Environment & Logs ===
 .env
-
-# === Logs ===
 *.log
 
-# === Rust (jinwurs) ===
-packages/jinwurs/target/
-packages/jinwurs/Cargo.lock
-
-# === AI Coding Agents ===
-.codex/
-.agents/
-.mimosa/
-.zcode/
-.qoder/
 # === External Dependencies (large / not in repo) ===
 external_sources/
-test/*
-tests/
 
-# Keep the maintained Swift survey contracts visible to version control.
-!packages/jinwu-swift/tests/
-!packages/jinwu-swift/tests/test_bat_survey.py
-
-# The GW/POSHIST tests live in the historical top-level test tree.
-!test/test_gw.py
-!test/test_gw_*.py
-!test/test_gbm_poshist_predict.py
-!test/test_gbm_subthreshold*.py
-!test/test_core_skymap.py
-!test/test_merge_regressions.py
-!test/test_base_time.py
-!test/test_gr.py
-!test/test_quickstart_examples.py
-!test/test_stage_code_deps.py
-.runtime/gbm-search-validation/
+# === Local test & review trees (top-level only) ===
+# Tracked copies (test suite, reviews evidence) remain tracked until
+# explicitly removed with git rm --cached.
+/test/
+/tests/
+/testrs/
+/reviews/

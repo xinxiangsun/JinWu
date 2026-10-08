@@ -1,5 +1,8 @@
-Swift BAT Survey Pipeline
-=========================
+Swift BAT survey 流程
+=====================
+
+针对已知位置，以本地 survey / mosaic 产品优先；查询、下载与 mosaic 是显式开关。
+保留有符号净计数率、原生能道、曝光和协方差；固定模板上限与检测灵敏度分别报告。
 
 :mod:`jinwu.swift.bat.survey` processes one known-position target from
 Swift/BAT survey data.  It is a small, testable adapter around
@@ -22,7 +25,7 @@ The ``fit`` stage and the spectral upper limits additionally require a
 working HEASoft/PyXspec environment.
 
 Stages
-~~~~~~
+~~~~~~~~~~~~
 
 ::
 
@@ -85,7 +88,7 @@ and ``--network-timeout`` / ``--retries`` / ``--retry-wait`` /
 ``--query-margin`` for the network stages.
 
 Python API
-~~~~~~~~~~
+~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -153,7 +156,7 @@ Each result reports two separate quantities:
   ``calibration_status=unavailable`` rather than fabricated.
 
 See also
-~~~~~~~~
+~~~~~~~~~~~~
 
 * :doc:`upperlimits` — statistical semantics shared with the GBM
   pipeline.

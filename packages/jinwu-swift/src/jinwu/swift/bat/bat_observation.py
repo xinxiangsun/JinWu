@@ -271,9 +271,18 @@ class BATObservation:
         self.observation = self.visiblecheck and self.gticheck
         
         if not self.observation:
-            reason = "GTI" if not self.gticheck else "visibility"
-            warnings.warn(f"Source {self._srcname} not observable due to {reason}. "
-                         f"源 {self._srcname} 不可观测，原因是 {reason}。", stacklevel=2)
+            reason = (
+                "good-time-interval confirmation"
+                if not self.gticheck
+                else "the available visibility check"
+            )
+            warnings.warn(
+                f"Source {self._srcname} did not pass observation checks: "
+                f"{reason}. This does not by itself establish physical "
+                "non-observation. "
+                f"源 {self._srcname} 未通过观测质量检查（{reason}）；这本身并不代表物理上不可观测。",
+                stacklevel=2,
+            )
 
     def _load_from_attitude(self, attitude_path):
         """Load pointing info from Attitude file (*.sat or *.mkf).
@@ -281,17 +290,11 @@ class BATObservation:
         """
         self._attitude = Attitude.from_file(attitude_path)
         
-        # Get pointing at source time
-        try:
-            ra_pnt, dec_pnt = self._attitude.pointing_at(self.srctime)
-            self.bat_ra_pnt = ra_pnt
-            self.bat_dec_pnt = dec_pnt
-        except Exception as e:
-            # Use middle of the attitude data
-            mid_idx = len(self._attitude.time) // 2
-            self.bat_ra_pnt = self._attitude.ra[mid_idx].value
-            self.bat_dec_pnt = self._attitude.dec[mid_idx].value
-            warnings.warn(f"Could not interpolate at srctime: {e}. Using mid-point.", stacklevel=2)
+        # Get pointing at source time. A failure means the requested geometry
+        # is unknown; another sample cannot stand in for the source time.
+        ra_pnt, dec_pnt = self._attitude.pointing_at(self.srctime)
+        self.bat_ra_pnt = ra_pnt
+        self.bat_dec_pnt = dec_pnt
         
         self.pointing = SkyCoord(self.bat_ra_pnt, self.bat_dec_pnt, unit='deg', frame='icrs')
         
@@ -313,20 +316,15 @@ class BATObservation:
         self._frame = self._sao.get_spacecraft_frame()
         self._states = self._sao.get_spacecraft_states()
         
-        # Get frame at source time
-        try:
-            self._one_frame = self._frame.at(self.srctime)
-        except Exception as e:
-            # If srctime is outside SAO range, use closest time
-            frame_times = self._frame.obstime
-            if self.srctime < frame_times.min():
-                self._one_frame = self._frame[0]
-                warnings.warn(f"srctime before SAO range, using first frame", stacklevel=2)
-            elif self.srctime > frame_times.max():
-                self._one_frame = self._frame[-1]
-                warnings.warn(f"srctime after SAO range, using last frame", stacklevel=2)
-            else:
-                raise e
+        # A nearest endpoint frame is not the spacecraft geometry at source
+        # time, so reject source times outside the recorded SAO interval.
+        frame_times = self._frame.obstime
+        if self.srctime < frame_times.min() or self.srctime > frame_times.max():
+            raise ValueError(
+                f"requested source time {self.srctime} is outside SAO attitude "
+                f"coverage [{frame_times.min()}, {frame_times.max()}]"
+            )
+        self._one_frame = self._frame.at(self.srctime)
         
         # Get pointing info
         self.bat_ra_pnt, self.bat_dec_pnt = self._sao.get_bat_pointing()
@@ -517,8 +515,11 @@ class BATObservation:
     # ==================== Visibility Checks ====================
     
     def check_visibility(self) -> bool:
-        """Check if the source is visible (not Earth-occulted).
-        检查源是否可见（未被地球遮挡）。
+        """Check source visibility using the available geometry.
+
+        A GDT spacecraft frame checks Earth occultation. The lightweight
+        Attitude fallback only applies a 70-degree pointing-offset screen and
+        cannot determine Earth occultation.
         """
         # If using gdt-swift frame
         if self._one_frame is not None:
@@ -528,7 +529,7 @@ class BATObservation:
         # (Attitude doesn't have Earth occultation info)
         if self._attitude is not None:
             offset = self.source_offset_angle()
-            return offset < 70.0  # Assume visible if within ~70 degrees
+            return offset < 70.0  # Approximate offset screen, not occultation geometry
         
         return True  # Assume visible if no attitude info
 
@@ -536,14 +537,14 @@ class BATObservation:
         """Check if the source time is within Good Time Intervals.
         检查源时间是否在 GTI 范围内。
         """
-        # If using Attitude class
+        # If using Attitude class, unavailable or invalid SAA status is not
+        # evidence that the source was observed during a good-time interval.
         if self._attitude is not None:
             try:
                 in_saa = self._attitude.in_saa_at(self.srctime)
-                return not in_saa  # Good if NOT in SAA
             except Exception:
-                # If can't determine SAA status, assume good
-                return True
+                return False
+            return in_saa is not None and not bool(in_saa)
         
         # If using gdt-swift BatSao
         if self._states is None:

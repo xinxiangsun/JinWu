@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/giacomov/gv_significance",
+  "commit": "946d761a41cc26bda21ead8b5ba7750dd5a389a4",
+  "paper": "https://arxiv.org/abs/1712.00118",
+  "doi": "10.3847/1538-4365/aab780",
+  "license": "BSD-3-Clause",
+  "source_sha256": {
+    "gv_significance/ideal_case.py": "6a3dfb1709c86eb7239f035f2c27d3b6466cde64c8e8682e53b313f88a0bac74",
+    "gv_significance/poisson_poisson.py": "ae3b0e93e4fb9b6882533139bb632bb7e523e7c37cb890b07a28bbc7930d8946",
+    "gv_significance/poisson_gaussian.py": "49ac5484db8641a9ea79541f3a2395ab57fd99e3bdff89d5e26ca812023bce2e",
+    "gv_significance/significance_from_pvalue.py": "fd3937a51290c2cf34a57779833f3be72572be851d9c90d263cbcc518d48cf49",
+    "gv_significance/xlogy.py": "355684368a638872d699972923e532a5e42b9b2dd5e8fc76cf38892370eaa90c",
+    "gv_significance/size_one_or_n.py": "ed7ca1d324315984bc5d25dfbfcf0072033260fde92267c08a6a0de52a66eda2",
+    "LICENSE": "9d8eb50c36042a43edfcf980152c510e3e0828ab2f61c9c41ca06da48ad79ae2"
+  },
+  "known_background_tail": "P(N > n); frozen pdtrc(n, B), intentionally different from article text P(N >= n)",
+  "optimizer": {
+    "initial_k": 0.0,
+    "tol": 0.001,
+    "method": "scipy.optimize.minimize default, unconstrained BFGS with upstream likelihood barrier"
+  },
+  "adaptations": [
+    "Quantity input validation and NumPy broadcasting",
+    "plain/fixed PP reuse unchanged JinWu scalar Li-Ma; analytic zero-count limits replace upstream 1e-25 padding",
+    "public errors for conflicting inputs, failed optimizer, nonfinite/negative TS and PP Gaussian systematics with both counts zero",
+    "no Z_Bi, ncephes or source scientific corrections"
+  ]
+}

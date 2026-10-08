@@ -149,8 +149,11 @@ def map_channels_to_energy(matrix: np.ndarray, e_centers: np.ndarray, channels: 
 
         if method == 'expected':
             numerator = np.asarray(posterior_unnorm.multiply(e_centers[np.newaxis, :]).sum(axis=1)).ravel()
-            nz = denom > 0
-            out_vals[nz] = (numerator[nz] / denom[nz]).astype(dtype)
+            valid = (uniq_i >= 0) & (uniq_i < n_channels)
+            positions = np.flatnonzero(valid)
+            positions = positions[denom[uniq_i[positions]] > 0]
+            selected = uniq_i[positions]
+            out_vals[positions] = (numerator[selected] / denom[selected]).astype(dtype)
         elif method == 'sample':
             rng = np.random.default_rng(seed)
             for i, c in enumerate(uniq_i):

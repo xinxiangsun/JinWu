@@ -14,22 +14,68 @@
 """
 from __future__ import annotations
 
+import ast
+import operator
 import re
 from typing import Optional
 import numpy as np
 
 
 def _normalize_expr(expr: str) -> str:
-    # map ftselect style operators to Python/numpy equivalents
-    s = expr
-    s = s.replace('&&', ' and ')
-    s = s.replace('||', ' or ')
-    # treat single ! as not (but avoid !=)
-    s = re.sub(r'(?<![=!])!(?!=)', ' not ', s)
-    return s
+    # Normalize operators only outside quoted string literals.
+    pattern = r"('(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"|&&|\|\||!(?!=))"
+    replacements = {'&&': ' and ', '||': ' or ', '!': ' not '}
+    return re.sub(pattern, lambda match: replacements.get(match[0], match[0]), expr).strip()
 
 
-_tok_re = re.compile(r"('[^']*'|\"[^\"]*\"|[A-Za-z_][A-Za-z0-9_]*|[0-9]+\.?[0-9]*|==|!=|>=|<=|[<>]|\(|\)|and|or|not|\&|\||\^|\+|\-|\*|/)")
+def _evaluate_expression(node: ast.AST, columns: dict):
+    """Evaluate the supported scalar/array expression AST without Python eval.
+
+    Comparisons and boolean operators keep Python precedence and operate
+    elementwise on explicitly supplied event columns. Unsupported syntax raises
+    ValueError; numeric constants, strings and arithmetic are supported.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
+        return node.value
+    if isinstance(node, ast.Name):
+        if node.id not in columns:
+            raise ValueError(f'Unknown event column: {node.id}')
+        return columns[node.id]
+    if isinstance(node, ast.BoolOp):
+        operation = np.logical_and if isinstance(node.op, ast.And) else np.logical_or
+        values = [_evaluate_expression(value, columns) for value in node.values]
+        result = values[0]
+        for value in values[1:]:
+            result = operation(result, value)
+        return result
+    if isinstance(node, ast.UnaryOp):
+        operations = {ast.Not: np.logical_not, ast.Invert: operator.invert,
+                      ast.USub: operator.neg, ast.UAdd: operator.pos}
+        operation = operations.get(type(node.op))
+        if operation is not None:
+            return operation(_evaluate_expression(node.operand, columns))
+    if isinstance(node, ast.BinOp):
+        operations = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+                      ast.Div: operator.truediv, ast.Mod: operator.mod, ast.Pow: operator.pow,
+                      ast.BitAnd: operator.and_, ast.BitOr: operator.or_, ast.BitXor: operator.xor}
+        operation = operations.get(type(node.op))
+        if operation is not None:
+            return operation(_evaluate_expression(node.left, columns),
+                             _evaluate_expression(node.right, columns))
+    if isinstance(node, ast.Compare):
+        operations = {ast.Eq: operator.eq, ast.NotEq: operator.ne, ast.Gt: operator.gt,
+                      ast.GtE: operator.ge, ast.Lt: operator.lt, ast.LtE: operator.le}
+        left = _evaluate_expression(node.left, columns)
+        result = True
+        for comparison, operand in zip(node.ops, node.comparators):
+            operation = operations.get(type(comparison))
+            if operation is None:
+                raise ValueError('Unsupported comparison operator')
+            right = _evaluate_expression(operand, columns)
+            result = np.logical_and(result, operation(left, right))
+            left = right
+        return result
+    raise ValueError(f'Unsupported event expression syntax: {type(node).__name__}')
 
 
 def expression_to_mask(ev, expr: str) -> np.ndarray:
@@ -46,11 +92,6 @@ def expression_to_mask(ev, expr: str) -> np.ndarray:
         return np.ones(len(ev.time), dtype=bool)
 
     s = _normalize_expr(expr)
-
-    # tokenization
-    toks = _tok_re.findall(s)
-    if not toks:
-        raise ValueError('Cannot parse expression')
 
     # build mapping from identifier to numpy array expression
     # safe names: columns in ev
@@ -74,67 +115,10 @@ def expression_to_mask(ev, expr: str) -> np.ndarray:
             colmap[name] = np.asarray(val)
             colmap[lower] = np.asarray(val)
 
-    # function to render token stream into a python/numpy expression
-    out_tokens = []
-    for tok in toks:
-        tt = tok.strip()
-        if tt == 'and' or tt == 'or' or tt == 'not' or tt in ('(', ')'):
-            # keep
-            if tt == 'and':
-                out_tokens.append('&')
-            elif tt == 'or':
-                out_tokens.append('|')
-            elif tt == 'not':
-                out_tokens.append('~')
-            else:
-                out_tokens.append(tt)
-        elif re.match(r"^'[^']*'$|^\"[^\"]*\"$", tt):
-            # string literal
-            out_tokens.append(tt)
-        elif re.match(r'^[0-9]+\.?[0-9]*$', tt):
-            out_tokens.append(tt)
-        elif tt in ('==', '!=', '>=', '<=', '>', '<'):
-            # map to numpy-friendly ops
-            if tt == '==':
-                out_tokens.append('==')
-            elif tt == '!=':
-                out_tokens.append('!=')
-            else:
-                out_tokens.append(tt)
-        else:
-            # identifier: column name or unknown
-            key = tt
-            if key in colmap:
-                # we will substitute a temporary name like __col_PHA
-                name = f'__col_{key}'
-                out_tokens.append(name)
-            else:
-                # unknown identifier: keep as-is (might be function or constant)
-                out_tokens.append(tt)
-
-    pyexpr = ' '.join(out_tokens)
-
-    # build eval environment
-    env = {}
-    # put numpy into env for numeric ops
-    env['np'] = np
-    # place column arrays
-    for k, v in colmap.items():
-        env[f'__col_{k}'] = np.asarray(v)
-
-    # Evaluate expression safely
     try:
-        # result should be a numpy boolean array
-        res = eval(pyexpr, {'__builtins__': {}}, env)
-    except Exception as e:
-        raise RuntimeError(f'Failed to evaluate expression: {e}\npython expr: {pyexpr}')
-
-    # ensure boolean mask
-    res = np.asarray(res)
-    if res.dtype != bool:
-        # try nonzero
-        try:
-            res = res != 0
-        except Exception:
-            raise RuntimeError('Expression did not produce boolean mask')
-    return res
+        tree = ast.parse(s, mode='eval')
+        result = _evaluate_expression(tree.body, colmap)
+        mask = np.broadcast_to(np.asarray(result, dtype=bool), np.asarray(ev.time).shape)
+    except (SyntaxError, ValueError, TypeError) as exc:
+        raise ValueError(f'Invalid event selection expression: {exc}') from exc
+    return np.array(mask, dtype=bool, copy=True)

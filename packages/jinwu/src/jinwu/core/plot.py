@@ -1065,8 +1065,14 @@ def plot_event_txx(
         and t100_context_fraction >= 0.0
     ):
         margin = t100_duration * float(t100_context_fraction)
-        display_start = max(display_start, t100_start - margin)
-        display_stop = min(display_stop, t100_stop + margin)
+        duration_start = _safe_float("t90_tstart", t100_start)
+        duration_stop = _safe_float("t90_tstop", t100_stop)
+        if not np.isfinite(duration_start):
+            duration_start = t100_start
+        if not np.isfinite(duration_stop):
+            duration_stop = t100_stop
+        display_start = max(display_start, min(t100_start,duration_start) - margin)
+        display_stop = min(display_stop, max(t100_stop,duration_stop) + margin)
         if display_stop <= display_start:
             display_start = float(bb_edges[0])
             display_stop = float(bb_edges[-1])
@@ -1324,11 +1330,12 @@ def plot_event_txx(
         if sig_mask[i]:
             ax_mid.axvspan(float(x_bb_edges[i]), float(x_bb_edges[i + 1]), alpha=0.25, color=PALETTE["band"], label="_nolegend_")
 
+    window_label = "T100"
     if np.isfinite(x_t100_start):
-        t100_start_label = "T100 start" if forpaper else f"T100 start: {x_t100_start:.1f}s"
+        t100_start_label = f"{window_label} start" if forpaper else f"{window_label} start: {x_t100_start:.1f}s"
         ax_mid.axvline(x_t100_start, color=PALETTE["secondary"], linestyle="--", linewidth=2.0, label=t100_start_label)
     if np.isfinite(x_t100_stop):
-        t100_stop_label = "T100 end" if forpaper else f"T100 end: {x_t100_stop:.1f}s"
+        t100_stop_label = f"{window_label} end" if forpaper else f"{window_label} end: {x_t100_stop:.1f}s"
         ax_mid.axvline(x_t100_stop, color=PALETTE["secondary"], linestyle="--", linewidth=2.0, label=t100_stop_label)
     if np.isfinite(x_t90_start) and np.isfinite(x_t90_stop) and (x_t90_stop > x_t90_start):
         if forpaper:
@@ -1743,4 +1750,3 @@ def plotfit(
         outputs = save_figure(fig, outputdir / filename_stem, formats=(output_format,), dpi=dpi)
         output_file = outputs.get(output_format.lower())
     return output_file, fig
-

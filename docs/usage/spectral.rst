@@ -1,12 +1,9 @@
+XSPEC 能谱拟合
+==============
 
-Spectral Fitting
-================
+先核查源/背景 PHA、响应、曝光与区域缩放，再准备能谱并拟合候选模型。
+记录统计量、NH / redshift、误差状态、模型选择与 flux 来源；运行需要真实 PyXspec。
 
-.. warning::
-
-   This page is a work in progress.  See the module docstrings in
-   :mod:`jinwu.core.fit` and :mod:`jinwu.core.upperlimit` for detailed
-   API documentation.
 
 JinWu provides a Pythonic wrapper around XSPEC/PyXspec for spectral fitting,
 supporting:

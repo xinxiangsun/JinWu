@@ -166,6 +166,7 @@ class HighZDetectabilityEstimator:
 			target_dt=target_dt,
 			add_poisson=False,
 			background_rate=b_on,
+			input_background_rate=b_on,
 			output_total_rate=True,
 		)
 		rate_on = np.asarray(res.rate, dtype=float)
@@ -239,4 +240,3 @@ class HighZDetectabilityEstimator:
 			snr_p84=snr_p84 if with_spread else None,
 			z_max=z_max,
 		)
-

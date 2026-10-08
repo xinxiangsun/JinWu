@@ -12,6 +12,16 @@ from .ogip import ValidationReport
 
 
 def band_from_arf_bins(arf_path: str | Path, bin_lo: int = 81, bin_hi: int = 780) -> EnergyBand:
+    """按 ARF 行号取能段 / Derive an energy band from ARF row indices.
+
+    bin_lo/bin_hi 为包含端点的 1-based 行号，默认 81/780；分别取
+    ENERG_LO 的下界与 ENERG_HI 的上界。只对下界负索引与上界过大作
+    单侧截断，调用者须提供有效非空范围。返回 EnergyBand 并标记 keV，
+    不读取 TUNIT 或自动转换能量单位。读取/索引异常向上传递。
+    Use inclusive 1-based rows (defaults 81/780), selecting lower/upper energy
+    edges. Only low-index underflow/high-index overflow are clipped on one side;
+    callers ensure a valid nonempty range. Return EnergyBand labeled keV without
+    TUNIT conversion. FITS/indexing errors propagate."""
     with fits.open(arf_path) as h:
         hd = cast(Any, h["SPECRESP"])
         d = hd.data
@@ -29,6 +39,14 @@ def channel_mask_from_ebounds(
     band: EnergyBand,
     ch_band: Optional[ChannelBand] = None,
 ) -> np.ndarray:
+    """按能量交叠与可选通道范围选道 / Select channels overlapping an energy band.
+
+    ebounds=(channel, e_lo, e_hi)；采用 e_hi>emin 且 e_lo<emax 的严格
+    交叠规则，再按包含端点的 ch_band 限制。返回同形状 bool 数组。
+    band 数值须与 EBOUNDS 已同单位；不读取 band 的单位字符串换算。
+    Use e_hi>emin and e_lo<emax, then optional inclusive channel limits. Return
+    boolean mask of matching shape. Band numbers must already match EBOUNDS
+    units; the band's unit strings are not converted here."""
     ch, e_lo, e_hi = ebounds
     mask = (e_hi > float(band.emin)) & (e_lo < float(band.emax))
     if ch_band is not None:
@@ -37,6 +55,14 @@ def channel_mask_from_ebounds(
 
 
 def _combine_mjdref(header: Dict[str, Any]) -> Optional[float]:
+    """读取合并的 MJDREF / Read a combined MJD reference from a header.
+
+    MJDREFI/MJDREFF 任一存在时优先相加，缺项按 0；否则尝试 MJDREF。
+    无字段或单字段转换失败返回 None；分拆字段转换异常可能向上传递。
+    不进行 UTC/TT 等时间尺度转换。
+    Prefer split MJDREFI+MJDREFF with absent components as 0, otherwise MJDREF.
+    Missing/direct-conversion failure returns None; split-field conversion errors
+    may propagate. No UTC/TT or other time-scale conversion is performed."""
     if header is None:
         return None
     if ("MJDREFI" in header) or ("MJDREFF" in header):
@@ -52,6 +78,12 @@ def _combine_mjdref(header: Dict[str, Any]) -> Optional[float]:
 
 
 def _first_non_empty(keys: list[str], *headers: Dict[str, Any]) -> Optional[Any]:
+    """按键优先级读取首个非空值 / Find the first nonempty value by key priority.
+
+    先遍历 keys，再按 headers 顺序；排除 None、空串和单个空格。
+    键大小写敏感，零值保留；无匹配返回 None，不校验数值有效性。
+    Iterate keys first, then headers. Exclude None, empty string and one space;
+    keep zero. Lookup is case-sensitive, with None if absent and no value validation."""
     for key in keys:
         for hdr in headers:
             if hdr is None:
@@ -62,6 +94,13 @@ def _first_non_empty(keys: list[str], *headers: Dict[str, Any]) -> Optional[Any]
 
 
 def _collect_headers_dump(hdul: fits.HDUList) -> FitsHeaderDump:
+    """保存各 HDU 头的字典快照 / Collect primary/extension header dictionary snapshots.
+
+    返回 FitsHeaderDump，扩展保留名称及可解析 EXTVER；无法解析版本为 None。
+    不读取表内容，不承诺保留重复 FITS 卡片、顺序和注释的无损表示。
+    Return FitsHeaderDump with extension names and parsed EXTVER or None. No table
+    reading; dict conversion is not a lossless preservation of repeated cards,
+    header order or card comments."""
     hdr0 = cast(Any, getattr(hdul[0], 'header', {})) if len(hdul) > 0 else {}
     primary = dict(hdr0) if hdr0 else {}
     exts: list[HduHeader] = []
@@ -78,6 +117,15 @@ def _collect_headers_dump(hdul: fits.HDUList) -> FitsHeaderDump:
 
 
 def _build_meta(hdul: fits.HDUList, prefer_header: Optional[Dict[str, Any]]) -> OgipMeta:
+    """按优先头提取 OGIP 元数据 / Build OGIP metadata from prioritized headers.
+
+    prefer_header 优先于 primary 和其他扩展；具体别名由键优先级决定。
+    返回 OgipMeta，尽量解析任务、时间和观测字段，缺失值为 None；
+    不把 TIMEUNIT/TIMESYS/MJDREF 转换为统一时间对象，也不证明字段一致。
+    Prefer the supplied header, then primary and remaining extensions, with key
+    aliases ordered by priority. Return OgipMeta with parsed identity/time fields
+    or None. No unified time conversion or cross-header consistency validation;
+    some malformed split-reference conversions can still raise."""
     dump = _collect_headers_dump(hdul)
     primary = dump.primary
     other_ext_headers = [x.header for x in dump.extensions]
@@ -162,6 +210,14 @@ def _build_meta(hdul: fits.HDUList, prefer_header: Optional[Dict[str, Any]]) -> 
 
 
 def _mission_timezero_object(telescop: Optional[str], timezero: float, *, allow_unix_fallback: bool = False):
+    """由任务秒数构造绝对时间 / Construct a mission TIMEZERO object.
+
+    已知 telescop 委托 time_from_mission_seconds；无任务名返回 None。
+    未知任务在 allow_unix_fallback=True 时尝试 Unix UTC，否则 RuntimeError。
+    回退只是兼容解释，不证明秒数确实是 Unix，调用方须核实时间元数据。
+    Delegate known missions to time_from_mission_seconds; absent name returns None.
+    Unknown missions may use Unix UTC when allowed, otherwise raise RuntimeError.
+    A fallback interpretation does not prove the input is Unix; callers verify metadata."""
     if telescop is None:
         return None
     from .time import Time, time_from_mission_seconds
@@ -184,6 +240,14 @@ def _mission_timezero_object(telescop: Optional[str], timezero: float, *, allow_
 #       Astrophysics Data"（Angelini, Pence & Tennant, Legacy 3, 32）——
 #       GTI 扩展含 START/STOP 两列。
 def _extract_gti(hdul: fits.HDUList) -> Optional[list[tuple[float, float]]]:
+    """读取第一个可解析 GTI 表 / Extract the first parseable GTI table.
+
+    匹配 GTI 扩展名，START/STOP 优先于 TSTART/TSTOP；返回 float 起止
+    元组列表。无合适扩展返回 None；数值转换失败也返回 None。不排序、
+    合并、校验区间或施加 TIMEZERO，结果保留表内时间参考与单位。
+    Match GTI name and prefer START/STOP over TSTART/TSTOP. Return float boundary
+    tuples or None for absent/unparseable data. No sorting, merging, interval
+    validation or TIMEZERO shift; preserve table time reference/unit."""
     if hdul is None:
         return None
     for hdu in hdul:
@@ -216,6 +280,15 @@ def _extract_gti(hdul: fits.HDUList) -> Optional[list[tuple[float, float]]]:
 
 
 def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
+    """从 REG00101 推断代表区域 / Infer a representative region from REG00101.
+
+    仅处理圆/环面积（半径原单位的平方），根据 COMPONENT 或形状/大小
+    启发式分类；优先返回首个 src，再 bkg，再首个未知区域。返回 RegionArea
+    或 None，并非全部区域并集，不读取单位换算、重叠或遮挡校正。
+    Compute circle/annulus area in squared native radius units and infer roles by
+    COMPONENT or shape/size heuristics. Prefer first source, then background, then
+    unknown; return RegionArea or None. This is not a union of all regions and
+    performs no unit conversion, overlap handling or detector-mask correction."""
     reg_hdu = None
     for ext in hdul:
         name = (getattr(ext, 'name', '') or '').upper()
@@ -232,6 +305,9 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
     colnames = [str(n).upper() for n in (cols.names if cols is not None else [])]
 
     def _get_col(name_variants: list[str]) -> Optional[str]:
+        """查找首个存在的候选列 / Return the first candidate in uppercase column names.
+
+        无匹配返回 None / Return None if absent."""
         for nn in name_variants:
             if nn in colnames:
                 return nn
@@ -246,6 +322,10 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
     rows_info: list[Dict[str, Any]] = []
 
     def _as_float(v: Any) -> Optional[float]:
+        """读取标量或数组首项 / Parse the first scalar/array element as float.
+
+        None、空值或转换异常返回 None，不验证有限性。
+        Return None for missing/empty/unconvertible input; no finiteness validation."""
         if v is None:
             return None
         try:
@@ -320,6 +400,7 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
         rows_info[0]['role'] = 'source'
 
     def _normalize_role(role: str) -> Literal['src', 'bkg', 'unk']:
+        """统一区域角色字符串 / Map source/background to src/bkg, all others to unk."""
         if role == 'source':
             return 'src'
         if role == 'background':
@@ -342,7 +423,11 @@ def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
 
 
 def _opt_int(value: Any) -> Optional[int]:
-    """宽容的整型关键字解析（空串/非法值 → None）。"""
+    """宽容解析整数头字段 / Parse an optional integer keyword tolerantly.
+
+    先 float 再 int，小数会截断；空值或转换失败返回 None，不验证整值性。
+    Convert float then int, truncating fractions. Empty/invalid values return None;
+    this is not an integer-value validation."""
     try:
         if value is None or str(value).strip() == '':
             return None
@@ -356,8 +441,14 @@ def _opt_int(value: Any) -> Optional[int]:
 # 参考：HEASoft 6.37 heacore/heasp/rmf.cxx rmf::readMatrix（先读 TLMIN<F_CHAN 列索引>，
 #       读不到时回退 min(F_CHAN)：最小值为 0 则取 0，否则取 1）。
 def _infer_rmf_tlmin(header: Mapping[str, Any], f_chan: Optional[np.ndarray]) -> Optional[int]:
-    """F_CHAN 的 TLMIN（0 基/1 基约定）：优先读文件声明的 TLMINn（n>1），
-    否则从 F_CHAN 列最小值推断（对齐 HEASoft 6.37 heasp::rmf 行为）。"""
+    """读取或推断 RMF 首通道 / Read or infer a response first-channel value.
+
+    优先头字典中首个可解析的 TLMIN*（排除 TLMIN1），否则取 F_CHAN
+    数组的实际最小值。当前未将 TLMIN 卡与具体列名逐一关联，调用者须
+    确认文件声明适用；失败或无数据返回 None。
+    Prefer the first parseable TLMIN* except TLMIN1, otherwise use the actual
+    minimum F_CHAN. The current implementation does not associate each card with
+    its column name; callers confirm the declaration. Return None if unavailable."""
     for k, v in dict(header).items():
         ku = str(k).upper()
         if ku.startswith('TLMIN') and ku != 'TLMIN1':
@@ -379,12 +470,24 @@ def _infer_rmf_tlmin(header: Mapping[str, Any], f_chan: Optional[np.ndarray]) ->
 
 class OgipArfReader:
     def __init__(self, path: str | Path):
+        """保存 ARF 读取路径 / Initialize a ARF reader with a local path.
+
+        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
+        Check path existence only, raising FileNotFoundError. No tilde expansion,
+        table reading or product-type validation; initialize the cached data as None."""
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[ArfData] = None
 
     def read(self) -> ArfData:
+        """读取 ARF 并缓存数据对象 / Read the SPECRESP ARF and cache ArfData.
+
+        提取 ENERG_LO/HI、SPECRESP、头与元数据；裸数沿用文件单位约定，
+        不做 TUNIT 换算。每次调用重新打开文件并替换 _data，不自动 validate。
+        Read energy bounds, effective area and metadata using native file-unit values;
+        no TUNIT conversion. Each call reopens the file and replaces _data without
+        calling validate. Missing required extensions/columns and FITS errors propagate."""
         with fits.open(self.path) as h:
             hd = cast(Any, h["SPECRESP"])
             d = hd.data
@@ -410,6 +513,12 @@ class OgipArfReader:
         return self._data
 
     def validate(self) -> ValidationReport:
+        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
+
+        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
+        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
+        Reuse cached data if present without rereading disk. Return ValidationReport
+        from the data class; passing its checks is not general scientific certification."""
         if self._data is None:
             self.read()
         assert self._data is not None
@@ -418,12 +527,26 @@ class OgipArfReader:
 
 class OgipRmfReader:
     def __init__(self, path: str | Path):
+        """保存 RMF 读取路径 / Initialize a RMF reader with a local path.
+
+        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
+        Check path existence only, raising FileNotFoundError. No tilde expansion,
+        table reading or product-type validation; initialize the cached data as None."""
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[RmfData] = None
 
     def read(self) -> RmfData:
+        """读取 RMF/RSP 矩阵及可选 EBOUNDS / Read a response matrix and optional EBOUNDS.
+
+        优先 MATRIX，再 SPECRESP MATRIX；提取能量、可变长分组与矩阵数组，
+        解析通道约定，返回并缓存 RmfData。裸数不做单位转换，矩阵不归一化、
+        不解压为稠密矩阵、不独立区分是否已含有效面积。
+        Prefer MATRIX then SPECRESP MATRIX; read energy, variable-length groups/matrix
+        and channel metadata. Return/cache RmfData without unit conversion, matrix
+        normalization, dense expansion or determination of whether area is included.
+        Each call rereads disk; required-extension/column errors propagate."""
         with fits.open(self.path) as h:
             # OGIP RMF files produced by XSPEC/HEASoft commonly use the
             # canonical ``SPECRESP MATRIX`` extension name, while some
@@ -504,6 +627,12 @@ class OgipRmfReader:
         return self._data
 
     def validate(self) -> ValidationReport:
+        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
+
+        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
+        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
+        Reuse cached data if present without rereading disk. Return ValidationReport
+        from the data class; passing its checks is not general scientific certification."""
         if self._data is None:
             self.read()
         assert self._data is not None
@@ -512,12 +641,32 @@ class OgipRmfReader:
 
 class OgipPhaReader:
     def __init__(self, path: str | Path):
+        """保存 PHA 读取路径 / Initialize a PHA reader with a local path.
+
+        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
+        Check path existence only, raising FileNotFoundError. No tilde expansion,
+        table reading or product-type validation; initialize the cached data as None."""
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[PhaData] = None
 
     def read(self) -> PhaData:
+        """读取 PHA 通道谱 / Read and cache a PHA channel spectrum.
+
+        要求 SPECTRUM/CHANNEL 与 COUNTS 或 RATE；保留 STAT_ERR、分组、质量
+        及比例字段和可选 EBOUNDS。仅有 RATE 时，正有限 EXPOSURE 用于换算
+        counts=rate*exposure；曝光无效时 counts 暂存 RATE 数值，不能当原始
+        Poisson 计数。STAT_ERR 不在此自动按 rate/counts 的表示换算。
+        Require SPECTRUM/CHANNEL and COUNTS or RATE; retain errors, grouping, quality,
+        scales and optional EBOUNDS. RATE-only data become counts with valid positive
+        exposure; otherwise counts retains rate numbers and must not be treated as raw
+        Poisson counts. STAT_ERR is not converted between representations here.
+
+        返回缓存的 PhaData；响应路径字符串保留，不自动读取背景或响应；
+        重复调用重新读取，不自动运行 validate，FITS/字段错误上抛。
+        Return/cache PhaData; response path strings do not load those files. Each call
+        rereads disk without validate; FITS/required-field errors propagate."""
         with fits.open(self.path) as h:
             hs = cast(Any, h["SPECTRUM"])
             ds = hs.data
@@ -612,6 +761,12 @@ class OgipPhaReader:
         return self._data
 
     def validate(self) -> ValidationReport:
+        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
+
+        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
+        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
+        Reuse cached data if present without rereading disk. Return ValidationReport
+        from the data class; passing its checks is not general scientific certification."""
         if self._data is None:
             self.read()
         assert self._data is not None
@@ -622,6 +777,15 @@ class OgipPhaReader:
         band: EnergyBand,
         rmf_chan_band: Optional[ChannelBand] = ChannelBand(51, 399),
     ) -> tuple[np.ndarray, np.ndarray]:
+        """按能段与通道约束返回谱 / Return selected channels and stored count values.
+
+        有 EBOUNDS 时按严格能量交叠及可选通道范围筛选，再匹配 PHA 通道。
+        无 EBOUNDS 时仅用通道约束，band 不起能量筛选作用；默认通道 51..399，
+        不是通用仪器能段。返回 (channels, counts) 数组，不更新缓存谱。
+        With EBOUNDS use energy overlap and optional inclusive channel bounds, then
+        match PHA channels. Without EBOUNDS only channel limits apply; band is ignored.
+        Default 51..399 is a legacy range, not a universal energy calibration. Return
+        channels/stored counts without changing the cached spectrum."""
         if self._data is None:
             _ = self.read()
         d = self._data
@@ -641,12 +805,38 @@ class OgipPhaReader:
 
 class OgipLightcurveReader:
     def __init__(self, path: str | Path):
+        """保存 lightcurve 读取路径 / Initialize a lightcurve reader with a local path.
+
+        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
+        Check path existence only, raising FileNotFoundError. No tilde expansion,
+        table reading or product-type validation; initialize the cached data as None."""
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[LightcurveData] = None
 
     def read(self) -> LightcurveData:
+        """读取光变并构造相对时间 / Read a lightcurve with relative-time fields.
+
+        寻找含 TIME 的表，time=TIME-TIME[0]，timezero=TIMEZERO+TIME[0]。
+        当前将 TIME 视作 bin 左边缘，bin_hi=time+dt，不应用 TIMEPIXR；dt
+        优先 TIMEDEL 再时间差中位数，单位按文件的既有秒数约定，不换 TUNIT。
+        Find a TIME table, set time=TIME-TIME[0] and timezero=TIMEZERO+TIME[0]. Treat
+        TIME as bin left edge without TIMEPIXR adjustment; infer dt from TIMEDEL or
+        median differences. No TUNIT conversion; callers establish seconds/time reference.
+
+        RATE 优先作为主 value；COUNTS 缺失时用 RATE*dt 生成。ERROR 按主
+        表示解释，counts/rate 转换使用 dt；bin_exposure 则优先裁剪后的
+        FRACEXP*bin_width，否则 bin_width。此读取步骤不做原生死时间校正。
+        Prefer RATE as primary value, deriving absent counts as RATE*dt. ERROR follows
+        that representation; count/rate conversion uses dt. Bin exposure uses clipped
+        FRACEXP*width or width. No native-event-deadtime correction is performed.
+
+        返回并缓存 LightcurveData，保留可读取 GTI 原始数值；当前没有对 GTI
+        同步减去 TIME[0]。读取成功不证明 GTI 与相对时间已一致或噪声为 Poisson。
+        Repeat calls reread disk and return/cache LightcurveData. GTI numbers are kept
+        without subtracting TIME[0]; read success does not establish common references
+        or Poisson noise. Missing fields/bin width or unknown mission conversion may raise."""
         with fits.open(self.path) as h:
             hdu = None
             for ext in h:
@@ -829,6 +1019,12 @@ class OgipLightcurveReader:
         return self._data
 
     def validate(self) -> ValidationReport:
+        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
+
+        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
+        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
+        Reuse cached data if present without rereading disk. Return ValidationReport
+        from the data class; passing its checks is not general scientific certification."""
         if self._data is None:
             self.read()
         assert self._data is not None
@@ -837,12 +1033,32 @@ class OgipLightcurveReader:
 
 class OgipEventReader:
     def __init__(self, path: str | Path):
+        """保存 event 读取路径 / Initialize a event reader with a local path.
+
+        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
+        Check path existence only, raising FileNotFoundError. No tilde expansion,
+        table reading or product-type validation; initialize the cached data as None."""
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
         self._data: Optional[EventData] = None
 
     def read(self) -> EventData:
+        """读取事件及原始列 / Read events, raw columns and relative-time GTI.
+
+        寻找 TIME 表，time=TIME-TIME[0]，timezero=TIMEZERO+TIME[0]；保留
+        原始列，并按候选名字映射坐标、能量及通道，不由 PI 推断能量单位。
+        支持的 GTI START/STOP 同减 TIME[0]；TIMEZERO 绝对对象按任务转换，
+        未知任务可能兼容回退 Unix，不能据此认证时间系统。
+        Find a TIME table, form relative times and shifted timezero; preserve raw
+        columns and candidate coordinate/energy/channel mappings without PI calibration.
+        Shift supported GTI START/STOP by TIME[0]. Mission absolute conversion may
+        fall back to Unix for unknown missions, which does not certify the time system.
+
+        返回缓存 EventData；不排序事件、不应用 GTI 事件筛选或死时间校正。
+        重复调用重新读文件，可选字段失败可能成为 None，必需字段错误上抛。
+        Return/cache EventData without sorting, GTI filtering or deadtime correction.
+        Each call rereads; optional field failures may become None, required ones raise."""
         with fits.open(self.path) as h:
             hevt = None
             for ext in h:
@@ -868,10 +1084,12 @@ class OgipEventReader:
                         raw_columns[cn] = np.asarray([])
             time_raw = np.asarray(raw_columns.get('TIME') if 'TIME' in raw_columns else de['TIME'], float)
             header = dict(cast(Any, hevt.header))
+            primary_header = dict(cast(Any, h[0]).header) if len(h) > 0 else {}
             timezero_raw = 0.0
-            if 'TIMEZERO' in header:
+            raw_timezero = header.get('TIMEZERO', primary_header.get('TIMEZERO', 0.0))
+            if raw_timezero is not None:
                 try:
-                    timezero_raw = float(header['TIMEZERO'])
+                    timezero_raw = float(raw_timezero)
                 except (ValueError, TypeError):
                     timezero_raw = 0.0
             time_offset = float(time_raw[0]) if len(time_raw) > 0 else 0.0
@@ -879,7 +1097,6 @@ class OgipEventReader:
             time_rel = time
             timezero = timezero_raw + time_offset
             telescop = None
-            primary_header = dict(cast(Any, h[0]).header) if len(h) > 0 else {}
             for hdr in [header, primary_header]:
                 if 'TELESCOP' in hdr:
                     telescop = str(hdr['TELESCOP']).strip().upper()
@@ -931,6 +1148,10 @@ class OgipEventReader:
             u2orig = {cn.upper(): cn for cn in colnames}
 
             def _find(*cands: str) -> Optional[str]:
+                """映射候选列到原名称 / Return the first case-insensitive candidate's original name.
+
+                无匹配返回 None，不读取或转换列值。
+                Return None if absent, without reading/converting values."""
                 for c in cands:
                     if c is None:
                         continue
@@ -981,6 +1202,12 @@ class OgipEventReader:
         return self._data
 
     def validate(self) -> ValidationReport:
+        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
+
+        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
+        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
+        Reuse cached data if present without rereading disk. Return ValidationReport
+        from the data class; passing its checks is not general scientific certification."""
         if self._data is None:
             self.read()
         assert self._data is not None
@@ -1008,6 +1235,15 @@ OgipWritableData = Union[ArfData, RmfData, PhaData, LightcurveData, EventData]
 
 
 def _normalize_grouping_to_flags(grouping: np.ndarray) -> np.ndarray:
+    """把旧组号转为 OGIP 标记 / Convert legacy group IDs to OGIP grouping flags.
+
+    若非零值已全为 +/-1，原样返回整数数组。其他编码下，正组号变化
+    记 +1，同组记 -1，非正值记 0；零项不会重置此前组号。返回数组，
+    不合并通道或计数；调用者须确认输入编码符合该规则。
+    Return an integer array unchanged when nonzero values are already +/-1.
+    Otherwise positive group-ID changes start +1, repeats continue -1, nonpositive
+    entries become 0 without resetting the previous ID. No channel/count aggregation;
+    callers ensure the legacy coding fits these rules."""
     g = np.asarray(grouping, dtype=int)
     if g.size == 0:
         return g
@@ -1031,10 +1267,30 @@ def _normalize_grouping_to_flags(grouping: np.ndarray) -> np.ndarray:
 
 class PhaWriter:
     def __init__(self, data: PhaData, outpath: str | Path):
+        """保存 PHA 对象与输出路径 / Initialize a PHA writer by reference.
+
+        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
+        Store data by reference and outpath as Path. No copying, validation, directory
+        creation or file write; write() handles overwrite policy."""
         self.data = data
         self.outpath = Path(outpath)
 
     def write(self, *, overwrite: bool = False) -> Path:
+        """将结构化 PHA 写为 FITS / Write selected PHA fields to a FITS spectrum.
+
+        overwrite=False 时现有文件抛 FileExistsError；不创建父目录。写
+        CHANNEL、计数/率、可选误差/质量/分组，规范 GROUPING；可写 EBOUNDS。
+        RATE 存在且曝光无效时只写 RATE，不写 COUNTS/无效曝光头。
+        Default overwrite=False rejects existing files; parents are not created. Write
+        selected count/rate/error/quality/grouping fields and optional EBOUNDS, converting
+        group IDs to flags. RATE with invalid exposure omits COUNTS/invalid exposure cards.
+
+        返回 outpath。输出浮点列多为 FITS E（32-bit），不是原文件逐位复制；
+        未保证所有 raw_spectrum_columns、重复卡片和扩展被保留。不重新分组
+        计算计数、不拟合、不验证响应兼容性，单位须由输入字段保证。
+        Return outpath. Float columns commonly use FITS E (32-bit), not a byte-exact
+        copy; not all raw columns/cards/extensions are retained. No count regrouping,
+        fit or response validation. Callers ensure field units and scientific consistency."""
         outp = self.outpath
         if outp.exists() and not overwrite:
             raise FileExistsError(str(outp))
@@ -1153,10 +1409,23 @@ class PhaWriter:
 
 class ArfWriter:
     def __init__(self, data: ArfData, outpath: str | Path):
+        """保存 ARF 对象与输出路径 / Initialize a ARF writer by reference.
+
+        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
+        Store data by reference and outpath as Path. No copying, validation, directory
+        creation or file write; write() handles overwrite policy."""
         self.data = data
         self.outpath = Path(outpath)
 
     def write(self, *, overwrite: bool = False) -> Path:
+        """写 ARF 的选定响应字段 / Write selected ARF fields to SPECRESP FITS.
+
+        写 ENERG_LO/HI、SPECRESP 的 32-bit 浮点列与响应分类头，保留部分
+        仪器字段；不换单位、不积分或重采样响应。父目录须已存在，默认
+        禁止覆盖；返回输出 Path。不是原 ARF 所有扩展/头卡的无损复制。
+        Write 32-bit energy/area columns and selected response/instrument metadata,
+        without unit conversion/integration/rebinning. Parents must exist; default
+        rejects overwrite. Return Path, not a lossless copy of every original card/HDU."""
         outp = self.outpath
         if outp.exists() and not overwrite:
             raise FileExistsError(str(outp))
@@ -1194,16 +1463,40 @@ class ArfWriter:
 
 class RmfWriter:
     def __init__(self, data: RmfData, outpath: str | Path):
+        """保存 RMF 对象与输出路径 / Initialize a RMF writer by reference.
+
+        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
+        Store data by reference and outpath as Path. No copying, validation, directory
+        creation or file write; write() handles overwrite policy."""
         self.data = data
         self.outpath = Path(outpath)
 
     def write(self, *, overwrite: bool = False) -> Path:
+        """写 RMF 的稀疏分组结构 / Write response groups and matrix rows to FITS.
+
+        能量用 E，F_CHAN/N_CHAN 用可变长 PJ，MATRIX 用可变长 PE；
+        写通道边界与组/元素统计头，满足字段时附 EBOUNDS。不会归一化
+        矩阵或验证有效面积语义；保留部分源头，不保留全部任意扩展。
+        Use E energy columns, variable-length PJ groups and PE matrix rows, adding
+        channel/group-count metadata and available EBOUNDS. Do not normalize the matrix
+        or validate area semantics. Preserve selected headers, not arbitrary extensions.
+
+        父目录不自动创建，overwrite=False 拒绝已有文件；返回输出 Path，
+        I/O 与字段形状错误上抛。浮点写出可能降低到 32-bit 精度。
+        Parents are not created, overwrite=False rejects existing targets. Return Path;
+        I/O/shape errors propagate and float storage can reduce precision to 32-bit."""
         outp = self.outpath
         if outp.exists() and not overwrite:
             raise FileExistsError(str(outp))
         rmf = self.data
 
         def _vla_array(values: np.ndarray | list[Any] | tuple[Any, ...] | None, dtype: Any) -> np.ndarray:
+            """规范化可变长 FITS 行 / Build object-array rows for variable-length FITS columns.
+
+            None 转空 object 数组，缺失行转指定 dtype 空数组，其他行至少一维。
+            不检查每行长度与 N_CHAN/N_GRP 一致性。
+            None becomes empty object array; absent rows become empty typed arrays and
+            others at least 1-D. No N_CHAN/N_GRP row-length consistency check."""
             if values is None:
                 return np.asarray([], dtype=object)
             seq = np.asarray(values, dtype=object)
@@ -1317,10 +1610,28 @@ class RmfWriter:
 
 class LightcurveWriter:
     def __init__(self, data: LightcurveData, outpath: str | Path):
+        """保存 lightcurve 对象与输出路径 / Initialize a lightcurve writer by reference.
+
+        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
+        Store data by reference and outpath as Path. No copying, validation, directory
+        creation or file write; write() handles overwrite policy."""
         self.data = data
         self.outpath = Path(outpath)
 
     def write(self, *, overwrite: bool = False) -> Path:
+        """写选定光变列及 GTI / Write selected lightcurve columns and optional GTI.
+
+        TIME 使用 lc.time，优先 RATE/rate_err，再 COUNTS/counts_err；保存
+        部分曝光/仪器头，GTI 使用对象当前数值。当前未完整写出 TIMEZERO、
+        TIMEDEL、TIMESYS/MJDREF 或原始头，不是可保证绝对时间无损的 round trip。
+        Write lc.time, preferring RATE/errors to COUNTS/errors, selected exposure/
+        instrument metadata and current GTI values. TIMEZERO/TIMEDEL/TIMESYS/MJDREF
+        and the original header are not fully serialized, so this is not a guaranteed
+        lossless absolute-time round trip.
+
+        返回 Path；父目录须存在，默认禁止覆盖；不从 value 自动填 counts/rate。
+        Return Path; require existing parents and default no overwrite. Do not infer
+        counts/rate fields from value. FITS errors propagate; no scientific reanalysis."""
         outp = self.outpath
         if outp.exists() and not overwrite:
             raise FileExistsError(str(outp))
@@ -1365,10 +1676,27 @@ class LightcurveWriter:
 
 class EventWriter:
     def __init__(self, data: EventData, outpath: str | Path):
+        """保存 event 对象与输出路径 / Initialize a event writer by reference.
+
+        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
+        Store data by reference and outpath as Path. No copying, validation, directory
+        creation or file write; write() handles overwrite policy."""
         self.data = data
         self.outpath = Path(outpath)
 
     def write(self, *, overwrite: bool = False) -> Path:
+        """写选定事件列与 GTI / Write selected event fields and optional GTI.
+
+        TIME 使用 ev.time，写可用 PI/CHANNEL、坐标、能量；透传部分头，
+        TIMEZERO 用当前 ev.timezero 覆盖，GTI 保留当前值。不写全部 raw_columns
+        或原始任意扩展，不重算能量标定或坐标转换。
+        Use ev.time, available PI/CHANNEL/coordinates/energy, selected header passthrough,
+        current TIMEZERO and GTI values. Not all raw columns/arbitrary extensions are
+        written; no energy calibration or coordinate transformation is performed.
+
+        父目录须存在，默认拒绝覆盖，返回 Path；当前写出不执行 validate。
+        Require existing parents, default no overwrite, return Path. No validate is run;
+        FITS/shape errors propagate and selected float fields use reduced precision."""
         outp = self.outpath
         if outp.exists() and not overwrite:
             raise FileExistsError(str(outp))
@@ -1414,6 +1742,14 @@ class EventWriter:
 
 
 def guess_ogip_kind(path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt']:
+    """启发式判断 FITS 产品类型 / Guess an OGIP product type by suffix and content.
+
+    .arf/.rmf/.rsp/.pha/.pi 扩展名优先，不读文件确认；其余读取 HDU 名和
+    TIME/RATE/COUNTS 列。未知内容最后回退 pha，返回类型字符串，不能
+    把猜测成功当作格式有效性证明。
+    Recognized suffixes take precedence without content confirmation; otherwise
+    inspect HDU names and TIME/RATE/COUNTS. Unknown content falls back to pha.
+    Return a kind string, not format validation; FITS/open errors may propagate."""
     p = Path(path)
     name = p.name.lower()
     if name.endswith('.arf'):
@@ -1450,30 +1786,99 @@ def guess_ogip_kind(path) -> Literal['arf', 'rmf', 'pha', 'lc', 'evt']:
 
 
 @overload
-def readfits(path, kind: Literal['arf']) -> ArfData: ...
+def readfits(path, kind: Literal['arf']) -> ArfData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
+    ...
 
 
 @overload
-def readfits(path, kind: Literal['rmf']) -> RmfData: ...
+def readfits(path, kind: Literal['rmf']) -> RmfData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
+    ...
 
 
 @overload
-def readfits(path, kind: Literal['pha']) -> PhaData: ...
+def readfits(path, kind: Literal['pha']) -> PhaData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
+    ...
 
 
 @overload
-def readfits(path, kind: Literal['lc']) -> LightcurveData: ...
+def readfits(path, kind: Literal['lc']) -> LightcurveData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
+    ...
 
 
 @overload
-def readfits(path, kind: Literal['evt']) -> EventData: ...
+def readfits(path, kind: Literal['evt']) -> EventData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
+    ...
 
 
 @overload
-def readfits(path, kind: None = ...) -> OgipData: ...
+def readfits(path, kind: None = ...) -> OgipData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
+    ...
 
 
 def readfits(path, kind: Optional[Literal['arf', 'rmf', 'pha', 'lc', 'evt']] = None) -> OgipData:
+    """按指定或猜测类型读 OGIP / Read an OGIP product by explicit or inferred kind.
+
+    path 为本地路径，kind 可为 arf/rmf/pha/lc/evt；None 委托 guess_ogip_kind。
+    返回相应数据类，具体读入、单位与时间契约见各 reader；不自动 validate。
+    非法 kind 抛 ValueError，FITS/读取异常上抛。重载声明仅提供静态返回类型。
+    Use local path and optional arf/rmf/pha/lc/evt kind; None delegates to guessing.
+    Return the corresponding data class using that reader's unit/time conventions,
+    without validate. Unknown kind raises ValueError; read errors propagate.
+    Overload declarations provide static return types only."""
     k = kind or guess_ogip_kind(path)
     if k == 'arf':
         return read_arf(path)
@@ -1489,55 +1894,145 @@ def readfits(path, kind: Optional[Literal['arf', 'rmf', 'pha', 'lc', 'evt']] = N
 
 
 def read_arf(path) -> ArfData:
+    """读取对应 OGIP 数据 / Construct OgipArfReader and return its read() result.
+
+    path 为本地文件，单位、时间和错误条件遵循该 reader；不额外 validate。
+    Use a local path with that reader's unit/time/error contract. No extra validate
+    call, network fetch or persistent reader object is returned."""
     return OgipArfReader(path).read()
 
 
 def read_rmf(path) -> RmfData:
+    """读取对应 OGIP 数据 / Construct OgipRmfReader and return its read() result.
+
+    path 为本地文件，单位、时间和错误条件遵循该 reader；不额外 validate。
+    Use a local path with that reader's unit/time/error contract. No extra validate
+    call, network fetch or persistent reader object is returned."""
     return OgipRmfReader(path).read()
 
 
 def read_pha(path) -> PhaData:
+    """读取对应 OGIP 数据 / Construct OgipPhaReader and return its read() result.
+
+    path 为本地文件，单位、时间和错误条件遵循该 reader；不额外 validate。
+    Use a local path with that reader's unit/time/error contract. No extra validate
+    call, network fetch or persistent reader object is returned."""
     return OgipPhaReader(path).read()
 
 
 def read_lc(path) -> LightcurveData:
+    """读取对应 OGIP 数据 / Construct OgipLightcurveReader and return its read() result.
+
+    path 为本地文件，单位、时间和错误条件遵循该 reader；不额外 validate。
+    Use a local path with that reader's unit/time/error contract. No extra validate
+    call, network fetch or persistent reader object is returned."""
     return OgipLightcurveReader(path).read()
 
 
 def read_evt(path) -> EventData:
+    """读取对应 OGIP 数据 / Construct OgipEventReader and return its read() result.
+
+    path 为本地文件，单位、时间和错误条件遵循该 reader；不额外 validate。
+    Use a local path with that reader's unit/time/error contract. No extra validate
+    call, network fetch or persistent reader object is returned."""
     return OgipEventReader(path).read()
 
 
 def write_pha(data: PhaData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    """写对应 OGIP 数据 / Construct PhaWriter and write selected object fields.
+
+    返回 outpath 的 Path，overwrite 默认 False；不创建父目录。具体列、
+    精度及头字段保留范围见 writer；不是任意原始 FITS 的无损复制。
+    Return output Path, default overwrite=False, without creating parents. Refer
+    to the writer for columns, precision and metadata preservation; this is not
+    a lossless copy of an arbitrary original FITS. Errors propagate."""
     return PhaWriter(data, outpath).write(overwrite=overwrite)
 
 
 def write_arf(data: ArfData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    """写对应 OGIP 数据 / Construct ArfWriter and write selected object fields.
+
+    返回 outpath 的 Path，overwrite 默认 False；不创建父目录。具体列、
+    精度及头字段保留范围见 writer；不是任意原始 FITS 的无损复制。
+    Return output Path, default overwrite=False, without creating parents. Refer
+    to the writer for columns, precision and metadata preservation; this is not
+    a lossless copy of an arbitrary original FITS. Errors propagate."""
     return ArfWriter(data, outpath).write(overwrite=overwrite)
 
 
 def write_rmf(data: RmfData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    """写对应 OGIP 数据 / Construct RmfWriter and write selected object fields.
+
+    返回 outpath 的 Path，overwrite 默认 False；不创建父目录。具体列、
+    精度及头字段保留范围见 writer；不是任意原始 FITS 的无损复制。
+    Return output Path, default overwrite=False, without creating parents. Refer
+    to the writer for columns, precision and metadata preservation; this is not
+    a lossless copy of an arbitrary original FITS. Errors propagate."""
     return RmfWriter(data, outpath).write(overwrite=overwrite)
 
 
 def write_lc(data: LightcurveData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    """写对应 OGIP 数据 / Construct LightcurveWriter and write selected object fields.
+
+    返回 outpath 的 Path，overwrite 默认 False；不创建父目录。具体列、
+    精度及头字段保留范围见 writer；不是任意原始 FITS 的无损复制。
+    Return output Path, default overwrite=False, without creating parents. Refer
+    to the writer for columns, precision and metadata preservation; this is not
+    a lossless copy of an arbitrary original FITS. Errors propagate."""
     return LightcurveWriter(data, outpath).write(overwrite=overwrite)
 
 
 def write_evt(data: EventData, outpath: str | Path, *, overwrite: bool = False) -> Path:
+    """写对应 OGIP 数据 / Construct EventWriter and write selected object fields.
+
+    返回 outpath 的 Path，overwrite 默认 False；不创建父目录。具体列、
+    精度及头字段保留范围见 writer；不是任意原始 FITS 的无损复制。
+    Return output Path, default overwrite=False, without creating parents. Refer
+    to the writer for columns, precision and metadata preservation; this is not
+    a lossless copy of an arbitrary original FITS. Errors propagate."""
     return EventWriter(data, outpath).write(overwrite=overwrite)
 
 
 @overload
-def writefits(data: PhaData, outpath: str | Path, kind: Literal['pha'], *, overwrite: bool = ...) -> Path: ...
+def writefits(data: PhaData, outpath: str | Path, kind: Literal['pha'], *, overwrite: bool = ...) -> Path:
+    """按类型委托 OGIP 写出 / Dispatch OGIP writing by an explicit or object kind.
+
+    kind 优先；None 对 PhaData 用 pha，其他读取 data.kind。不运行类型转换，
+    强制不匹配 kind 可能在具体 writer 报错。overwrite 默认 False。
+    返回 Path，不创建父目录；选择性写出，不保证原始文件无损往返。
+    Prefer explicit kind; otherwise PhaData implies pha and other objects use their
+    kind field. No conversion is performed; mismatched explicit kinds can fail in
+    the writer. Default overwrite=False. Return Path without parent creation; these
+    writers are selective, not lossless original-file round trips."""
+    ...
 
 
 @overload
-def writefits(data: PhaData, outpath: str | Path, kind: None = ..., *, overwrite: bool = ...) -> Path: ...
+def writefits(data: PhaData, outpath: str | Path, kind: None = ..., *, overwrite: bool = ...) -> Path:
+    """按类型委托 OGIP 写出 / Dispatch OGIP writing by an explicit or object kind.
+
+    kind 优先；None 对 PhaData 用 pha，其他读取 data.kind。不运行类型转换，
+    强制不匹配 kind 可能在具体 writer 报错。overwrite 默认 False。
+    返回 Path，不创建父目录；选择性写出，不保证原始文件无损往返。
+    Prefer explicit kind; otherwise PhaData implies pha and other objects use their
+    kind field. No conversion is performed; mismatched explicit kinds can fail in
+    the writer. Default overwrite=False. Return Path without parent creation; these
+    writers are selective, not lossless original-file round trips."""
+    ...
 
 
 @overload
-def writefits(data: OgipWritableData, outpath: str | Path, kind: Literal['arf', 'rmf', 'lc', 'evt'], *, overwrite: bool = ...) -> Path: ...
+def writefits(data: OgipWritableData, outpath: str | Path, kind: Literal['arf', 'rmf', 'lc', 'evt'], *, overwrite: bool = ...) -> Path:
+    """按类型委托 OGIP 写出 / Dispatch OGIP writing by an explicit or object kind.
+
+    kind 优先；None 对 PhaData 用 pha，其他读取 data.kind。不运行类型转换，
+    强制不匹配 kind 可能在具体 writer 报错。overwrite 默认 False。
+    返回 Path，不创建父目录；选择性写出，不保证原始文件无损往返。
+    Prefer explicit kind; otherwise PhaData implies pha and other objects use their
+    kind field. No conversion is performed; mismatched explicit kinds can fail in
+    the writer. Default overwrite=False. Return Path without parent creation; these
+    writers are selective, not lossless original-file round trips."""
+    ...
 
 
 def writefits(
@@ -1547,6 +2042,15 @@ def writefits(
     *,
     overwrite: bool = False,
 ) -> Path:
+    """按类型委托 OGIP 写出 / Dispatch OGIP writing by an explicit or object kind.
+
+    kind 优先；None 对 PhaData 用 pha，其他读取 data.kind。不运行类型转换，
+    强制不匹配 kind 可能在具体 writer 报错。overwrite 默认 False。
+    返回 Path，不创建父目录；选择性写出，不保证原始文件无损往返。
+    Prefer explicit kind; otherwise PhaData implies pha and other objects use their
+    kind field. No conversion is performed; mismatched explicit kinds can fail in
+    the writer. Default overwrite=False. Return Path without parent creation; these
+    writers are selective, not lossless original-file round trips."""
     k = kind
     if k is None:
         if isinstance(data, PhaData):

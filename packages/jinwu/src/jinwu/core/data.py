@@ -1450,12 +1450,15 @@ class timescale:
         return f'{value:.1f}'
 
     def _format_txx_line(self, res: Dict[str, Any], key: str, *, tz_ref: float) -> str:
+        label = key.upper()
         val = self._safe_float(res.get(key, np.nan), np.nan)
         if not np.isfinite(val):
-            return f'{key.upper()}: N/A'
+            return f'{label}: N/A'
 
         main = self._as_asym_text(val, res.get(f'{key}_err', np.asarray([], dtype=float)))
-        line = f'{key.upper()}: {main} s'
+        line = f'{label}: {main} s'
+        if key in {'t90','t50'} and res.get(key+'_error_status') == 'unresolved_koshut_crossings':
+            line += ' (Koshut error unresolved)'
 
         t_start = self._safe_float(res.get(f'{key}_tstart', np.nan), np.nan)
         t_stop = self._safe_float(res.get(f'{key}_tstop', np.nan), np.nan)
@@ -1513,7 +1516,8 @@ class timescale:
         参数
         ----
         method : 'aanda' | 'iterbkg'
-            - ``'aanda'``（默认）：`ops.txx`，事件级贝叶斯块 + A&A 5.4 分位累计；
+            - ``'aanda'``（默认）：`ops.txx`，EXTraS 背景时间变换定窗、有符号累计，
+              Koshut (1996) ON/OFF 适配误差；``nmc`` 为完整观测重选窗的模拟诊断次数。
             - ``'iterbkg'``：`timescale_mod.txx_iterbkg`，迭代背景自洽的分箱贝叶斯块法
               （burstcube 移植，支持 ``nsamples`` 全流水线重采样误差）。
             两种方法返回结构兼容，可用同一分析器先后调用做方法学对比。

@@ -13,85 +13,7 @@ from ..pipeline import _intersect_intervals, _merge_intervals, validate_backgrou
 from .models import CHANNEL_EDGES, seconds
 
 
-def latest_products(paths):
-    """Select the latest version of each named GBM archive product."""
-    chosen = {}
-    for path in sorted({Path(p).expanduser().resolve() for p in paths}):
-        match = re.match(r"(.+)_v(\d+)\.fit(?:s)?(?:\.gz)?$", path.name)
-        key, version = (match[1], int(match[2])) if match else (path.name, 0)
-        if key not in chosen or version > chosen[key][0]:
-            chosen[key] = (version, path)
-    return tuple(v[1] for k, v in sorted(chosen.items()))
-
-
-def merge_tte_events(event_sets):
-    """Union overlapping file events, preserving within-file multiplicities.
-
-    Inputs are pairs of arrays (absolute MET seconds, native channel). Returns
-    sorted seconds and channels. For equal (time, channel), retain the largest
-    multiplicity in any one file, not the sum across duplicate files.
-    """
-    dtype = np.dtype([("time", "f8"), ("channel", "i4")])
-    keys, counts = [], []
-    for times, channels in event_sets:
-        rows = np.empty(len(times), dtype=dtype)
-        rows["time"], rows["channel"] = times, channels
-        unique, n = np.unique(rows, return_counts=True)
-        keys.append(unique)
-        counts.append(n)
-    if not keys:
-        return np.array([], dtype=float), np.array([], dtype=int)
-    unique, inverse = np.unique(np.concatenate(keys), return_inverse=True)
-    multiplicity = np.zeros(len(unique), dtype=int)
-    np.maximum.at(multiplicity, inverse, np.concatenate(counts))
-    rows = np.repeat(unique, multiplicity)
-    return rows["time"], rows["channel"]
-
-
-def interval_exposure(edges, intervals):
-    """Geometric GTI overlap in seconds per bin, with overlapping GTIs merged."""
-    edges = np.asarray(edges, dtype=float)
-    exposure = np.zeros(len(edges) - 1)
-    for start, stop in _merge_intervals(intervals):
-        exposure += np.maximum(0., np.minimum(edges[1:], stop) - np.maximum(edges[:-1], start))
-    return exposure
-
-
-def read_detector_events(paths, trigger_time, interval):
-    """Read matching TTE files, retaining counts, EBOUNDS, GTIs and dead times.
-
-    ``interval`` is a seconds Quantity relative to scalar ``trigger_time``.
-    Native channel boundaries and dead-time settings must agree across files.
-    Returns event arrays in relative seconds plus merged GTIs and metadata.
-    """
-    from gdt.missions.fermi.gbm.tte import GbmTte
-    t0 = float(trigger_time.to_value("fermi"))
-    lo, hi = seconds(interval) + t0
-    events, intervals, reference = [], [], None
-    for path in latest_products(paths):
-        tte = GbmTte.open(str(path))
-        offset = float(tte.trigtime or 0.)
-        bounds = np.array(tte.ebounds.as_list(), dtype=float)
-        metadata = (bounds, float(tte.event_deadtime), float(tte.overflow_deadtime))
-        if reference is not None and (not np.array_equal(bounds, reference[0]) or metadata[1:] != reference[1:]):
-            raise ValueError("TTE energy calibration or dead times change across files")
-        reference = metadata
-        times = np.asarray(tte.data.times, dtype=float) + offset
-        channels = np.asarray(tte.data.channels, dtype=int)
-        if len(bounds) != 128 or np.any((channels < 0) | (channels >= 128)):
-            raise ValueError("GTS templates require the native 128-channel GBM TTE layout")
-        gti = [(max(lo, a + offset), min(hi, b + offset)) for a, b in tte.gti.as_list()
-               if min(hi, b + offset) > max(lo, a + offset)]
-        mask = np.zeros(times.size, dtype=bool)
-        for a, b in gti:
-            mask |= (times >= a) & (times < b)
-        events.append((times[mask], channels[mask]))
-        intervals.extend(gti)
-        tte.close()
-    if reference is None:
-        raise ValueError("no TTE files for detector")
-    times, channels = merge_tte_events(events)
-    return times - t0, channels, [(a - t0, b - t0) for a, b in _merge_intervals(intervals)], reference
+from ..tte import latest_products, merge_tte_events, interval_exposure, read_detector_events
 
 
 @dataclass
@@ -188,10 +110,19 @@ def prepare_search_data(paths_by_detector, trigger_time, config):
         var = blocked(np.sqrt((uncertainty[:, d, search_channels]**2).sum(axis=1)) * exposure[:, d]).sum(axis=1)**2
         t = blocked(centers).mean(axis=1)
         good = blocked(valid[:, d, search_channels].all(axis=1)).all(axis=1)
-        use = good & ((t < search_lo - width / 2) | (t > search_hi + width / 2)) & (mu >= 20)
+        block_start = edges[np.arange(n) * block]
+        block_stop = edges[np.arange(1, n + 1) * block]
+        # Exclude the nominal +/- width/2 support of every bin in each
+        # control block. GDT NaivePoisson(fast=True) holds event count rather
+        # than window width fixed, so its actual support can be wider. These
+        # controls are diagnostics, not guaranteed source-free holdouts.
+        nominal_source_free = ((block_stop + width / 2 <= search_lo)
+                               | (block_start - width / 2 >= search_hi))
+        use = good & nominal_source_free & (mu >= 20)
         diagnostic = (validate_background_residuals(obs[use], mu[use], np.sqrt(mu[use] + var[use]), times=t[use])
                       if use.any() else {"passed": False, "reason": "no_valid_background_control_blocks"})
-        diagnostic.update(control_blocks=int(use.sum()), method="source_free_control_blocks", independent_holdout=False)
+        diagnostic.update(control_blocks=int(use.sum()), method="nominal_source_free_control_blocks",
+                          independent_holdout=False)
         diagnostics[detector] = diagnostic
     return PreparedSearchData(edges, counts, exposure, rates, uncertainty, valid,
                               np.asarray(common, dtype=float).reshape(-1, 2), tuple(config.detectors)), diagnostics
@@ -207,14 +138,13 @@ class MeasuredHistory:
         from gdt.missions.fermi.gbm.poshist import GbmPosHist
         times, pos, vel, quat, good = [], [], [], [], []
         for path in latest_products(paths):
-            history = GbmPosHist.open(str(path))
-            frame, states = history.get_spacecraft_frame(), history.get_spacecraft_states()
-            times.append(frame.obstime.to_value("fermi"))
-            pos.append(frame.obsgeoloc.xyz.to_value(u.m).T)
-            vel.append(frame.obsgeovel.xyz.to_value(u.m / u.s).T)
-            quat.append(np.asarray(frame.quaternion))
-            good.append(np.asarray(states["good"]) & ~np.asarray(states["saa"]))
-            history.close()
+            with GbmPosHist.open(str(path)) as history:
+                frame, states = history.get_spacecraft_frame(), history.get_spacecraft_states()
+                times.append(frame.obstime.to_value("fermi"))
+                pos.append(frame.obsgeoloc.xyz.to_value(u.m).T)
+                vel.append(frame.obsgeovel.xyz.to_value(u.m / u.s).T)
+                quat.append(np.asarray(frame.quaternion))
+                good.append(np.asarray(states["good"]) & ~np.asarray(states["saa"]))
         if not times:
             raise ValueError("measured POSHIST required")
         self.times, indices = np.unique(np.concatenate(times), return_index=True)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu"
-version = "0.2.1"
+version = "0.2.2"
 description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -75,3 +75,4 @@ include = ["jinwu*"]
 
 [tool.setuptools.package-data]
 "jinwu.data" = ["*.fits", "*.mdb"]
+"jinwu.core" = ["GV_SIGNIFICANCE_LICENSE.txt", "GV_SIGNIFICANCE_PROVENANCE.json"]

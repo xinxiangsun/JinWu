@@ -421,11 +421,15 @@ class Teldef:
         vec_foc = np.array([mm_x, mm_y, mm_z], dtype=float)
         # rotate into detector frame: vec_det = inv(ALIGNM) @ vec_foc
         try:
-            # alignment matrices in teldef are often orthonormal rotations; use transpose
-            inv_align = self.align.T
-            vec_det = inv_align @ vec_foc
+            # Solve rather than transpose: FITS rotation coefficients can be
+            # rounded, while the reverse transform uses the stored matrix.
+            vec_det = np.linalg.solve(self.align, vec_foc)
         except Exception:
             raise
+        # Intersect the rotated ray with the detector plane z=FOCALLEN.
+        if vec_det[2] <= 0 or not np.all(np.isfinite(vec_det)):
+            raise ValueError('Sky direction does not intersect the forward detector plane')
+        vec_det *= float(self.focal_length) / vec_det[2]
         # convert mm to pixels using detector scale and optical axis
         sx = float(self.det_xscl) if getattr(self, 'det_xscl', None) is not None else 1.0
         sy = float(self.det_yscl) if getattr(self, 'det_yscl', None) is not None else 1.0
@@ -451,8 +455,10 @@ class Teldef:
         mm_y = (float(y_pix) - opty) * sy
         mm_z = float(self.focal_length)
         vec_det = np.array([mm_x, mm_y, mm_z], dtype=float)
-        # rotate into focal/satellite frame (use transpose of ALIGNM)
-        vec_foc = self.align.T @ vec_det
+        # Reverse the detector-frame rotation used by sky_to_det_with_pointing.
+        vec_foc = self.align @ vec_det
+        if vec_foc[2] <= 0 or not np.all(np.isfinite(vec_foc)):
+            raise ValueError('Detector direction does not intersect the forward focal plane')
         # get tangent plane coords (radians)
         x_rad = vec_foc[0] / vec_foc[2]
         y_rad = vec_foc[1] / vec_foc[2]

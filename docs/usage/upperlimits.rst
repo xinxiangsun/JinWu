@@ -1,5 +1,8 @@
-Upper Limits
-============
+上限与检测灵敏度
+================
+
+观测上限来自实际数据的似然；检测灵敏度来自给定误报率与检测概率的校准实验。
+选择符合 Poisson ON/OFF、带误差背景或 Gaussian 净谱的策略，并记录固定谱模板与响应。
 
 Jinwu separates two quantities which are often both called an upper limit:
 

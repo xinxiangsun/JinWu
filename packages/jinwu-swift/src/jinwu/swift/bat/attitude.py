@@ -107,11 +107,11 @@ class Attitude:
         ra_unwrapped = np.rad2deg(np.unwrap(np.deg2rad(self.ra.value)))
         roll_unwrapped = np.rad2deg(np.unwrap(np.deg2rad(self.roll.value)))
         self._ra_interp = interp1d(t, ra_unwrapped, kind='linear',
-                                   bounds_error=False, fill_value='extrapolate')
+                                   bounds_error=True)
         self._dec_interp = interp1d(t, self.dec.value, kind='linear',
-                                    bounds_error=False, fill_value='extrapolate')
+                                    bounds_error=True)
         self._roll_interp = interp1d(t, roll_unwrapped, kind='linear',
-                                     bounds_error=False, fill_value='extrapolate')
+                                     bounds_error=True)
 
     @classmethod
     def from_file(cls, attitude_file):
@@ -230,18 +230,52 @@ class Attitude:
 
     @classmethod
     def _parse_sao(cls, all_data):
-        """Parse *.sao file data."""
+        """Parse a SAO-like table with explicit row-wise pointing columns.
+
+        The standard ``gdt-swift`` ``BatSao`` product stores ``POSITION`` and
+        ``QUATERNION`` in extension 1 and ``RA_PNT``/``DEC_PNT`` in the
+        primary header. This lightweight fallback does not convert that
+        position/quaternion schema; use ``BatSao`` for standard SAO products.
+        Here we accept row-wise RA/Dec plus roll columns only, and fail when
+        any required pointing component has no explicit source.
+        """
         time = all_data['TIME']
         
-        # SAO files have different column names
-        if 'RA_PNT' in all_data:
+        # SAO files have different column names. Prefer complete scalar column
+        # pairs, then accept POINTING rows with at least RA and Dec columns.
+        if 'RA_PNT' in all_data and 'DEC_PNT' in all_data:
             ra = all_data['RA_PNT']
             dec = all_data['DEC_PNT']
+        elif 'RA' in all_data and 'DEC' in all_data:
+            ra = all_data['RA']
+            dec = all_data['DEC']
+        elif 'POINTING' in all_data:
+            pointing = all_data['POINTING']
+            if getattr(pointing, 'ndim', 0) != 2 or pointing.shape[1] < 2:
+                raise ValueError("SAO POINTING column must have shape (n_rows, >= 2)")
+            ra = pointing[:, 0]
+            dec = pointing[:, 1]
         else:
-            ra = all_data.get('RA', all_data.get('POINTING', np.zeros_like(time.value) * u.deg)[:, 0])
-            dec = all_data.get('DEC', all_data.get('POINTING', np.zeros_like(time.value) * u.deg)[:, 1])
-        
-        roll = all_data.get('PA_PNT', all_data.get('ROLL', np.zeros_like(time.value) * u.deg))
+            raise ValueError(
+                "SAO attitude data must include RA_PNT/DEC_PNT, RA/DEC, "
+                "or POINTING with at least two columns"
+            )
+
+        if 'PA_PNT' in all_data:
+            roll = all_data['PA_PNT']
+        elif 'ROLL' in all_data:
+            roll = all_data['ROLL']
+        elif 'POINTING' in all_data:
+            pointing = all_data['POINTING']
+            if getattr(pointing, 'ndim', 0) != 2 or pointing.shape[1] < 3:
+                raise ValueError(
+                    "SAO attitude data must include PA_PNT, ROLL, or a POINTING third column for roll"
+                )
+            roll = pointing[:, 2]
+        else:
+            raise ValueError(
+                "SAO attitude data must include PA_PNT, ROLL, or a POINTING third column for roll"
+            )
         
         quaternion = all_data.get('QUATERNION', None)
         if quaternion is not None:
@@ -266,6 +300,30 @@ class Attitude:
 
     # ==================== Pointing Methods ====================
     
+    def _query_time_in_coverage(self, met_time):
+        """Return the numeric query time or reject requests outside the samples."""
+        if isinstance(met_time, u.Quantity):
+            try:
+                t = met_time.to_value(self.time.unit)
+            except u.UnitConversionError as exc:
+                raise ValueError(
+                    f"requested BAT attitude time must be convertible to {self.time.unit}"
+                ) from exc
+        else:
+            t = met_time.value if hasattr(met_time, 'value') else met_time
+        t_values = np.asarray(t, dtype=float)
+        if not np.all(np.isfinite(t_values)):
+            raise ValueError("requested BAT attitude MET time must be finite")
+
+        t_min = float(np.min(self.time.value))
+        t_max = float(np.max(self.time.value))
+        if np.any((t_values < t_min) | (t_values > t_max)):
+            raise ValueError(
+                f"requested MET time {t!r} is outside BAT attitude coverage "
+                f"[{t_min}, {t_max}] {self.time.unit}"
+            )
+        return t
+
     def pointing_at(self, met_time):
         """
         Get pointing (RA, Dec) at a specific MET time.
@@ -280,11 +338,14 @@ class Attitude:
         -------
         tuple
             (ra, dec) in degrees.
+
+        Raises
+        ------
+        ValueError
+            If the requested time is non-finite or outside the sampled attitude
+            coverage. Pointing is interpolated only within the recorded interval.
         """
-        if hasattr(met_time, 'value'):
-            t = met_time.value
-        else:
-            t = met_time
+        t = self._query_time_in_coverage(met_time)
         
         ra = self._ra_interp(t) % 360.0  # 解缠绕插值后回卷到 [0, 360)
         dec = self._dec_interp(t)
@@ -300,11 +361,15 @@ class Attitude:
         return SkyCoord(ra, dec, frame='icrs')
 
     def roll_at(self, met_time):
-        """Get roll angle at a specific time (wrapped back to [0, 360) deg)."""
-        if hasattr(met_time, 'value'):
-            t = met_time.value
-        else:
-            t = met_time
+        """Get wrapped roll in degrees; reject times outside sampled coverage.
+
+        Raises
+        ------
+        ValueError
+            If the requested time is non-finite or outside the sampled attitude
+            coverage.
+        """
+        t = self._query_time_in_coverage(met_time)
         return (self._roll_interp(t) % 360.0) * u.deg
 
     def in_saa_at(self, met_time):
@@ -312,10 +377,7 @@ class Attitude:
         if self.in_saa is None:
             return None
         
-        if hasattr(met_time, 'value'):
-            t = met_time.value
-        else:
-            t = met_time
+        t = self._query_time_in_coverage(met_time)
         
         # Find nearest time index
         idx = np.argmin(np.abs(self.time.value - t))
@@ -329,10 +391,7 @@ class Attitude:
         if self.is_settled is None:
             return None
         
-        if hasattr(met_time, 'value'):
-            t = met_time.value
-        else:
-            t = met_time
+        t = self._query_time_in_coverage(met_time)
         
         idx = np.argmin(np.abs(self.time.value - t))
         

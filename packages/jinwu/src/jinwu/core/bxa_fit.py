@@ -400,6 +400,21 @@ def _resolve_stat_method(stat_method: str | None) -> str:
     return resolved
 
 
+def _create_flux_chain_at_best_fit(solver, spectrum, erange: str, warnings_list: list[str]):
+    """Evaluate posterior fluxes (band string in keV) and restore live XSPEC.
+
+    Optional flux failures produce a warning and None. Failure to restore the
+    best fit propagates: exporting an unrelated sample would be misleading.
+    """
+    try:
+        return solver.create_flux_chain(spectrum, erange=str(erange))
+    except Exception as exc:  # pragma: no cover - depends on data
+        warnings_list.append(f"BXA flux chain failed: {exc}")
+        return None
+    finally:
+        solver.set_best_fit()
+
+
 def fit_prepared_bxa(
     prepared,
     *,
@@ -583,12 +598,8 @@ def fit_prepared_bxa(
 
         flux_chain = None
         if calculate_flux_chain:
-            try:
-                flux_chain = solver.create_flux_chain(
-                    xspec_spectra[0], erange=str(flux_erange)
-                )
-            except Exception as exc:  # pragma: no cover - depends on data
-                warnings_list.append(f"BXA flux chain failed: {exc}")
+            flux_chain = _create_flux_chain_at_best_fit(
+                solver, xspec_spectra[0], flux_erange, warnings_list)
 
         fit_statistic = _finite_or_none(getattr(xspec.Fit, "statistic", None))
         fit_dof = _int_or_none(getattr(xspec.Fit, "dof", None))

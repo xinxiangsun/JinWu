@@ -22,6 +22,7 @@ import re
 import shutil
 import sys
 import tempfile
+import stat
 from statistics import NormalDist
 from typing import Any, Callable, Iterable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -4813,7 +4814,17 @@ class BATSurveyPipeline(InstrumentPipeline[BATSurveyInput, BATSurveyResult]):
             return base
         files: list[dict[str, Any]] = []
         try:
-            for path in sorted(item for item in caldb.rglob("*") if item.is_file()):
+            paths: list[Path] = []
+
+            def fail_on_walk_error(error: OSError) -> None:
+                raise error
+
+            for directory, _, filenames in os.walk(caldb, onerror=fail_on_walk_error):
+                paths.extend(Path(directory) / name for name in filenames)
+
+            for path in sorted(paths):
+                if not stat.S_ISREG(path.stat().st_mode):
+                    continue
                 resolved = path.resolve()
                 files.append(
                     {
@@ -4821,8 +4832,11 @@ class BATSurveyPipeline(InstrumentPipeline[BATSurveyInput, BATSurveyResult]):
                         "sha256": _file_fingerprint(resolved),
                     }
                 )
-        except (OSError, ValueError) as exc:
-            files.append({"error": f"{type(exc).__name__}:{exc}"})
+        except Exception as exc:
+            raise RuntimeError(
+                f"Cannot fingerprint the local BAT CALDB tree {caldb}; "
+                "refusing to reuse a stage cache with an incomplete fingerprint"
+            ) from exc
         return _fingerprint({"base": base, "caldb_files": files})
 
     def _load_cached_stage(

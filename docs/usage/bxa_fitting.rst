@@ -1,6 +1,8 @@
+BXA / UltraNest 贝叶斯能谱拟合
+==============================
 
-Bayesian Spectral Fitting (BXA)
-===============================
+统一接口可选择 MLE、XSPEC chain 与 BXA nested sampling。
+BXA 输出后验、logZ 与诊断；先验、响应与背景假设需要随结果记录，不能仅用 logZ 作最终科学判断。
 
 JinWu can infer X-ray spectra either by maximum likelihood (MLE), by an
 XSPEC MCMC chain, or by **Bayesian nested sampling** through
@@ -26,8 +28,7 @@ Environment & Prerequisites
 
 JinWu's BXA fitting needs three things at run time: ``jinwu`` itself, the
 ``bxa`` extra (``bxa`` + ``ultranest``), and an importable HEASoft/PyXspec.
-There is no ``python``/``pip`` on the bare ``PATH``; always activate a conda
-environment first:
+Use the environment that provides the required PyXspec runtime:
 
 .. code-block:: bash
 
@@ -35,7 +36,7 @@ environment first:
     conda activate <env>
 
     # BXA + UltraNest (xspec is provided by HEASoft, not by pip)
-    pip install jinwu[bxa]
+    python -m pip install "jinwu[bxa]"
 
 Two conda environments are set up for this project.  **Pick by purpose**:
 
@@ -163,7 +164,7 @@ instrument config, or rely on the global default:
 
 .. code-block:: python
 
-    from jinwu.core import WXT, FitConfig
+    from jinwu.core.config import WXT, FitConfig
 
     cfg = WXT(fitting=FitConfig(method="bxa"))
     # cfg.fitting.method == "bxa" -> the pipeline routes its fit stage to BXA
@@ -423,7 +424,7 @@ Performance presets
 
 
 See also
-~~~~~~~~
+~~~~~~~~~~~~
 
 * :doc:`spectral` -- prepare/fit flow, MLE fitting and chain analysis.
 * :mod:`jinwu.core.bxa_fit` -- BXA nested-sampling implementation.

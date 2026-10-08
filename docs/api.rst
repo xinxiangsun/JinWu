@@ -1,166 +1,42 @@
-API Reference
-=============
+API 参考
+============
 
-This page documents the public API of JinWu, auto-generated from docstrings.
+API 按对象的定义模块生成，避免重导出造成重复。jinwu.core 是便捷导入入口；
+仪器包共享 jinwu 命名空间。签名与说明来自当前源码，文档构建不运行科学分析。
 
-Core Package
-------------
+.. toctree::
+   :maxdepth: 2
 
-.. automodapi:: jinwu.core
-   :no-inheritance-diagram:
-   :include-all-objects:
+   api/modules
+   compatibility
 
-Datasets & Net Data
--------------------
+常用对象在哪里
+--------------
 
-.. automodapi:: jinwu.core.datasets
-   :no-inheritance-diagram:
-   :include-all-objects:
+.. list-table::
+   :header-rows: 1
 
-Pipeline Framework
-------------------
-
-.. automodapi:: jinwu.core.pipeline
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Pipeline & Instrument Configuration
------------------------------------
-
-.. automodapi:: jinwu.core.config
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Spectral Fitting
-----------------
-
-.. automodapi:: jinwu.core.fit
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Bayesian (BXA) Fitting
-----------------------
-
-.. automodapi:: jinwu.core.bxa_fit
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Model Comparison
-----------------
-
-.. automodapi:: jinwu.core.model_comparison
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Upper Limits
-------------
-
-.. automodapi:: jinwu.core.upperlimit
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-HEASoft Environment
--------------------
-
-.. automodapi:: jinwu.core.heasoft
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Lightcurve Analysis
--------------------
-
-.. automodapi:: jinwu.lightcurve
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Background Modeling
--------------------
-
-.. automodapi:: jinwu.background
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Spectral Analysis
------------------
-
-.. automodapi:: jinwu.spectrum
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Response Matrix Utilities
--------------------------
-
-GBM 响应生成已随 0.2.0 拆分移植到仪器包 ``jinwu.fermi.gbm.response``
-（原 ``jinwu.response`` 空壳已移除；本节经由 fermi 文档页展示）。
-
-.. automodapi:: jinwu.fermi.gbm.response
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Timing Analysis
----------------
-
-.. automodapi:: jinwu.timing
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Model Components
-----------------
-
-.. automodapi:: jinwu.model
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Physics Utilities
------------------
-
-.. automodapi:: jinwu.physics
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-ftools (Pure-Python HEASOFT Equivalents)
-----------------------------------------
-
-.. automodapi:: jinwu.ftools
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Einstein Probe (WXT)
---------------------
-
-.. automodapi:: jinwu.ep.wxt
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Fermi/GBM
----------
-
-.. automodapi:: jinwu.fermi.gbm
-
-GW localization and coverage
-----------------------------
-
-.. automodapi:: jinwu.gw
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Swift/BAT Observations
-----------------------
-
-.. automodapi:: jinwu.swift.bat
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Swift GRB Pipeline
-------------------
-
-.. automodapi:: jinwu.swift.grb
-   :no-inheritance-diagram:
-   :include-all-objects:
-
-Swift BAT Survey Pipeline
--------------------------
-
-.. automodapi:: jinwu.swift.bat.survey
-   :no-inheritance-diagram:
-   :include-all-objects:
+   * - 对象/方法
+     - 定义模块
+   * - readfits、read_pha、read_lc、read_evt
+     - jinwu.core.io
+   * - Time、TimeDelta
+     - jinwu.core.time
+   * - LightcurveData、PhaData、EventData
+     - jinwu.core.data
+   * - netdata、数据集合
+     - jinwu.core.datasets
+   * - txx、txx_iterbkg
+     - jinwu.core.timescale
+   * - snr
+     - jinwu.core.significance
+   * - fit_spectral、LightcurveFitter
+     - jinwu.core.fit
+   * - BXA 先验和结果
+     - jinwu.core.bxa_fit
+   * - 仪器预设、拟合配置
+     - jinwu.core.config
+   * - 条件上限、灵敏度适配器
+     - jinwu.core.upperlimit
+   * - absorption_budget
+     - jinwu.physics.absorption

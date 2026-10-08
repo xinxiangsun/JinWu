@@ -1,0 +1,61 @@
+{
+  "repository": "xinxiangsun/GBM_MVT_paper",
+  "commit": "57e7a0fe7e5b27311acb161f622f4a68b2e0e8c7",
+  "parent_repository": "sumanbala2210-USRA/GBM_MVT_paper",
+  "license_declaration": "Apache-2.0",
+  "license_evidence": [
+    "MVTfermi/__init__.py",
+    "pyproject.toml",
+    "docs/README.md"
+  ],
+  "original_haar_repository": "https://github.com/nrbutler/mvt",
+  "original_haar_license_status": "no standalone authorization found; unresolved before publication",
+  "source_files": {
+    "MVTfermi/haar_denoise.py": {
+      "sha256": "d84b595775a116bf5c7678e5980240a61e1998c07907011715bf2beceea9c582",
+      "bytes": 2754
+    },
+    "MVTfermi/haar_nondec_regular_err_wt.py": {
+      "sha256": "854572bcb0f6fd1c2afc7d671e10d6121ff569af9a14583e3b9693785ff61b6a",
+      "bytes": 2958
+    },
+    "MVTfermi/haar_power_mod.py": {
+      "sha256": "be440d27a74fe0a262df4c9409a337c7740657a108d0a1db9660086d577126c2",
+      "bytes": 13883
+    },
+    "MVTfermi/__init__.py": {
+      "sha256": "b2010d070da1bebe375d31d4f01a3aa17a4149e141732a8edd212172abb828c7",
+      "bytes": 725
+    },
+    "MVTfermi/test_mvt_grb_lc.txt": {
+      "sha256": "33b62e13009d4cc8b9abc8000e6a731d49c955bbfd098762b572dcd8b150169f",
+      "bytes": 12432619
+    },
+    "MVTfermi/clasify_mvt_value.py": {
+      "sha256": "a5140e56d72d42b8a29548d338af6b936708ad106b8d7499f8abbe5dfdca8bca",
+      "bytes": 6420
+    },
+    "MVTfermi/mvt_snr_fit_model.npz": {
+      "sha256": "382cd9796f2420909cb28a7ea330b218a6407bdff7958e8ccf912024994f6e99",
+      "bytes": 4254
+    },
+    "pyproject.toml": {
+      "sha256": "d403bbf2f6f511215f63ad50eda7ccd2c938b828d7691b03b2f646b55cc6cb5a",
+      "bytes": 1545
+    },
+    "docs/README.md": {
+      "sha256": "91aa33c2735e8044c0de526f82b221ef46d89f64251f45e4ccf5d19632a68f8f",
+      "bytes": 8835
+    }
+  },
+  "calibration_path": "MVTfermi/mvt_snr_fit_model.npz",
+  "calibration_sha256": "382cd9796f2420909cb28a7ea330b218a6407bdff7958e8ccf912024994f6e99",
+  "numerical_changes": [],
+  "integration_changes": [
+    "package-relative imports",
+    "lazy plotting imports",
+    "removed global warning and backend changes",
+    "optional read-only diagnostics",
+    "whitespace-only cleanup; executable AST unchanged"
+  ]
+}

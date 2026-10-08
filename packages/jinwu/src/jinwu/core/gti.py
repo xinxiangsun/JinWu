@@ -21,8 +21,13 @@ try:
 except ImportError:
     _HAVE_NUMBA = False
     def njit(*args, **kwargs):
-        """Dummy decorator when numba is not available."""
+        """缺少 Numba 时保留原函数 / Keep functions unchanged without Numba.
+
+        支持 ``@njit`` 与 ``@njit(...)`` 两种形式；忽略编译选项。
+        Accept both decorator forms and ignore compilation options.
+        """
         def decorator(func):
+            """原样返回被装饰函数 / Return the decorated function unchanged."""
             return func
         if len(args) == 1 and callable(args[0]):
             return args[0]
@@ -30,10 +35,25 @@ except ImportError:
 
 
 def merge_gti(starts: Optional[np.ndarray], stops: Optional[np.ndarray], *, tol: float = 1e-9) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-    """合并并规范化 GTI 列表：返回非重叠、升序的 (starts, stops)。
+    """合并 GTI 并按起点排序 / Merge and sort good-time intervals.
 
-    - 会按 start 排序并合并相邻或重叠区间（next_start <= cur_stop + tol 时合并）。
-    - 若输入为空或长度为0，返回 (None, None)。
+    Parameters
+    ----------
+    starts, stops : array-like or None
+        对应的区间起止时间，须使用同一参考零点和单位；通常为秒。
+        Paired interval boundaries in the same time reference and unit,
+        usually seconds. The caller supplies valid, equally sized arrays.
+    tol : float
+        允许合并的最大间隙，单位与时间相同；默认 1e-9。
+        Maximum gap to merge, in the input time unit; defaults to 1e-9.
+
+    Returns
+    -------
+    tuple of numpy.ndarray or tuple of None
+        非重叠、升序的 ``(starts, stops)``；缺失或空输入返回
+        ``(None, None)``。相邻或重叠区间也会合并。
+        Sorted, non-overlapping boundaries, or ``(None, None)`` for missing
+        or empty input. Intervals merge when next_start <= current_stop + tol.
     """
     if starts is None or stops is None:
         return None, None
@@ -64,9 +84,15 @@ def merge_gti(starts: Optional[np.ndarray], stops: Optional[np.ndarray], *, tol:
 
 
 def union_gti(list_of_starts: List[np.ndarray], list_of_stops: List[np.ndarray], *, tol: float = 1e-9) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-    """将多个 GTI 列表取并集，返回合并规范化后的 (starts, stops)。
+    """合并多组 GTI 的并集 / Return the merged union of several GTI tables.
 
-    用于模拟 mgtime：把多个 GTI 表的区间合并为一个整体。
+    ``list_of_starts`` 与 ``list_of_stops`` 按位置成对处理；跳过 None
+    或空区间组，然后调用 :func:`merge_gti`。所有时间与 ``tol`` 须使用
+    同一单位和参考零点；无有效区间时返回 ``(None, None)``。
+    Pair the two lists positionally, skip missing/empty groups, and delegate
+    to :func:`merge_gti`. Times and tolerance share a unit and reference.
+    Return ``(None, None)`` when no intervals remain. Lists must have matching
+    lengths; this implementation uses zip and does not validate that condition.
     """
     starts_flat = []
     stops_flat = []
@@ -85,11 +111,22 @@ def union_gti(list_of_starts: List[np.ndarray], list_of_stops: List[np.ndarray],
 
 
 def intervals_from_mask(times: np.ndarray, mask: np.ndarray, *, min_gap: float = 0.0) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-    """从时间序列和布尔掩码生成 GTI 区间（连续 True 段）。
+    """从连续 True 样本生成区间 / Extract intervals from True sample runs.
 
-    - `times` 应为单调升序的时间数组（事件或 MKF 时间中心）。
-    - 连续的 True 段（相邻索引之间时间差可任意）会被抽取为 [t_start, t_stop]。
-    - `min_gap` 可用于合并短间隙（若 gap <= min_gap 则视为连续）。
+    ``times`` 是升序的一维时间数组，``mask`` 是等长布尔数组。
+    每个连续 True 段的首末样本时间直接成为起止边界；不会推断采样帧宽，
+    也不会因相邻 True 样本时间跨度大而拆段。孤立样本产生零长度区间。
+    ``min_gap > 0`` 时进一步合并间隙不大于该阈值的区间，单位同时间。
+    ``times`` is a sorted 1-D time array and ``mask`` has the same length.
+    Boundaries are the first/last selected sample times, without inferred
+    frame widths. A large gap within a True run does not split it; an isolated
+    sample gives a zero-duration interval. Positive ``min_gap`` merges short
+    gaps in the same time unit.
+
+    返回 ``(starts, stops)`` 数组；空输入或无 True 段返回 ``(None, None)``，
+    非空数组长度不匹配时抛出 ValueError。
+    Return boundary arrays, or ``(None, None)`` for empty input/no selected
+    runs. Unequal nonempty array lengths raise ValueError.
     """
     times = np.asarray(times, dtype=float)
     mask = np.asarray(mask, dtype=bool)
@@ -110,9 +147,8 @@ def intervals_from_mask(times: np.ndarray, mask: np.ndarray, *, min_gap: float =
     starts = times[starts_idx]
     # stops_idx points to index after last True; use times[stops_idx - 1] as last event
     stops = times[np.maximum(0, stops_idx - 1)]
-    # Convert to half-open intervals [start, stop] using small epsilon extension
-    # but here we return inclusive stops as in xselect (use observed times)
-    # Optionally merge short gaps
+    # 保留最后一个 True 样本的时间作为 stop，不额外延长区间。
+    # Keep the last selected sample time as stop, without extending the interval.
     if min_gap > 0.0 and starts.size > 1:
         merged_s = [float(starts[0])]
         merged_e = []
@@ -131,11 +167,21 @@ def intervals_from_mask(times: np.ndarray, mask: np.ndarray, *, min_gap: float =
 
 
 def adjust_gti_to_frame(starts: np.ndarray, stops: np.ndarray, frame_dt: float, timepixr: float = 0.0) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-    """将 GTI 边界对齐到帧边界：start 向上取整到下一个帧起点，stop 向下取整到帧末端。
+    """向内对齐 GTI 到时间网格 / Align GTI inward to a frame grid.
 
-    - frame_dt: 帧时长（秒）
-    - timepixr: 时间参考偏移（通常 0.0 或 0.5），表示每帧参考点与边界的偏移
-    返回新的 (starts, stops)，并丢弃长度 <= 0 的区间。
+    ``starts``、``stops``、正的 ``frame_dt`` 和 ``timepixr`` 均使用同一
+    时间单位，通常为秒。本网格为 ``timepixr + k * frame_dt``；当前实现
+    将 ``timepixr`` 直接作为时间偏移，不会乘以帧长，调用者须据此换算
+    无量纲 FITS TIMEPIXR。起点向上、终点向下取整，舍弃零或负长度区间。
+    All boundaries, positive ``frame_dt``, and ``timepixr`` share a time unit,
+    usually seconds. The grid is ``timepixr + k * frame_dt``. Here timepixr
+    is used directly as a time offset, not multiplied by frame duration;
+    callers must convert a dimensionless FITS TIMEPIXR accordingly. Round
+    starts up and stops down, discarding nonpositive durations.
+
+    返回新的边界数组；缺失、空输入或全部被舍弃时返回 ``(None, None)``。
+    Return new boundary arrays, or ``(None, None)`` for missing/empty input
+    or when no positive-duration interval survives.
     """
     if starts is None or stops is None:
         return None, None
@@ -163,7 +209,12 @@ def adjust_gti_to_frame(starts: np.ndarray, stops: np.ndarray, frame_dt: float, 
 if _HAVE_NUMBA:
     @njit
     def _exposure_per_bins_core(ms: np.ndarray, me: np.ndarray, bins: np.ndarray) -> np.ndarray:
-        """Numba-accelerated core for exposure_per_bins calculation."""
+        """逐 bin 累加 GTI 交叠时长 / Sum GTI overlaps per bin using Numba.
+
+        输入为规范化的非重叠 GTI 与 bin 边界，单位一致；返回各 bin 曝光。
+        Inputs are non-overlapping GTI and bin edges in one time unit;
+        return exposure durations in that unit. No dead-time correction.
+        """
         nb = bins.size - 1
         expo = np.zeros(nb, dtype=np.float64)
         for i in range(nb):
@@ -179,7 +230,12 @@ if _HAVE_NUMBA:
         return expo
 else:
     def _exposure_per_bins_core(ms: np.ndarray, me: np.ndarray, bins: np.ndarray) -> np.ndarray:
-        """Pure Python fallback for exposure_per_bins calculation."""
+        """逐 bin 累加 GTI 交叠时长 / Sum GTI overlaps without Numba.
+
+        与加速版本相同，假定 GTI 非重叠；不做死时间校正。
+        Same input/output contract as the accelerated core; assumes GTI do
+        not overlap and applies no dead-time correction.
+        """
         nb = bins.size - 1
         expo = np.zeros(nb, dtype=float)
         for i in range(nb):
@@ -194,7 +250,17 @@ else:
 
 
 def exposure_per_bins(ms: np.ndarray, me: np.ndarray, bins: np.ndarray) -> np.ndarray:
-    """计算每个时间 bin 与合并 GTI 的重叠曝光时长。bins 为 edges（len = nbins+1）。"""
+    """计算各 bin 的 GTI 交叠曝光 / Compute GTI overlap exposure per bin.
+
+    ``ms``、``me`` 为已合并的非重叠 GTI 起止时间；``bins`` 为升序边界，
+    长度 nbins+1。返回长度 nbins 的浮点数组，单位同输入时间（通常秒）。
+    本函数直接累加交叠长度，不合并 GTI、不校正死时间；重叠 GTI 会重复
+    计入曝光，故调用者应先用 :func:`merge_gti` 规范化。
+    ``ms``/``me`` are merged non-overlapping GTI boundaries; ``bins`` contains
+    sorted edges of length nbins+1. Return nbins float durations in the input
+    time unit, usually seconds. Overlaps are summed without GTI merging or
+    dead-time correction; call :func:`merge_gti` first to avoid double counting.
+    """
     ms = np.asarray(ms, dtype=np.float64)
     me = np.asarray(me, dtype=np.float64)
     bins = np.asarray(bins, dtype=np.float64)

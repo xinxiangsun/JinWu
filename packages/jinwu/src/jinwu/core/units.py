@@ -69,7 +69,14 @@ class FilterInfo:
     zero_point_ab: Quantity = 3631 * u.Jy
     
     def __post_init__(self):
-        """Set defaults and validate inputs."""
+        """设置滤光片默认值 / Set filter defaults and check wavelength input.
+
+        wavelength 必须为 Quantity；lambda_pivot 缺失时引用 wavelength。
+        裸数 zero_point_ab 按 Jy 包装。原位更新字段；此处不全面核验带宽、
+        Vega 零点或各 Quantity 的量纲、正值条件。
+        Require wavelength to be a Quantity, use it for a missing pivot, and attach
+        Jy to a bare AB zero point. Mutate fields without comprehensive dimension,
+        bandwidth, Vega-zero-point or positivity checks."""
         # Ensure wavelength has units
         if not isinstance(self.wavelength, Quantity):
             raise ValueError("wavelength must be an astropy Quantity with units")
@@ -83,18 +90,12 @@ class FilterInfo:
             self.zero_point_ab = self.zero_point_ab * u.Jy
     
     def get_zero_point(self, system: Literal['AB', 'Vega']) -> Quantity:
-        """Get zero-point for specified photometric system.
-        
-        Parameters
-        ----------
-        system : {'AB', 'Vega'}
-            Photometric system
-        
-        Returns
-        -------
-        Quantity
-            Zero-point flux in Jy
-        """
+        """返回所选星等系统零点 / Return the selected photometric zero point.
+
+        system 必须精确为 'AB' 或 'Vega'，否则抛 ValueError；返回对应
+        Quantity 字段，通常为 Jy，不复制或自动转换系统。
+        system must be exactly 'AB' or 'Vega', otherwise ValueError. Return the
+        corresponding Quantity field, conventionally Jy, without copying/conversion."""
         if system == 'AB':
             return self.zero_point_ab
         elif system == 'Vega':
@@ -103,22 +104,28 @@ class FilterInfo:
             raise ValueError(f"system must be 'AB' or 'Vega', got '{system}'")
     
     def __str__(self):
+        """格式化滤光片属性 / Format filter name, wavelengths and zero points.
+
+        返回带原单位的可读字符串，不用于无损序列化。
+        Return a human-readable string with stored units, not a lossless serialization."""
         return (f"FilterInfo({self.name}: λ={self.wavelength:.1f}, "
                 f"Weff={self.weff:.1f}, ZP_Vega={self.zero_point_vega:.2f}, "
                 f"ZP_AB={self.zero_point_ab:.2f})")
     
     def __repr__(self):
+        """复用可读滤光片表示 / Return the same readable text as str(self)."""
         return self.__str__()
     
     def __mul__(self, other: Union[float, Quantity]) -> 'Magnitude':
-        """Support left multiplication: filter * magnitude (e.g., filter * 20.5)
-        
-        Examples
-        --------
-        >>> filt = FILTERS['Swift/UVOT.white']
-        >>> mag1 = filt * 20.5              # Creates Magnitude(20.5, filt, system='Vega')
-        >>> mag2 = filt * (22 * u.ABmag)    # Creates Magnitude(22.0, filt, system='AB')
-        """
+        """由滤光片乘星等创建对象 / Construct a Magnitude by multiplying a filter.
+
+        裸数按 Vega 星等解释；含 'mag' 的 Quantity 提取 value，并根据单位
+        名是否含 AB 选择 AB/Vega。不会执行光度单位等价转换，也不传递误差；
+        不含星等单位的 Quantity 抛 TypeError。返回新的 Magnitude。
+        Bare numbers imply Vega. A magnitude-like Quantity supplies its value;
+        a unit name containing AB selects AB, otherwise Vega. No logarithmic-unit
+        conversion or uncertainty transfer is performed. Other units raise TypeError.
+        Return a new Magnitude instance."""
         if isinstance(other, Quantity):
             # Handle astropy Quantity (e.g., Magnitude(22, filt) * u.ABmag)
             # Check if unit is magnitude-like
@@ -138,10 +145,10 @@ class FilterInfo:
             return Magnitude(float(other), self, system='Vega', error=None)
     
     def __rmul__(self, other: Union[float, Quantity]) -> 'Magnitude':
-        """Support right multiplication: magnitude * filter (e.g., 20.5 * filter)
+        """支持星等乘滤光片 / Delegate magnitude * filter to filter * magnitude.
         
-        This is called when the left operand doesn't support multiplication with FilterInfo.
-        """
+        行为、系统推断与错误条件同 __mul__。
+        Use the same system inference and error conditions as __mul__."""
         return self.__mul__(other)
 
 
@@ -165,7 +172,11 @@ class InstrumentFilterLibrary:
     filters: Dict[str, FilterInfo]
     
     def __getitem__(self, key: str) -> FilterInfo:
-        """Access filter by name."""
+        """按完整名称取滤光片 / Return a filter by its exact dictionary key.
+
+        大小写敏感；返回原 FilterInfo 引用，未知 key 抛 KeyError 并列出选项。
+        Case-sensitive lookup; return the original FilterInfo reference. Unknown keys
+        raise KeyError with available names."""
         if key not in self.filters:
             available = list(self.filters.keys())
             raise KeyError(
@@ -175,7 +186,12 @@ class InstrumentFilterLibrary:
         return self.filters[key]
     
     def __getattr__(self, name: str) -> FilterInfo:
-        """Access filter by attribute name (dot notation)."""
+        """按简短属性名取滤光片 / Look up a filter by its case-insensitive short name.
+
+        使用标识符最后一个点号后的部分匹配；多个匹配取首个。未找到抛
+        AttributeError；数据类字段使用正常属性读取。
+        Match the suffix after the last dot, ignoring case; the first match wins.
+        Unknown names raise AttributeError; dataclass fields use ordinary access."""
         # Avoid infinite recursion for dataclass attributes
         if name in ('telescope', 'instrument', 'filters'):
             return object.__getattribute__(self, name)
@@ -193,13 +209,18 @@ class InstrumentFilterLibrary:
         )
     
     def __str__(self):
+        """显示望远镜、仪器与数量 / Summarize telescope, instrument and filter count."""
         return f"{self.telescope}/{self.instrument} ({len(self.filters)} filters)"
     
     def __repr__(self):
+        """复用滤光片库的字符串表示 / Return the library's readable string form."""
         return self.__str__()
     
     def list_filters(self) -> list:
-        """List all available filters in this instrument."""
+        """列出完整滤光片名称 / List full filter keys in dictionary insertion order.
+
+        返回新列表，不复制滤光片对象。
+        Return a new list of names without copying filter objects."""
         return list(self.filters.keys())
 
 
@@ -207,10 +228,19 @@ class DotAccessor:
     """支持点号访问的包装器，允许 filters.swift.uvot.white 这样的访问方式"""
     
     def __init__(self, data: Dict):
+        """保存导航字典引用 / Store the navigation dictionary by reference.
+
+        不复制字典；后续原字典修改会反映到访问结果。
+        Do not copy data; later changes to that dictionary affect lookups."""
         self._data = data
     
     def __getattr__(self, name: str):
-        """支持点号访问"""
+        """大小写不敏感的层级访问 / Traverse keys case-insensitively by attribute.
+
+        字典值包装为新 DotAccessor；其他值返回原对象；首个匹配获选。
+        下划线开头名称走常规属性读取，未知名称抛 AttributeError。
+        Wrap nested dictionaries, otherwise return the original value; first match
+        wins. Underscore names use normal access. Missing names raise AttributeError."""
         if name.startswith('_'):
             return object.__getattribute__(self, name)
         
@@ -231,7 +261,10 @@ class DotAccessor:
         )
     
     def __getitem__(self, key: str):
-        """兼容方括号访问"""
+        """精确 key 的层级访问 / Traverse an exact, case-sensitive dictionary key.
+
+        字典结果包装为 DotAccessor；非字典结果直接返回。缺失 key 抛 KeyError。
+        Wrap dictionary results; return other values directly. Missing keys raise KeyError."""
         if key in self._data:
             value = self._data[key]
             if isinstance(value, dict):
@@ -240,13 +273,12 @@ class DotAccessor:
         raise KeyError(f"Key '{key}' not found in {list(self._data.keys())}")
     
     def __mul__(self, other: Union[float, Quantity]) -> 'Magnitude':
-        """Support multiplication for terminal FilterInfo
+        """仅在终端滤光片节点创建星等 / Multiply only a terminal filter node.
         
-        Examples
-        --------
-        >>> mag = filter.swift.uvot.white * 20.5
-        >>> mag = 22 * u.ABmag * filter.swift.uvot.white
-        """
+        当前字典须只有一个 FilterInfo 值，再转交其 __mul__；中间导航层
+        不能相乘，抛 TypeError。返回 Magnitude，不修改导航字典。
+        Require exactly one FilterInfo value and delegate to its __mul__. Intermediate
+        navigation levels raise TypeError. Return Magnitude without mutating navigation."""
         # Check if this is a terminal FilterInfo node
         # (DotAccessor should only wrap dicts or FilterInfo, not nested DotAccessor)
         if len(self._data) == 1:
@@ -260,7 +292,7 @@ class DotAccessor:
         )
     
     def __rmul__(self, other: Union[float, Quantity]) -> 'Magnitude':
-        """Support right multiplication: magnitude * filter"""
+        """支持反向终端乘法 / Delegate reverse multiplication to __mul__."""
         return self.__mul__(other)
 
 
@@ -310,20 +342,15 @@ class Magnitude:
                  filter_info: FilterInfo,
                  system: Literal['AB', 'Vega'] = 'Vega',
                  error: Union[None, float, Quantity] = None):
-        """
-        Initialize a Magnitude object.
-        
-        Parameters
-        ----------
-        magnitude : float or Quantity
-            The magnitude value
-        filter_info : FilterInfo
-            Filter properties
-        system : {'AB', 'Vega'}, optional
-            Photometric system (default: 'Vega')
-        error : float, Quantity, optional
-            Magnitude uncertainty
-        """
+        """保存星等、系统与可选误差 / Initialize a magnitude and its calibration.
+
+        magnitude/error 的裸数分别按星等和星等标准误差解释；Quantity 仅取
+        value，不校验或转换单位。filter_info 提供零点，system 精确为 AB/Vega；
+        非法系统由 get_zero_point 报错。误差仅保存，不校验正值或分布。
+        Bare magnitude/error mean magnitudes and magnitude standard error. Quantities
+        supply value without unit validation/conversion. filter_info supplies the zero
+        point; system must be AB/Vega. Invalid systems raise through get_zero_point.
+        Uncertainty is stored without positivity/distribution validation."""
         # Normalize magnitude to float value
         if isinstance(magnitude, Quantity):
             self.magnitude = magnitude.value
@@ -346,27 +373,19 @@ class Magnitude:
             self.error = None
     
     def to_fnu(self, unit: Union[str, u.Unit] = 'erg/(cm2 s Hz)') -> Quantity:
-        """
-        Convert magnitude to frequency flux density.
-        
-        The conversion uses: f_ν = ZP_ν × 10^(-m/2.5)
-        where ZP_ν is the zero-point for the specified photometric system.
-        
-        Parameters
-        ----------
-        unit : str or Unit, optional
-            Output unit (default: erg/(cm2 s Hz))
-        
-        Returns
-        -------
-        Quantity
-            Frequency flux density with uncertainty (if available)
-        
-        Notes
-        -----
-        The returned quantity represents the "effective" f_ν at the filter's 
-        pivot wavelength, suitable for multi-wavelength SED fitting.
-        """
+        """星等转频率通量密度 / Convert magnitude to frequency flux density.
+
+        计算 f_nu = zero_point * 10**(-magnitude/2.5)，再转换到 unit；默认
+        'erg/(cm2 s Hz)'。返回 Quantity。已有星等误差时，将一阶传播的
+        sigma_f = f_nu * ln(10)/2.5 * error 存为结果的 .error 属性。
+        Compute f_nu = zero_point * 10**(-magnitude/2.5) and convert to unit,
+        default 'erg/(cm2 s Hz)'. Return a Quantity. If magnitude error is supplied,
+        attach first-order sigma_f = f_nu * ln(10)/2.5 * error as its .error attribute.
+
+        使用滤光片零点校准，不积分源谱、滤光片透过率或校准不确定度；
+        不兼容的目标单位会由 Astropy 报错。
+        Use the filter zero-point calibration; no source-spectrum/bandpass integration
+        or calibration-error propagation. Incompatible units raise through Astropy."""
         # Calculate f_ν using the system-specific zero-point
         fnu_jy = self.zero_point * 10**(-self.magnitude / 2.5)
         
@@ -381,27 +400,17 @@ class Magnitude:
         return fnu
     
     def to_flam(self, unit: Union[str, u.Unit] = 'erg/(cm2 s Angstrom)') -> Quantity:
-        """
-        Convert magnitude to wavelength flux density.
-        
-        Uses the relation: f_λ = f_ν × c / λ_pivot²
-        (with energy conservation: λ_pivot² × f_λ = c × f_ν)
-        
-        Parameters
-        ----------
-        unit : str or Unit, optional
-            Output unit (default: erg/(cm2 s Angstrom))
-        
-        Returns
-        -------
-        Quantity
-            Wavelength flux density at pivot wavelength with uncertainty (if available)
-        
-        Notes
-        -----
-        This represents f_λ evaluated at the pivot wavelength λ_pivot,
-        not averaged over the filter bandpass.
-        """
+        """转为波长通量密度 / Convert to wavelength flux density at the pivot.
+
+        先调用 to_fnu，再计算 f_lambda = f_nu * c / lambda_pivot**2。
+        unit 默认 'erg/(cm2 s Angstrom)'，返回 Quantity；可选星等误差按
+        相同相对一阶误差保存到 .error。不考虑 pivot/零点的不确定度。
+        Call to_fnu, then f_lambda = f_nu * c / lambda_pivot**2. Default unit is
+        'erg/(cm2 s Angstrom)'. Return Quantity with optional first-order .error;
+        pivot/zero-point uncertainty is not propagated. No bandpass integration.
+
+        参考频率/波长谱密度单位换算 / Spectral-density conversion reference:
+        https://docs.astropy.org/en/stable/units/equivalencies.html#spectral-flux-density-equivalency"""
         # Get f_ν first
         fnu = self.to_fnu(unit='erg/(cm2 s Hz)')
         
@@ -417,28 +426,17 @@ class Magnitude:
         return flam
     
     def to_flux(self, unit: Union[str, u.Unit] = 'erg/(cm2 s)') -> Quantity:
-        """
-        Convert magnitude to integrated flux (flux within filter bandwidth).
-        
-        Calculation: F = f_λ × W_eff
-        where W_eff is the effective bandwidth (rectangular equivalent width)
-        
-        Parameters
-        ----------
-        unit : str or Unit, optional
-            Output unit (default: erg/(cm2 s))
-        
-        Returns
-        -------
-        Quantity
-            Integrated flux within the filter bandpass with uncertainty (if available)
-        
-        Notes
-        -----
-        This is the actual observed total flux from the source through the filter.
-        It's calculated by multiplying the wavelength flux density by the 
-        effective bandwidth (from the filter transmission curve).
-        """
+        """以有效带宽估算带内通量 / Estimate band flux using effective width.
+
+        计算 F = to_flam() * filter_info.weff，unit 默认 'erg/(cm2 s)'，
+        返回 Quantity；星等误差按一阶相对误差附在 .error。weff 须与波长
+        单位相容。此实现只做密度乘有效宽度，不对实际源谱与滤光片透过率
+        执行积分；因此不能作为任意源谱的精确带内总通量。
+        Compute F = to_flam() * filter_info.weff, default 'erg/(cm2 s)', returning
+        Quantity with optional first-order magnitude .error. Width must have wavelength
+        units. This is density times effective width, not an integral of a source SED
+        through transmission, so it does not give exact band flux for an arbitrary SED.
+        Zero-point, bandwidth and pivot uncertainties are not propagated."""
         # Get f_λ
         flam = self.to_flam(unit='erg/(cm2 s Angstrom)')
         
@@ -453,14 +451,19 @@ class Magnitude:
         return flux
     
     def to_Jy(self) -> Quantity:
-        """Convert to Jansky (frequency flux density)."""
+        """返回 Jy 频率通量密度 / Return to_fnu(unit='Jy') with the same error convention."""
         return self.to_fnu(unit='Jy')
     
     def __str__(self):
+        """显示星等、误差与系统 / Format magnitude, optional error, filter and system.
+
+        格式针对标量；数组星等可能无法用当前数值格式显示。
+        The numeric formatting is scalar-oriented; array magnitudes may not format."""
         error_str = f" ± {self.error:.2f} mag" if self.error is not None else ""
         return f"Magnitude({self.magnitude:.2f}{error_str}, {self.filter_info.name}, {self.system})"
     
     def __repr__(self):
+        """复用星等的可读字符串 / Return the same readable representation as str(self)."""
         return self.__str__()
 
 
@@ -795,50 +798,48 @@ def magnitude_to_flux(magnitude: Union[float, Quantity],
                       error: Union[None, float, Quantity] = None,
                       flux_type: Literal['fnu', 'flam', 'F'] = 'fnu',
                       unit: Union[str, u.Unit] = None) -> Quantity:
-    """
-    Convert magnitude to flux (convenient functional interface).
+    """星等到通量的函数入口 / Convert a magnitude using a named or supplied filter.
     
     Parameters
     ----------
     magnitude : float or Quantity
-        Magnitude value
+        星等值，Quantity 只取 value，不自动转换单位。
+        Magnitude value; Quantity supplies value without unit conversion.
     filter_info : FilterInfo or str
-        Filter properties, or name of predefined filter from FILTERS
-    system : {'AB', 'Vega'}, optional
-        Photometric system (default: 'Vega')
-    error : float, Quantity, optional
-        Magnitude uncertainty
-    flux_type : {'fnu', 'flam', 'F'}, optional
-        Type of flux to return:
-        - 'fnu': frequency flux density (default)
-        - 'flam': wavelength flux density
-        - 'F': integrated flux within bandwidth
-    unit : str or Unit, optional
-        Output unit. If None, uses sensible defaults:
-        - 'fnu': 'erg/(cm2 s Hz)'
-        - 'flam': 'erg/(cm2 s Angstrom)'
-        - 'F': 'erg/(cm2 s)'
+        滤光片对象或 FILTERS 中大小写敏感的完整名称。
+        Filter object or an exact case-sensitive full name in FILTERS.
+    system : {'AB', 'Vega'}
+        星等系统，默认 Vega / Photometric system; default Vega.
+    error : float, Quantity or None
+        可选星等标准误差；Quantity 只取 value。
+        Optional magnitude standard error; Quantity supplies value only.
+    flux_type : {'fnu', 'flam', 'F'}
+        分别为频率密度、pivot 处波长密度、有效带宽通量估计；默认 fnu。
+        Frequency density, pivot wavelength density, or effective-width band-flux
+        estimate; default fnu. F does not integrate an arbitrary source spectrum.
+    unit : str, Unit or None
+        输出单位，None 时分别为 erg/(cm2 s Hz)、erg/(cm2 s Angstrom)、
+        erg/(cm2 s)。须与选择的物理量相容。
+        Output unit, defaulting to those cgs units for the selected quantity.
     
     Returns
     -------
     Quantity
-        Converted flux value with uncertainty (if provided)
-    
-    Examples
-    --------
-    >>> from astropy import units as u
-    >>> from jinwu.core.units import magnitude_to_flux
-    >>> 
-    >>> # Using predefined filter with Vega system
-    >>> fnu = magnitude_to_flux(20.5, 'NOT/ALFOSC.Bes_R', system='Vega', error=0.1)
-    >>> 
-    >>> # Using AB system
-    >>> fnu_ab = magnitude_to_flux(20.5, 'NOT/ALFOSC.Bes_R', system='AB', error=0.1)
-    >>> 
-    >>> # Using custom FilterInfo
-    >>> filt = FilterInfo(...)
-    >>> flam = magnitude_to_flux(20.5, filt, system='Vega', flux_type='flam')
-    """
+        对应通量，若给 error 则 .error 含一阶传播误差。
+        Converted flux; supplied magnitude error becomes a first-order .error.
+
+    Raises
+    ------
+    ValueError
+        未知滤光片名称、星等系统或 flux_type；不兼容单位由 Astropy 报错。
+        Unknown filter, system or flux type; unit errors propagate from Astropy.
+
+    Notes
+    -----
+    复用 Magnitude 的转换，未传播零点、带宽和 pivot 的校准误差。
+    Delegate to Magnitude, without calibration-error propagation for zero point,
+    width or pivot. Filter metadata are stored locally; this function performs no
+    network query."""
     # Resolve filter
     if isinstance(filter_info, str):
         if filter_info not in FILTERS:

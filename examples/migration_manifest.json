@@ -1,0 +1,143 @@
+[
+  {
+    "source": "test/prepare_backscal.ipynb",
+    "destination": "examples/spectra/prepare_backscal.ipynb",
+    "script": "examples/spectra/prepare_backscal.py",
+    "status": "legacy_external_dependency",
+    "note": "依赖旧 autohea API；会写入指定谱目录，未重跑 / Uses legacy autohea and writes spectra; not rerun",
+    "source_sha256": "b491b851f9dd93d9a6d70bc7e49f6aab45b5ab0992462e90b79ad60ecdf5198b",
+    "historical_errors": 0,
+    "destination_sha256": "3d45abc03eabfb90f8a7cae255de7d87dab36c5713a953e37bdfe51b22fab9fe",
+    "script_sha256": "1a18dcf1d923cf13b032c73780bebe657ac81ee9cbf96f02de235e104e3c0c31"
+  },
+  {
+    "source": "test/teldef_test.ipynb",
+    "destination": "examples/coordinates/teldef.ipynb",
+    "script": "examples/coordinates/teldef.py",
+    "status": "needs_review",
+    "note": "脚本运行完成，但坐标往返不一致 / Script completed but coordinate round trip disagreed",
+    "source_sha256": "d8f2694f11ac53b65ec749bfe13125d167a53f80980a6ed4969651e06b931e29",
+    "historical_errors": 0,
+    "destination_sha256": "093ed738bc9890258874b07a0812230ba2830ca1b201223123a5efe58c446669",
+    "script_sha256": "0267c05c0aed5b4d44794571e9352c5598f2cb596ae4f04adb8f89990ac1f7d2"
+  },
+  {
+    "source": "test/test_instrument_io.ipynb",
+    "destination": "examples/io/instrument_scan.ipynb",
+    "script": "examples/io/instrument_scan.py",
+    "status": "data_required",
+    "note": "需要外部观测目录 / Requires an external observation directory",
+    "source_sha256": "f45c13eaa33b719e76340b962e81f3f1ab4d9feef8658dd00cb9eda2c6919276",
+    "historical_errors": 0,
+    "destination_sha256": "358899c716bd9b8fb5e8b1c2210dcf002a2654f3e2234c003be86b4ffcc120f2",
+    "script_sha256": "21ad2ca5d3d9d6220509c322c96317112fe622de8cb5591ebd1bd6bd1d98d839"
+  },
+  {
+    "source": "test/test_io.ipynb",
+    "destination": "examples/io/read_lightcurve.ipynb",
+    "script": "examples/io/read_lightcurve.py",
+    "status": "data_required",
+    "note": "需要 EP250111a 光变文件 / Requires an EP250111a light-curve file",
+    "source_sha256": "f2f8425e224936929087534a723c5206f2f2f86f0208471e5cadcd6feeb74cf6",
+    "historical_errors": 0,
+    "destination_sha256": "f4e651c1d0de0e60262a7855a1c8c465b0464bb57e3784bd70ca002785ae097a",
+    "script_sha256": "1d840f09bdbf8aab05e004cf849c62db2479df0d7b65267408fae3fdaa43c2f6"
+  },
+  {
+    "source": "test/test_lightcurve.ipynb",
+    "destination": "examples/lightcurves/ep250615a.ipynb",
+    "script": "examples/lightcurves/ep250615a.py",
+    "status": "legacy_analysis",
+    "note": "真实观测分析记录，旧字段和时间约定尚未重审 / Historical analysis; field and time contracts need review",
+    "source_sha256": "6673a1726a5b0888a131d00d90dd43d3c1c389cbe8efc1feb2950b068e565c35",
+    "historical_errors": 0,
+    "destination_sha256": "5d752a1ee5e7fdf1fb994366fb0cb94b355d8e53487c944d7ef6c6f2ea82b379",
+    "script_sha256": "c014f5d8d9e7c3aee4de50960f64b123ccaff92fba1955978095c67981cd489e"
+  },
+  {
+    "source": "test/test_time.ipynb",
+    "destination": "examples/time/mission_time_exploration.ipynb",
+    "script": "examples/time/mission_time_exploration.py",
+    "status": "legacy_exploration",
+    "note": "包含非法闰秒日期和可选 swiftbat 依赖 / Includes an invalid leap-second date and optional swiftbat dependency",
+    "source_sha256": "376ed461dc55e057bb3a3db70f8468ab38580f48184bcfc2b762d9e590303aae",
+    "historical_errors": 0,
+    "destination_sha256": "cbafdaa3e19b67bab4ae41912e99c6e681fe9acd0f1c5e54ae26209617438d9c",
+    "script_sha256": "bc71ad12d119badaa0d36c9ae7faf0fc856a0883ef4f3a32f7ff72a9bfb62fdd"
+  },
+  {
+    "source": "test/test_txx_ep260119a.ipynb",
+    "destination": "examples/durations/ep260119a_exploration.ipynb",
+    "script": "examples/durations/ep260119a_exploration.py",
+    "status": "legacy_analysis",
+    "note": "保留原报错和探索内容；部分单元依赖缺失变量 / Preserves errors/exploration; some cells use undefined variables",
+    "source_sha256": "a2a5b93addfa348a583fd2d92be0d1043d00edf6fad4f0f0f9cd34254993122d",
+    "historical_errors": 1,
+    "destination_sha256": "ccfd6dc2ba6833ef61b780fcd6fbe9359c88284f9e800bc04c21fe08979d75ba",
+    "script_sha256": "13ef2a79990bc7f6dd39ad1a862f950dad3b65a4945d548ca9131f3e4899fead"
+  },
+  {
+    "source": "test/test_wxtpipeline.ipynb",
+    "destination": "examples/wxt/pointing_pipeline.ipynb",
+    "script": "examples/wxt/pointing_pipeline.py",
+    "status": "data_required",
+    "note": "完整流程依赖观测数据与外部工具；未重跑 / Full workflow requires data/tools; not rerun",
+    "source_sha256": "d56ddc59629d85afefd70ae8b12727902d8429320cedaf2a1a101df88ff4c870",
+    "historical_errors": 0,
+    "destination_sha256": "7a4114adeefd8154f53319e383a045dd951e218758758dda65c0bc673cc9d543",
+    "script_sha256": "179958d0b6ecf7b6b1d2adc55e0734512593d9a27e533de65bef45326a38e25a"
+  },
+  {
+    "source": "test/test_xselect.ipynb",
+    "destination": "examples/events/xselect.ipynb",
+    "script": "examples/events/xselect.py",
+    "status": "data_required",
+    "note": "需要事件、源和背景文件以及 XSELECT / Requires event/source/background files and XSELECT",
+    "source_sha256": "0ce4cf8536a31d09123adca630c4e27d5875298b44d6583b4f0e89a2ce894835",
+    "historical_errors": 0,
+    "destination_sha256": "9f6a5f72bced1c86491b6b293a791ae152121cc5761d767a32f8bd7fda36df8a",
+    "script_sha256": "6bee3b678755a03ad7855a5c24568987e847bf45d910b0b74a9bdb44ca6197b6"
+  },
+  {
+    "source": "test/test_fit.ipynb",
+    "destination": "examples/drafts/lightcurve_fit_imports.ipynb",
+    "script": "examples/drafts/lightcurve_fit_imports.py",
+    "status": "draft",
+    "note": "仅导入语句，尚不是完整教程 / Import-only draft, not a complete tutorial",
+    "source_sha256": "648b81ca910a45c9a3664e685cbeaad1626df534e0ddc0c6cb6157a06d5cbf80",
+    "historical_errors": 0,
+    "destination_sha256": "1ed5e6bc57bf88874ce025a589f123a981dc640d227c773702abcf07874ee53c",
+    "script_sha256": "f867b77a9380ed073d7441aa298e33c5c0321d4d5a2f07591f094bdbf6139ddf"
+  },
+  {
+    "source": "test/test_model.ipynb",
+    "destination": "examples/drafts/elisa_model_imports.ipynb",
+    "script": "examples/drafts/elisa_model_imports.py",
+    "status": "draft",
+    "note": "仅 ELISA 导入，保留原报错 / ELISA import-only draft with original error",
+    "source_sha256": "00f48ee5e6addba5d0e73554e0f53f393444e295125305278275cb8b54c3b3f9",
+    "historical_errors": 1,
+    "destination_sha256": "8ab165a325ec0388b7d6378d4b48e7f8b502bc8639971ce369da93002970dc9b",
+    "script_sha256": "3a55242bd7bfcd95839aeccfa0ba0f6bce9601545bab90a8df163f2639e41ff9"
+  },
+  {
+    "source": "test/FITTING_GUIDE.md",
+    "destination": "examples/fitting/FITTING_GUIDE.md",
+    "status": "legacy_guide",
+    "source_sha256": "28e3e56b043309c524ddb20242728f8d1791519250f8d22890ecb982c6159a1e",
+    "destination_sha256": "13f21b5f3e1f861fc9ea3847b45996bc24c38f4a4bd913a4274bbbb2f8af2274"
+  },
+  {
+    "source": "test/LIGHTCURVE_DATA_REFACTOR_GUIDE.md",
+    "destination": "examples/lightcurves/LIGHTCURVE_DATA_REFACTOR_GUIDE.md",
+    "status": "legacy_guide",
+    "source_sha256": "b113e3f920611f9247e4e1dd4f159443ab1c1a02873506a6bf3d654608ce71c1",
+    "destination_sha256": "4f557365b91bbb19a5a5b405f56904fa05b212065f713d7b1a7b5d3fcc1e6da1"
+  },
+  {
+    "source": "test/teldef_porting_notebook.ipynb",
+    "destination": null,
+    "status": "deleted_empty",
+    "source_sha256": "9309e50d839e2ef0462015687d5d4b549e0d574d60fc36b5f7df1d7ebdaf36c1"
+  }
+]

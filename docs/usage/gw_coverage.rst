@@ -1,5 +1,8 @@
-GW localization and coverage plots
-==================================
+GW 定位图与覆盖
+===============
+
+从 LVK notice、GraceDB 或本地 HEALPix FITS 创建定位图和可追溯的覆盖报告。
+可合并时间标记的 EP / BAT footprint 与 GBM 几何；覆盖概率不是谱上限或实际检测效率。
 
 The optional ``jinwu-gw`` distribution creates a reproducible static report
 from an LVK notice or a local HEALPix map.  It uses the GBM position-history

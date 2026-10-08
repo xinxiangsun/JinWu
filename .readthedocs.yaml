@@ -7,14 +7,15 @@ build:
 
 sphinx:
   configuration: docs/conf.py
-  fail_on_warning: false
+  fail_on_warning: true
 
 # Monorepo: the distributions live under packages/ (the repo root itself is
 # NOT installable — no [project] table).  docs/api.rst references modules from
-# all four Python distributions, so install each of them; the docs extra on
+# all five Python distributions, so install each of them; the docs extra on
 # the core package provides Sphinx and the theme.
 python:
   install:
+    - requirements: docs/requirements.txt
     - method: pip
       path: packages/jinwu
       extra_requirements:
@@ -25,7 +26,7 @@ python:
       path: packages/jinwu-fermi
     - method: pip
       path: packages/jinwu-swift
-    # jinwu.gw is referenced by docs/api.rst (automodapi); without the package
+    # jinwu.gw is included in the generated module reference; without the package
     # RTD would either fail to import it or document MagicMock shims.
     - method: pip
       path: packages/jinwu-gw

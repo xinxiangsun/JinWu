@@ -1,5 +1,11 @@
 # jinwu-fermi
 
+GBM Haar MVT 已加入 `jinwu.fermi.gbm.mvt`，可直接处理均匀计数光变或独立运行
+真实 TTE 流程：`python -m jinwu.fermi.gbm.mvt --help`。计算核心固定为
+`GBM_MVT_paper@57e7a0f`，保存原始返回、中间量和所有抽样状态。
+用法、许可来源与验收范围见仓库的 `docs/usage/gbm_mvt.rst` 和
+`reviews/gbm-mvt-migration.md`。
+
 Fermi/GBM instrument support for the
 [jinwu](https://pypi.org/project/jinwu/) analysis toolkit: continuous GBM
 coverage checks, detector selection, TTE spectral product extraction and

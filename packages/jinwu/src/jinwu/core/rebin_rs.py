@@ -32,27 +32,62 @@ def rebin_lightcurve_rs(
     align_ref: Optional[float] = None,
     empty_bin: Literal["zero", "nan"] = "zero",
 ) -> "LightcurveData":
-    """Rebin a LightcurveData using the Rust-accelerated engine.
+    """用 Rust 重分箱一维光变 / Rebin a one-dimensional lightcurve with Rust.
 
-    Numerically identical to `ops.rebin_lightcurve()`, but the core
-    double-loop aggregation runs in compiled Rust.
+    复用 Python 层的 bin 几何与曝光解析，把重叠累加交给 jinwurs。
+    数值等价性取决于两种后端的具体版本与输入，应以对应回归为准。
+    Reuse Python geometry/exposure helpers and delegate overlap accumulation
+    to jinwurs. Numerical equivalence depends on backend versions and inputs;
+    establish it with the corresponding regression comparisons.
 
     Parameters
     ----------
     lc : LightcurveData
-        Input lightcurve.
+        一维光变，counts 或 counts/s 由 is_rate 决定；多能段须先切片。
+        One-dimensional counts or counts/s according to is_rate; slice bands
+        first. Input time reference is preserved, not transformed.
     binsize : float
-        Desired new-bin width in seconds.
+        目标正 bin 宽，单位与时间相同，通常秒；小于最大原 bin 宽时
+        自动提升到该宽度，本入口不会细分到更短的目标宽度。
+        Desired positive width in the time unit, usually seconds; raised to
+        the maximum original width if smaller. This entry does not refine bins.
     method : {'auto', 'sum', 'mean'}
-        Aggregation method.
+        auto 对 rate 用 mean，对 counts 用 sum；sum 输出计数，mean
+        输出计数除以曝光，非直接对输入数值求算术平均。
+        Auto uses mean for rates and sum for counts. Sum returns counts;
+        mean divides accumulated counts by exposure, not an arithmetic mean.
     align_ref : float or None
-        Left-edge alignment reference time.
+        新网格左边缘参考，时间单位/零点同 lc；None 使用最早原左边缘。
+        Left-edge reference in the same unit/zero point; None uses the first
+        original left edge. A supplied reference controls the covered grid.
     empty_bin : {'zero', 'nan'}
-        How to fill bins with zero exposure.
+        零曝光分箱的值/误差填充策略，传递给 Rust finalize。
+        Value/error filling for zero-exposure bins, passed to Rust finalize.
 
     Returns
     -------
     LightcurveData
+        新的均匀网格对象，保留来源元数据，设置 bin 边界及计数或率字段。
+        显式 bin_exposure 存在时按重叠传播，否则 mean 用目标 bin 宽归一化。
+        New uniform-grid object with source metadata, bin edges and counts/rate
+        fields. Explicit bin exposure is propagated; otherwise mean uses target
+        bin width as its denominator. Source arrays are not modified.
+
+    Raises
+    ------
+    ImportError, NotImplementedError
+        缺少 jinwurs，或输入为多能段数组；不会自动回退到 Python 后端。
+        Missing jinwurs or multi-band input; no automatic Python fallback.
+
+    Notes
+    -----
+    旧计数按 overlap/old_width 分配，方差按独立输入的线性传播累加。
+    缺失误差时使用 sqrt(max(counts, 0))。同一旧 bin 的分数拆分可使
+    输出 bin 相关；本结果未返回协方差矩阵，也未重新生成 Poisson 事件。
+    Allocate old counts by overlap/old_width and add linearly propagated
+    independent-input variances. Missing errors use sqrt(max(counts, 0)).
+    Fractional splitting can correlate outputs; no covariance matrix or newly
+    sampled Poisson events is produced.
     """
     if not _HAS_RUST:
         raise ImportError(

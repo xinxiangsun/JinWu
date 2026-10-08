@@ -103,7 +103,10 @@ class BackgroundScalingConfig:
 
 @dataclass(frozen=True, slots=True)
 class DurationConfig:
-    """T100/T90/T50 defaults for event-based duration estimation."""
+    """T100/T90/T50 defaults; nmc is full-observation bootstrap diagnostics.
+
+    Principal statistical errors follow Koshut (1996), not bootstrap quantiles.
+    """
 
     p0: float = 0.05
     block_snr_threshold: float = 3.0

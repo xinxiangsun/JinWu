@@ -1,9 +1,8 @@
-"""Guard: workflow-referenced test files and Sphinx toctree entries must be tracked.
+"""Guard workflow tests and documentation inputs in a clean checkout.
 
 Background
 ----------
-``test/*`` is ignored via .gitignore with an explicit per-file allow-list, so a
-new test module silently stays untracked unless it is force-added.  CI and the
+Local test trees are ignored; existing tracked tests remain in the index. CI and the
 publish wheel-gate can only see tracked files; ``docs/index.rst`` toctree
 entries that point at untracked files vanish from a fresh checkout and break
 the Read the Docs build.
@@ -12,21 +11,22 @@ This script fails (exit 1) when any of the following holds:
 
 1. a ``test/*.py`` / ``packages/*/tests/*.py`` path referenced by any
    ``.github/workflows/*.yml`` command line is missing from the git index;
-2. any ``.. toctree::`` entry under ``docs/`` has no corresponding
-   git-tracked source file.
+2. a toctree entry has neither a tracked source nor a reproducible generated
+   API page backed by the tracked generator and tracked module source.
 
-Run locally (not wired into CI yet — enabling in CI requires committing or
-removing the currently untracked ``docs/usage/gbm_subthreshold.rst`` and the
-two orphan usage pages; see the codex/beta review report, findings R4/R5/R7)::
+Run locally; API pages are regenerated under the ignored docs/api directory::
 
     python scripts/check_tracked_assets.py
 """
 from __future__ import annotations
 
 import re
+import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -76,6 +76,20 @@ def toctree_entries() -> list[str]:
 def main() -> int:
     tracked = tracked_files()
     problems: list[str] = []
+    generated: set[str] = set()
+    generator = "docs/_ext/jinwu_docs.py"
+    if generator in tracked:
+        spec = importlib.util.spec_from_file_location("jinwu_docs", ROOT / generator)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.generate_api_pages(SimpleNamespace(srcdir=str(ROOT / "docs")))
+        inventory = json.loads((ROOT / "docs/api/inventory.json").read_text())
+        generated.add("docs/api/modules.rst")
+        for row in inventory["modules"]:
+            if row["source"] in tracked:
+                generated.add(f"docs/api/module-{row['module']}.rst")
+            else:
+                problems.append(f"generated API module source is untracked: {row['source']}")
 
     for ref in workflow_test_paths():
         _, path = ref.split(": ", 1)
@@ -92,7 +106,7 @@ def main() -> int:
             docs_dir / f"{entry}.md",
             docs_dir / entry,
         ]
-        if any(str(c) in tracked for c in candidates):
+        if any(str(c.resolve().relative_to(ROOT)) in tracked | generated for c in candidates):
             continue
         problems.append(f"toctree 条目缺少被跟踪的文档源: {ref}")
 

@@ -1,14 +1,14 @@
 {% set name = "jinwu" %}
-{% set version = "0.2.1" %}
+{% set version = "0.2.2" %}
 {% set python_min = "3.11" %}
 
 package:
   name: {{ name|lower }}
-  version: "{{ version }}"
+  version: "0.2.2"
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
-  sha256: 8f7794557061b940fcee6d62a764791f2193fa35aebfdc79db0b766fa7dbc90c
+  sha256: 9e58d31cb024bedf4b099d4ae3d7ed232213465418bbcaba16c0beee48a7595c
 
 build:
   noarch: python

@@ -2079,7 +2079,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         stop = float(duration.get("t90_tstop", math.nan))
         if not np.isfinite(start) or not np.isfinite(stop) or stop <= start:
             raise RuntimeError("Txx did not produce a finite positive T90 interval")
-        duration["negative_net_policy"] = "clip_to_zero"
+        duration.setdefault("negative_net_policy", "signed")
         duration["evt_binsize"] = cfg.event_binsize_s
         duration["diagnostic_min_t100_bins"] = cfg.diagnostic_min_t100_bins
         duration["focus_t100"] = cfg.focus_t100

@@ -24,6 +24,8 @@ def make_search_windows(config, gti):
     lo, hi = seconds(config.search_interval)
     base = float(seconds(config.min_step))
     dmin, dmax = float(seconds(config.min_duration)), float(seconds(config.max_duration))
+    if dmax < dmin:
+        raise ValueError("max_duration must be >= min_duration")
     windows = []
     for duration in dmin * 2.**np.arange(round(np.log2(dmax / dmin)) + 1):
         step_bins = max(1, round(duration / config.num_steps / base))
@@ -63,21 +65,33 @@ def evaluate_search_likelihood(counts, background, background_variance, response
     return like
 
 
-def spatial_prior_weights(grid_icrs, visible, *, position=None, map_vectors=None, map_probability=None):
+def spatial_prior_weights(grid_icrs, visible, *, position=None, map_vectors=None, map_probability=None,
+                          position_visible=None):
     """Map an external prior onto native grid cells, retaining occulted mass.
 
     Returns normalized visible weights, visible probability and position-grid
     offset in degrees (NaN for maps). Pixel probabilities already include
     pixel area; depositing their mass avoids losing a narrow localization
     between response-grid points. Zero visible probability returns zeros.
+
+    For a point position, `position_visible` is the measured-frame visibility
+    of the position itself. A visible point is deposited on the nearest visible
+    response cell, whereas an occulted point retains zero visible mass.
     """
     visible = np.asarray(visible, bool)
+    if position_visible is not None:
+        visibility = np.asarray(position_visible)
+        if visibility.shape != ():
+            raise ValueError("position_visible must be a scalar boolean")
+        position_visible = bool(visibility)
     vectors = grid_icrs.cartesian.xyz.value.T
     if position is not None:
         separation = grid_icrs.separation(position).to_value(u.deg)
-        index = int(np.argmin(separation))
+        candidates = np.flatnonzero(visible) if position_visible is True else np.arange(len(visible))
+        index = int(candidates[np.argmin(separation[candidates])]) if candidates.size else int(np.argmin(separation))
         weights = np.zeros(len(visible))
-        weights[index] = 1.
+        if position_visible is not False:
+            weights[index] = 1.
         offset = float(separation[index])
     elif map_vectors is not None:
         probability = np.asarray(map_probability, float)
@@ -229,10 +243,11 @@ def run_search_grid(prepared, history, template_root, trigger_time, config, *, p
             like, visible, exp, pe = evaluate_prepared_window(prepared, response, grid, start, duration,
                                                             sums=(countsum, expsum))
             coords = SkyCoord(grid.radians[0], np.pi / 2 - grid.radians[1], frame=response.frame, unit="rad").icrs
-            weights, mass, offset = spatial_prior_weights(coords, visible, position=position,
-                                                           map_vectors=map_vectors, map_probability=map_probability)
-            if position is not None and not bool(np.asarray(response.frame.location_visible(position)).all()):
-                weights, mass = weights * 0, 0.
+            position_visible = (bool(np.asarray(response.frame.location_visible(position)).all())
+                                if position is not None else None)
+            weights, mass, offset = spatial_prior_weights(
+                coords, visible, position=position, map_vectors=map_vectors,
+                map_probability=map_probability, position_visible=position_visible)
             prior_score = float(logsumexp(like.llr[:, weights > 0] + np.log(weights[weights > 0])[None, :])
                                 - np.log(len(TEMPLATES))) if mass > 0 else np.nan
             point = coords[visible][like._max_idx[1]]

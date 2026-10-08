@@ -42,16 +42,36 @@ class RegionAreaSet:
 
     @property
     def src_area(self) -> Optional[float]:
+        """求已知源区域面积之和 / Sum the known source-region areas.
+
+        忽略 area=None；无可用面积时返回 None。单位沿用区域定义，
+        本属性不执行几何合并或单位换算，重叠区域会直接重复累加。
+        Ignore None areas and return None when none are known. Units follow
+        the region definitions; no union or conversion is applied to overlaps.
+        """
         vals = [d.area for d in self.src if d.area is not None]
         return float(sum(vals)) if vals else None
 
     @property
     def bkg_area(self) -> Optional[float]:
+        """求已知背景区域面积之和 / Sum the known background-region areas.
+
+        忽略未知面积；无已知值返回 None。须由调用者统一面积单位并处理重叠。
+        Ignore missing areas; return None if all are unknown. The caller ensures
+        consistent area units and handles overlapping regions.
+        """
         vals = [d.area for d in self.bkg if d.area is not None]
         return float(sum(vals)) if vals else None
 
     @classmethod
     def from_regions(cls, regions: list[RegionArea] | None) -> 'RegionAreaSet':
+        """按区域角色分类 / Partition region records by source/background role.
+
+        返回新容器，保留原 RegionArea 对象引用；未知角色归入 unk。
+        None 或空列表返回空容器，不计算面积。
+        Return a new container referencing the original records; unrecognized
+        roles go to unk. Missing/empty input gives empty lists; no area calculation.
+        """
         inst = cls()
         if not regions:
             return inst

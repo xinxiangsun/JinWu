@@ -1136,6 +1136,63 @@ def test_calibration_config_change_invalidates_spectrum_stage(tmp_path, monkeypa
     assert first != second
 
 
+def test_caldb_hash_failure_aborts_fingerprint_instead_of_returning_partial(tmp_path, monkeypatch):
+    caldb = tmp_path / "caldb"
+    caldb.mkdir()
+    (caldb / "a.fits").write_bytes(b"first")
+    (caldb / "b.fits").write_bytes(b"second")
+    monkeypatch.setenv("CALDB", str(caldb))
+    pipeline = BATSurveyPipeline(
+        BATSurveyInput(target_id="caldb-hash-failure", root=tmp_path, output_root=tmp_path / "output")
+    )
+    original = survey_module._file_fingerprint
+
+    def fail_on_second_file(path):
+        if Path(path).name == "b.fits":
+            raise PermissionError("injected CALDB read failure")
+        return original(path)
+
+    monkeypatch.setattr(survey_module, "_file_fingerprint", fail_on_second_file)
+    with pytest.raises(RuntimeError, match="incomplete fingerprint") as exc_info:
+        pipeline._stage_input_fingerprint(PipelineStage("spectra"))
+    assert isinstance(exc_info.value.__cause__, PermissionError)
+
+
+def test_caldb_tree_walk_failure_aborts_fingerprint(tmp_path, monkeypatch):
+    caldb = tmp_path / "caldb"
+    caldb.mkdir()
+    (caldb / "calibration.fits").write_bytes(b"calibration")
+    monkeypatch.setenv("CALDB", str(caldb))
+    pipeline = BATSurveyPipeline(
+        BATSurveyInput(target_id="caldb-walk-failure", root=tmp_path, output_root=tmp_path / "output")
+    )
+
+    def failing_walk(path, onerror=None):
+        if onerror is not None:
+            onerror(PermissionError("injected CALDB traversal failure"))
+        yield str(path), [], []
+
+    monkeypatch.setattr(survey_module.os, "walk", failing_walk)
+    with pytest.raises(RuntimeError, match="incomplete fingerprint") as exc_info:
+        pipeline._stage_input_fingerprint(PipelineStage("spectra"))
+    assert isinstance(exc_info.value.__cause__, PermissionError)
+
+
+def test_remote_caldb_url_keeps_generic_fingerprint_without_tree_walk(tmp_path, monkeypatch):
+    monkeypatch.setenv("CALDB", "https://heasarc.gsfc.nasa.gov/FTP/caldb")
+    pipeline = BATSurveyPipeline(
+        BATSurveyInput(target_id="remote-caldb", root=tmp_path, output_root=tmp_path / "output")
+    )
+
+    def unexpected_walk(*args, **kwargs):
+        raise AssertionError("remote CALDB URL must not be treated as a local tree")
+
+    monkeypatch.setattr(survey_module.os, "walk", unexpected_walk)
+    assert pipeline._stage_input_fingerprint(PipelineStage("spectra")) == super(
+        BATSurveyPipeline, pipeline
+    )._stage_input_fingerprint(PipelineStage("spectra"))
+
+
 def test_mosaic_detection_uses_its_own_source_catalog(tmp_path):
     catalog = tmp_path / "sources_tot.cat"
     columns = [

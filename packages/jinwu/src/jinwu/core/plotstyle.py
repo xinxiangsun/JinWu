@@ -80,7 +80,11 @@ _STYLE_APPLIED = False
 
 
 def _available_cjk_fonts() -> list[str]:
-    """在已安装字体中筛选可用的中文字体（静默失败）。"""
+    """筛选可用中文字体 / Find installed CJK fonts in preference order.
+
+    查询 Matplotlib 字体缓存；失败返回空列表，不安装或下载字体。
+    Inspect Matplotlib's font cache; return [] on failure, without installing fonts.
+    """
     try:
         from matplotlib import font_manager
 
@@ -91,7 +95,13 @@ def _available_cjk_fonts() -> list[str]:
 
 
 def apply_style() -> None:
-    """应用 jinwu 统一 rcParams（每个进程只应用一次，幂等）。"""
+    """应用统一绘图样式 / Apply shared Matplotlib rcParams once per process.
+
+    原位修改全局 rcParams，并设置 _STYLE_APPLIED；无返回值。后续调用
+    直接返回，即使调用者已自行改变 rcParams，也不会重新覆盖。
+    Mutate global rcParams and set _STYLE_APPLIED; return None. Later calls
+    are no-ops, even if a caller has subsequently changed the style settings.
+    """
     global _STYLE_APPLIED
     if _STYLE_APPLIED:
         return
@@ -146,6 +156,14 @@ def save_figure(
 
     这是全库唯一的图片保存入口：统一 dpi、统一 bbox 处理，
     替代原先 savefig(dpi=150)/savefig(density=300) 等各自为政的调用。
+
+    Save fig in one or more formats and return {normalized_format: Path}.
+    base's final suffix is replaced; create parent directories, apply dpi and
+    tight bounding boxes, and allow Matplotlib to overwrite existing files.
+    This does not close the figure or apply_style(). Invalid formats/I/O errors
+    propagate. dpi primarily controls raster output; vector formats keep vectors.
+    base 的末尾扩展名会被替换；创建父目录、允许覆盖既有图，不关闭 figure。
+    dpi 主要控制栅格化输出；格式或 I/O 错误向上传递。
     """
     if isinstance(formats, str):
         formats = (formats,)
@@ -161,7 +179,15 @@ def save_figure(
 
 
 def format_log_axis(ax, axis: str = "x") -> None:
-    """让对数轴在小跨度下显示普通数字而非 ``2×10⁰`` 这类刻度标签。"""
+    """设置小跨度对数轴标签 / Format narrow logarithmic axes with plain numbers.
+
+    axis='x' 操作 x 轴，其他值操作 y 轴；设置 LogLocator，跨度不足一个
+    decade 时使用普通数值标签。注册 draw_event 回调以在重绘后更新，
+    不负责设置轴的 log scale；重复调用会注册额外回调，返回 None。
+    axis='x' selects x; any other value selects y. Set LogLocator and use plain
+    labels below one decade. Register a redraw callback; do not set log scale.
+    Repeated calls add callbacks. Modify the Axes and return None.
+    """
     import matplotlib.ticker as mticker
     import numpy as np
 
@@ -171,9 +197,15 @@ def format_log_axis(ax, axis: str = "x") -> None:
         locator = ax.yaxis
 
     def _plain(value, _pos):
+        """忽略刻度位置并格式化数值 / Format a tick value, ignoring its position."""
         return f"{value:g}"
 
     def _apply():
+        """按当前正数范围更新标签 / Update labels for the current positive limits.
+
+        无效范围静默跳过；宽范围时保留已有 formatter。
+        Skip invalid limits silently; keep existing formatters for wider spans.
+        """
         try:
             lo, hi = (ax.get_xlim() if axis == "x" else ax.get_ylim())
         except TypeError:  # 空轴
@@ -190,4 +222,3 @@ def format_log_axis(ax, axis: str = "x") -> None:
     _apply()
     # 绘制完成后（autoscale 生效）再校准一次
     ax.figure.canvas.mpl_connect("draw_event", lambda _event: _apply())
-

@@ -171,9 +171,9 @@ class GBMObservation:
         self.poshist_filepath = glob(str(self.datadir / f'glg_poshist_all_{yr_short}{self.month}{self.day}_v*.fit'))
         if not self.poshist_filepath:
             raise FileNotFoundError("Poshist file not found. 未找到 Poshist 文件。")
-        poshist = GbmPosHist.open(self.poshist_filepath[0])
-        self.frame = poshist.get_spacecraft_frame()
-        self.states = poshist.get_spacecraft_states()
+        with GbmPosHist.open(self.poshist_filepath[0]) as poshist:
+            self.frame = poshist.get_spacecraft_frame()
+            self.states = poshist.get_spacecraft_states()
         self.one_frame = self.frame.at(self.srctime)
         self.visiblecheck = self.check_visibility()
         self.gticheck = self.check_gti()
@@ -251,10 +251,10 @@ class GBMObservation:
         """Check if the source is within Fermi's field of view.
         检查源是否在 Fermi 的视野范围内。
         """
-        poshist = GbmPosHist.open(self.poshist_filepath[0])
-        frame = poshist.get_spacecraft_frame()
-        one_frame = frame.at(self.srctime)
-        return one_frame.location_visible(self.coord)
+        with GbmPosHist.open(self.poshist_filepath[0]) as poshist:
+            frame = poshist.get_spacecraft_frame()
+            one_frame = frame.at(self.srctime)
+            return one_frame.location_visible(self.coord)
 
     def check_gti(self):
         """Check if the source is within the GTI range.

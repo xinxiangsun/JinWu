@@ -1,5 +1,19 @@
 Changelog
-=========
+============
+
+v0.2.2 (2026-10-08)
+-------------------
+
+* 重建用户文档、导航、API 索引与严格 Read the Docs 构建配置。
+* 引入有符号净计数 T90、计数实验 SNR 与 GBM Haar MVT 工作流，记录来源、
+  条件性误差及测量/上限/失败状态。
+* 修正光变拟合失败状态、非法误差权重、XSPEC profile 的实数 delta 语法，
+  并在 BXA flux-chain 后恢复最佳拟合状态。
+* 修正 Swift Burst Analyser ECF 列与背景触发时间变量覆盖、源/背景 bin 对齐、
+  稀疏 RMF 通道子集映射、事件筛选优先级、TELDEF 正逆变换和模拟背景双计。
+* 迁移注意：非法拟合误差和不可对齐的背景网格现在抛出明确异常；调用方须提供
+  正确误差、统一时间基准与相合 bin。NPZ 模拟默认从 ON/OFF 提取净源模板。
+* 版本号同步到五个 Python 包与可选 Rust 包；源码版本更新不表示已上传 PyPI。
 
 v0.2.1 (2026-09-26)
 -------------------
@@ -56,12 +70,9 @@ Breaking changes
   groups flagged ``QUALITY=2`` (``grouping::loadMin``) instead of good data;
   ``rebin_rmf`` (ftrbnrmf) divides merged energy rows by the merged row
   count for REDIST-type responses (``rmf::rebinEnergies``).
-* Release gating fix: the three offline gate test files referenced by CI and
-  the publish wheel-gate (``test_quickstart_examples.py``,
-  ``test_stage_code_deps.py``, ``test_gr.py``) are now tracked in git —
-  ``.gitignore`` excluded the whole ``test/`` directory, so the wheel-gate
-  (and therefore publishing) referenced non-existent files and never ran.
-  CI additionally collects ``packages/jinwu-swift/tests``.
+* 工作区测试目录按用户约定被 gitignore；已跟踪测试不受新增 ignore 规则影响。
+  历史条目关于“本次新增跟踪测试”的描述不再适用。发布/CI 门禁能否在洁净检出中
+  获取所需测试，应独立核查，不能由本地已有测试推断。
 
 New and improved
 ~~~~~~~~~~~~~~~~
@@ -175,9 +186,9 @@ New and improved
   ``channel_mask_from_ebounds`` instead of the non-existent
   ``EnergyBand(..., unit=...)`` / ``ChannelBand.from_energy_band``) and are
   executed as tests against a fixed synthetic OGIP sample (AUD-05).
-* Documentation build (AUD-06): the Sphinx version is read from installed
-  distribution metadata (no silent ``0.0.27`` fallback), the dead ``src/``
-  path hack is removed, and Read the Docs installs the four monorepo
+* Documentation build (AUD-06): the current Sphinx version is read from source
+  distribution configuration (no silent ``0.0.27`` fallback), the dead ``src/``
+  path hack is removed, and Read the Docs installs the five monorepo
   distributions instead of the non-installable repo root;
   ``sphinx-automodapi>=0.21`` is required for Sphinx 8.2+/9 compatibility.
 * ``WXTPointingResult.display()`` keeps the same output contract

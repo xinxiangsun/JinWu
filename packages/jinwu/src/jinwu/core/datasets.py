@@ -41,6 +41,13 @@ def _coerce_lightcurve(obj: LightcurveInput, *, arg_name: str) -> LightcurveData
     is not actually a light curve (kind != 'lc'). This allows callers who
     use ``readfits`` without specifying ``kind='lc'`` to pass the result
     directly without extra casting while still keeping runtime safety.
+
+    校验并返回原光变对象，不创建副本。接受 LightcurveDataBase，或在
+    notebook 重载后具有 kind='lc' 与必要属性的对象；其他类型抛 TypeError。
+    当前不接受 PHA 能谱，也不检查时间/数值数组的科学有效性。
+    Return the original lightcurve without copying. Accept LightcurveDataBase
+    or a reloaded kind='lc' object with required attributes. Reject other types,
+    including PHA spectra, with TypeError; do not validate array contents here.
     """
 
     # Fast-path: normal case (no module reload / single class identity)
@@ -94,7 +101,13 @@ class LightcurveDataset:
     labels: Optional[List[str]] = None
     
     def __post_init__(self):
-        """确保 data 是列表"""
+        """统一曲线与标签列表 / Normalize lightcurve and label lists.
+
+        非 list 输入包装为单项列表；标签数量不匹配抛 ValueError。
+        不复制成员光变或校验其科学内容。
+        Wrap non-list data/labels as one-item lists. Unequal label/data counts
+        raise ValueError; member lightcurves are neither copied nor validated.
+        """
         if not isinstance(self.data, list):
             self.data = [self.data]
         if self.labels is not None and not isinstance(self.labels, list):
@@ -103,9 +116,16 @@ class LightcurveDataset:
             raise ValueError(f"labels length ({len(self.labels)}) != data length ({len(self.data)})")
     
     def __len__(self) -> int:
+        """返回曲线条数 / Return the number of lightcurves, not time bins."""
         return len(self.data)
     
     def __getitem__(self, index: int) -> LightcurveDataBase:
+        """按索引访问原曲线 / Return the referenced lightcurve by list index.
+
+        支持底层列表的负索引和切片；切片实际返回列表，不复制数据。
+        Follow list indexing, including negative indices and slices; slices
+        return a list despite the scalar type hint. No data copy is made.
+        """
         return self.data[index]
     
     def __add__(self, other: Union[LightcurveDataBase, 'LightcurveDataset']) -> 'LightcurveDataset':
@@ -115,6 +135,14 @@ class LightcurveDataset:
         ----
         >>> ds = ds + new_lc
         >>> ds = ds1 + ds2  # 合并两个 dataset
+
+        Return a new dataset containing references to the concatenated curves;
+        this operation does not merge time bins. Two datasets retain labels
+        only if both provide them. Adding a bare curve reuses current labels,
+        so a labeled dataset can raise ValueError for the resulting mismatch.
+        Unsupported operands return NotImplemented.
+        返回新容器但不合并时间分箱、不复制曲线；已有标签的容器直接加
+        单条曲线时，当前标签未扩展，可能因数量不匹配抛出 ValueError。
         """
         if isinstance(other, LightcurveDataBase):
             return LightcurveDataset(
@@ -144,6 +172,14 @@ class LightcurveDataset:
         colors : list[str], optional
             每条曲线的颜色
         其他参数传递给 plot_lightcurve
+
+        Delegate values/units and kwargs to core.plot.plot_lightcurve. A single
+        curve returns that plotting result; several curves return one overlay
+        Axes or an array of shared-x Axes. Auto uses separate panels above three
+        curves. Multi-panel mode creates a new figure even if ax was supplied.
+        This creates artists and does not save output files.
+        数值与单位解释交由 plot_lightcurve；多曲线返回叠加 Axes 或子图数组。
+        auto 在超过三条曲线时创建多面板；多面板不复用传入的 ax，不自动保存。
         """
         from jinwu.core.plot import plot_lightcurve
         import matplotlib.pyplot as plt
@@ -216,9 +252,19 @@ class JointDataset:
     spectra: List[SpectrumDataset]
 
     def add_lightcurve(self, lc: LightcurveDataset) -> None:
+        """追加光变容器引用 / Append a lightcurve dataset by reference.
+
+        原位修改列表，返回 None；不做时间对齐或校验。
+        Mutate the list, return None; no time alignment or validation.
+        """
         self.lightcurves.append(lc)
 
     def add_spectrum(self, spec: SpectrumDataset) -> None:
+        """追加能谱容器引用 / Append a spectral dataset by reference.
+
+        原位修改列表，返回 None；不执行联合拟合或响应校验。
+        Mutate the list, return None; no joint fit or response validation.
+        """
         self.spectra.append(spec)
 
 
@@ -232,7 +278,7 @@ def netdata(
 ) -> LightcurveDataBase:
     """计算净光变曲线（源 - 背景）
     
-    这是核心的背景减除函数，支持 LightcurveData 和未来的 PhaData。
+    这是核心的光变背景减除函数；当前只接受光变对象，不支持 PHA 能谱。
     所有减法操作（包括 `src - bkg`）最终都调用此函数。
     
     参数
@@ -269,6 +315,38 @@ def netdata(
     5. 误差传播：err² = src_err² + (ratio * bkg_err)²
     6. 转回原始单位（rate/counts）
     7. 零曝光 bin 标记为 NaN
+
+    English contract
+    ----------------
+    source/background must be lightcurves, with value in counts or counts/s
+    according to is_rate and time/exposure in consistent seconds. With no
+    background, return source itself and ignore ratio/offset; no copy is made.
+    Otherwise create a new instance of the source class and preserve its metadata.
+
+    ratio is a fixed, dimensionless multiplier in count space. If omitted,
+    infer (source area * total exposure)/(background area * total exposure),
+    or only the area ratio when use_exposure_weighted_ratio=False. Required
+    missing area/exposure metadata raises ValueError. Ratio uncertainty is
+    not propagated. offset is a deterministic count offset subtracted per bin.
+
+    Different grids trigger background rebinning anchored to the source's
+    first bin edge, followed by a strict grid check. TIMEZERO must agree;
+    callers must convert time references before subtraction. Misaligned grids
+    are rejected rather than subtracted by array position.
+    Rates are converted using bin_exposure, falling back to dt, then 1.0.
+    Missing errors use sqrt(max(counts, 0)). Independent variances add as
+    source_variance + ratio**2 * background_variance; covariance is not modeled.
+
+    Negative net counts are retained. The primary value/error fields of explicit
+    zero-exposure source bins become NaN; nonpositive/nonfinite exposure also
+    yields NaN when converting to rate. Auxiliary counts fields can still hold
+    count-space values. Preserved err_dist metadata does not establish that the
+    background-subtracted data follow a Poisson distribution.
+
+    注意：ratio 为计数空间的固定无量纲系数，未传播其不确定度；offset
+    为逐 bin 减去的确定性计数偏移。无背景时返回源原对象并忽略 offset。
+    输入时间系统须已一致。净计数允许为负；来源 err_dist 元数据不能
+    证明扣背景后的净数据仍服从 Poisson 分布，误差传播未考虑协方差。
     """
     import numpy as np
     
@@ -310,11 +388,23 @@ def netdata(
         raise ValueError("source/background time array is None")
 
     src_time = np.asarray(src_lc.time, dtype=float)
-    bkg_time = np.asarray(bkg_lc.time, dtype=float)
+
+    from jinwu.core.ops import _infer_bin_geometry
+    src_origin = float(src_lc.timezero or 0.0)
+    bkg_origin = float(bkg_lc.timezero or 0.0)
+    if not np.isfinite(src_origin + bkg_origin) or not np.isclose(src_origin, bkg_origin, rtol=0, atol=1e-7):
+        raise ValueError("source/background TIMEZERO differs; convert to a common time reference first")
+    src_lo, src_hi, _ = _infer_bin_geometry(src_lc)
+
+    def grid_matches(lc):
+        lo, hi, _ = _infer_bin_geometry(lc)
+        arrays = ((src_time, np.asarray(lc.time, dtype=float)), (src_lo, lo), (src_hi, hi))
+        return all(a.shape == b.shape and np.all(np.isfinite(a))
+                   and np.all(np.isfinite(b)) and np.allclose(a, b, rtol=0, atol=1e-7)
+                   for a, b in arrays)
 
     bkg_aligned = bkg_lc
-    if not (src_time.shape == bkg_time.shape and np.allclose(src_time, bkg_time)):
-        from jinwu.core.ops import rebin_lightcurve
+    if not grid_matches(bkg_lc):
         if src_lc.dt is None:
             raise ValueError("Cannot align: source.dt is None")
 
@@ -323,14 +413,35 @@ def netdata(
         if not np.isfinite(binsize) or binsize <= 0:
             raise ValueError(f"Cannot align: invalid source binsize={binsize}")
 
+        bkg_lo, bkg_hi, _ = _infer_bin_geometry(bkg_lc)
+        # Aggregation is valid only for complete background bins contained in
+        # the source bins. Rebinning cannot recover counts from shifted edges.
+        if (not src_lo.size or not bkg_lo.size
+                or not np.allclose(src_hi - src_lo, binsize, rtol=0, atol=1e-7)
+                or not np.isclose(bkg_lo[0], src_lo[0], rtol=0, atol=1e-7)
+                or not np.isclose(bkg_hi[-1], src_hi[-1], rtol=0, atol=1e-7)
+                or not np.allclose(bkg_lo[1:], bkg_hi[:-1], rtol=0, atol=1e-7)):
+            raise ValueError("Cannot align source/background: incomplete or shifted bin coverage")
+        membership = np.searchsorted(src_hi, bkg_lo + 1e-7, side='right')
+        if np.any(membership >= src_hi.size) or np.any(bkg_hi > src_hi[membership] + 1e-7):
+            raise ValueError("Cannot align source/background: background bins cross source edges")
+
         bkg_aligned = rebin_lightcurve(
             bkg_lc, binsize=binsize, method='auto',
-            align_ref=src_lc.timezero if src_lc.timezero else None
+            align_ref=float(src_lo[0]) if src_lo.size else None
         )
+        if not grid_matches(bkg_aligned):
+            raise ValueError("source/background bin centers and edges do not align after rebinning")
     
     # ========== 3. 转换到计数空间 ==========
     def _to_counts(lc):
-        """将 LightcurveData 转为计数空间，返回 (counts, err_counts, exposure_array)"""
+        """转到计数空间 / Return counts, count error and exposure array.
+
+        曝光优先 bin_exposure，再 dt，最后 1.0；rate 乘曝光还原计数。
+        无误差时取 sqrt(max(counts, 0))；value 缺失抛 ValueError。
+        Prefer bin_exposure, then dt, then 1.0. Multiply rates/errors by exposure;
+        absent errors use sqrt(max(counts, 0)). Missing value raises ValueError.
+        """
         if lc.value is None:
             raise ValueError("LightcurveData.value is None")
         exp = lc.bin_exposure if lc.bin_exposure is not None else (lc.dt if lc.dt is not None else 1.0)

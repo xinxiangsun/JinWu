@@ -623,6 +623,14 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
     cnt = pha.counts
     err = pha.stat_err
 
+    if factor is not None and min_counts is not None:
+        raise ValueError("factor 与 min_counts 互斥")
+    if factor is not None:
+        if isinstance(factor, (bool, np.bool_)) or not isinstance(factor, (int, np.integer)) or factor <= 0:
+            raise ValueError("factor 必须为正整数")
+        if factor == 1:
+            return pha
+
     # 确定分组数组
     grouping = None
     generated_group_ids = False
@@ -637,7 +645,7 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
             per_ch_quality = np.maximum(np.asarray(pha.quality, dtype=int).ravel(), tail_q)
         else:
             per_ch_quality = tail_q
-    elif factor is not None and factor > 1:
+    elif factor is not None:
         # 固定因子聚合
         n = ch.size
         grouping = np.zeros(n, dtype=int)
@@ -956,26 +964,43 @@ def bayesian_blocks_exposure(
     """曝光加权的分箱 Bayesian Blocks（Scargle 2013）。
 
     移植自 HEASoft 6.37 ``burstcube/lib/bayesian_blocks.py``（其基于 astropy 版本修改）。
-    相对 ``astropy.stats.bayesian_blocks`` 的差别（原实现文件头注明）：
+    相对 ``astropy.stats.bayesian_blocks`` 的差别（1–4 为原实现文件头注明，
+    5 为 JinWu 修正；Scargle 2013 的适应度、先验与动态规划递推本体不改动）：
 
     1. 修复了 astropy#14017；
-    2. 支持 0 计数箱（Scargle 约定至少 1 计数，此处放宽）；
+    2. 支持预分箱中的 0 计数箱；上游将其与逐事件 cell 的表示作区分，
+       这不是 Scargle 方法的普遍限制；
     3. 适应函数用逐箱曝光量 ``T_k`` 而非等宽时间——对 GTI 间隙/帧效应导致的
        逐箱曝光变化（如 EP/WXT）是正确的处理；
-    4. 返回变点处的 **箱索引**：第 ``i`` 个块覆盖 ``bins[idx[i]:idx[i+1]]``。
+    4. 返回变点处的 **箱索引**：第 ``i`` 个块覆盖 ``bins[idx[i]:idx[i+1]]``；
+    5. 回溯解码改为从整段出发的变长回溯。上游用长度 n 的定长数组回溯，
+       当最优分段块数等于箱数 n（含 n=1）时末边界 ``n`` 被截断丢失
+       （实测 astropy 8.0.1：n=1 返回单个边界；n=2/3 全单块分段返回 n 个
+       而非 n+1 个边界）；本实现返回首 0、尾 n 的全部 n+1 个边界。
+       缺陷分析与参考见函数末尾回溯处注释。
 
     参数
     ----
     counts : 逐箱计数（允许 0）。
-    exposure : 逐箱有效曝光（秒），与 ``counts`` 同形，应 > 0。
-    p0 : 假阳性率；与 ``gamma``/``ncp_prior`` 三选一（后者优先）。
+    exposure : 逐箱有效曝光（秒），与 ``counts`` 同形且有限、非负；正计数箱须有正曝光。
+        零曝光且零计数的箱不含信息，可用于迭代背景转换。
+    p0 : Scargle (2013) 先验经验式的标定参数；它不保证等于本数据实际假警率。
+        输出变点不是经零假设模拟校准的显著性。与 ``gamma``/``ncp_prior`` 三选一（后者优先）。
 
     返回：变点箱索引数组（int），首尾分别为 0 与 ``n``。
     """
     counts = np.asarray(counts, dtype=float)
     exposure = np.asarray(exposure, dtype=float)
-    if counts.shape != exposure.shape:
-        raise ValueError("counts 与 exposure 必须同形")
+    if counts.ndim != 1 or counts.shape != exposure.shape:
+        raise ValueError("counts 与 exposure 必须是一维同形数组")
+    if not np.all(np.isfinite(counts)) or not np.all(np.isfinite(exposure)):
+        raise ValueError("counts 与 exposure 必须为有限数值")
+    if np.any(counts < 0):
+        raise ValueError("Poisson Bayesian Blocks 不接受负计数")
+    if np.any(exposure < 0):
+        raise ValueError("exposure 不得为负")
+    if np.any((exposure == 0) & (counts > 0)):
+        raise ValueError("正计数箱必须具有正曝光")
     n = counts.size
     if n == 0:
         return np.asarray([0], dtype=int)
@@ -1015,19 +1040,27 @@ def bayesian_blocks_exposure(
         last[R] = i_max
         best[R] = A_R[i_max]
 
-    # 从末尾逐块剥离恢复变点序列（同原实现）。
-    change_points = np.zeros(n, dtype=int)
-    i_cp = n
+    # 最优分段恢复（解码）：从整段出发按 last[R] 逐块剥离起始箱。
+    # Scargle (2013) 的适应度（Eq. 19）、先验（Eq. 21）与动态规划递推均与
+    # 上游逐行一致，方法本体未改动；此处仅修正最优解的恢复步骤。
+    # 上游缺陷：astropy.stats.bayesian_blocks 与其移植 HEASoft 6.37
+    # burstcube/lib/bayesian_blocks.py（旧 JinWu 相同）用长度 n 的定长数组
+    # 回溯，最优分段块数 k=n 时需写 k+1=n+1 个边界而数组只有 n 格，末边界
+    # n 被截断（实测 astropy 8.0.1：n=1 返回单个边界；n=2/3 全单块分段返回
+    # n 个而非 n+1 个边界）。随机 400 组与穷举全部分段比对：上游式定长
+    # 回溯 34 组次优，本实现 0 组（跟踪回归含单箱、零计数/零曝光边界）。
+    # 本实现：变长列表从 [n] 出发回溯，返回首 0、尾 n 的全部 n+1 个边界；
+    # last[R] 是覆盖到第 R 箱的最优分段中末块的起始箱索引。
+    # 参考：Scargle, G. et al. 2013, ApJ, 764, 167, §3.2 与 Eq. 19/21
+    # (doi:10.1088/0004-637X/764/2/167; arXiv:1207.5578)；
+    # 本地 external_sources/heasoft-6.37/burstcube/lib/bayesian_blocks.py；
+    # astropy/stats/bayesian_blocks.py（hea 环境 8.0.1）。
+    change_points = [n]
     ind = n
-    while i_cp > 0:
-        i_cp -= 1
-        change_points[i_cp] = ind
-        if ind == 0:
-            break
-        ind = last[ind - 1]
-    if i_cp == 0:
-        change_points[i_cp] = 0
-    return change_points[i_cp:]
+    while ind > 0:
+        ind = int(last[ind - 1])
+        change_points.append(ind)
+    return np.asarray(change_points[::-1], dtype=int)
 
 
 class BayesianBlocksBinner:
@@ -1042,7 +1075,7 @@ class BayesianBlocksBinner:
 
     参数
     ----
-    - p0: False positive rate (Scargle 2013)，控制块数量敏感度
+    - p0: Scargle (2013) 块数先验惩罚的经验标定参数；并非未经零假设模拟校准的实际假警率
     - fitness: Bayesian Blocks 统计模型，可选：
       * 'events': 泊松事件（光子计数等）
       * 'regular_events': 规则采样的事件数据
@@ -1174,6 +1207,11 @@ class BayesianBlocksBinner:
             edges = bayesian_blocks(t, counts, fitness=self.fitness, p0=self.p0)
         # heapy/ppsignal 的做法会扩展首末边界到原始范围；保持与之兼容。
         # use_exposure 路径的边界已覆盖全段，无需再拼接。
+        # 注意：非曝光路径直接调用 astropy.stats.bayesian_blocks，其定长
+        # 数组回溯在最优分段块数=箱数时会丢失末边界（见
+        # bayesian_blocks_exposure 末尾注释）；本路径首末边界无条件重置为
+        # full_left/full_right，该缺陷恰被补齐，块归属由箱中心 mask 决定，
+        # 不受影响。
         full_left = float(left.min())
         full_right = float(right.max())
         if not self.use_exposure:

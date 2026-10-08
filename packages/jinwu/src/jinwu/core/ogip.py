@@ -50,12 +50,27 @@ class ValidationReport:
     messages: List[ValidationMessage] = field(default_factory=list)
 
     def add(self, level: str, code: str, message: str):
+        """追加诊断消息 / Append a diagnostic message to this report.
+
+        修改 messages，返回 None；不会同步更新 ok，也不校验 level 字符串。
+        Mutate messages and return None. Does not recompute ok or validate level.
+        """
         self.messages.append(ValidationMessage(level=level, code=code, message=message))
 
     def errors(self) -> List[ValidationMessage]:
+        """返回 ERROR 消息列表 / Return messages whose level is exactly ERROR.
+
+        创建新列表但不复制消息对象，不改变报告。
+        Return a new list referencing the same messages without changing the report.
+        """
         return [m for m in self.messages if m.level == 'ERROR']
 
     def warnings(self) -> List[ValidationMessage]:
+        """返回 WARN 消息列表 / Return messages whose level is exactly WARN.
+
+        仅筛选消息，不把 INFO 或未知级别视作告警。
+        Filter messages; INFO and unrecognized levels are not warnings here.
+        """
         return [m for m in self.messages if m.level == 'WARN']
 
 # ---------------- Base FITS Class ----------------
@@ -69,7 +84,15 @@ class OgipFitsBase:
     _validation: Optional[ValidationReport] = field(default=None, init=False, repr=False, compare=False)
 
     def validate(self) -> ValidationReport:
-        """通用层：仅检查路径与 header 存在性。子类会扩展。"""
+        """执行并缓存基础校验 / Run and cache basic FITS-object validation.
+
+        只检查 path.exists() 与 header 是否为 None，不重新读取文件。
+        返回 ValidationReport 并更新 _validation；ok 仅表示无 ERROR。
+        子类可扩展检查，基础通过不证明完整 OGIP 或科学兼容性。
+        Check only path existence and whether header is None, without rereading
+        the file. Return/store a report; ok means no ERROR messages. Subclasses
+        extend it; passing these checks does not establish full OGIP validity.
+        """
         rpt = ValidationReport(kind=self.__class__.__name__, path=self.path, ok=True)
         if not self.path.exists():
             rpt.add('ERROR', 'FILE_NOT_FOUND', f"File not found: {self.path}")
@@ -80,15 +103,28 @@ class OgipFitsBase:
         return rpt
 
     def _has_key_ci(self, key: str) -> bool:
+        """判断关键字是否有非 None 值 / Test for a non-None header value.
+
+        大小写不敏感；值为 None 的现有卡片也视为缺失。
+        Case-insensitive; a present card with value None counts as missing.
+        """
         return self.get_keyword_ci(key, default=None) is not None
 
     def _has_any_key_ci(self, keys: Sequence[str]) -> bool:
+        """判断候选关键字是否至少一个有效 / Check any candidate header key.
+
+        按 _has_key_ci 语义短路判断；空候选集返回 False。
+        Short-circuit using _has_key_ci; an empty sequence returns False.
+        """
         return any(self._has_key_ci(k) for k in keys)
 
     def get_keyword_ci(self, key: str, default: Optional[Any] = None) -> Any:
         """大小写不敏感地从 header 中读取关键字（若 header 为 dict）.
 
         返回关键字值或提供的 default。便于统一处理 FITS 关键字的大小写差异。
+        Read a keyword case-insensitively from a dict or Header. Try direct
+        lookup, then compare uppercase names; return default if absent or if
+        the header is None. Values are returned without unit/type conversion.
         """
         if self.header is None:
             return default
@@ -111,6 +147,11 @@ class OgipFitsBase:
 
     @property
     def validation(self) -> Optional[ValidationReport]:
+        """获取最近的校验报告 / Return the latest cached validation report.
+
+        尚未 validate 时返回 None；访问属性不会触发新的校验。
+        Return None before validate() has run; property access does not revalidate.
+        """
         return self._validation
 
 # ---------------- Specialized Base Classes ----------------
@@ -129,6 +170,14 @@ class OgipTimeSeriesBase(OgipFitsBase):
     REQUIRED_COLUMNS_ANY = [["TIME"]]  # 至少包含 TIME
 
     def validate(self) -> ValidationReport:
+        """校验时间序列头、列与 GTI / Validate time-series metadata and GTI.
+
+        扩展基础报告，检查配置关键字、TIME 列和已提供的 GTI 顺序。
+        不换算时间参考系、不补齐 GTI，也不读取新数据；将报告缓存并返回。
+        Extend basic validation with configured keywords, TIME column and
+        available GTI ordering. No time conversion or GTI reconstruction;
+        return/cache the report. Missing noncritical metadata may only warn.
+        """
         rpt = super().validate()
         # Header keyword checks
         for k in self.REQUIRED_KEYS:
@@ -224,6 +273,14 @@ class OgipSpectrumBase(OgipFitsBase):
     OPTIONAL_RATE_COLUMNS = ["COUNTS", "RATE"]
 
     def validate(self) -> ValidationReport:
+        """校验 PHA 元数据与值列 / Validate PHA metadata and value columns.
+
+        要求 CHANNEL 及 COUNTS/RATE 至少一个值列；部分头字段、曝光或
+        HDU 分类问题只记 WARN。返回并缓存报告，不核查实际谱值或响应网格。
+        Require CHANNEL and at least one COUNTS/RATE column. Some metadata,
+        exposure and HDU issues are WARN only. Return/cache the report without
+        checking the actual spectral values or response grid.
+        """
         # 显式调用（不用 super()）：具体类会以 `OgipSpectrumBase.validate(self)`
         # 未绑定方式委托到本方法。
         rpt = OgipFitsBase.validate(self)
@@ -272,6 +329,14 @@ class OgipResponseBase(OgipFitsBase):
     RESPONSE_HDUCLAS2 = ("SPECRESP", "RSP_MATRIX")
 
     def validate(self) -> ValidationReport:
+        """校验响应头的基础身份字段 / Validate basic response-header identity.
+
+        检查仪器与 HDU 分类/版本，将缺失项作为 WARN 记录；具体列与
+        数值网格须由子类检查。缓存并返回报告，不修改响应数组。
+        Check instrument identity and HDU class/version, recording missing
+        metadata as WARN. Concrete columns/grids are checked by subclasses.
+        Return/cache a report without modifying response arrays.
+        """
         # 显式调用（不用 super()）：具体类会以 `OgipResponseBase.validate(self)`
         # 未绑定方式委托到本方法。
         rpt = OgipFitsBase.validate(self)
@@ -314,6 +379,13 @@ def check_response_compatibility(spectrum: Any, response: Any) -> ValidationRepo
     - 通道数/通道范围：谱的 CHANNEL 数组应落在响应的通道约定（TLMIN+DETCHANS）内；
     - DETCHANS 与谱通道数的一致性提示。
     返回 ValidationReport（ok=False 表示不兼容，不应直接相乘/拟合）。
+
+    Check available spectrum CHANNEL bounds against response TLMIN/DETCHANS.
+    A range mismatch is ERROR; differing declared channel counts are WARN.
+    Missing response bounds produce INFO, and unexpected check failures produce
+    WARN. Thus ok=True means no detected ERROR, not that every compatibility
+    check was possible. No energy-grid, matrix-normalization or calibration check
+    is performed; inputs are left unchanged.
     """
     rpt = ValidationReport(kind='compatibility', path=Path(str(getattr(spectrum, 'path', '<in-memory>'))), ok=True)
     try:

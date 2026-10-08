@@ -3,18 +3,18 @@ GBM 亚临界定向搜索
 
 ``jinwu.fermi.gbm.subthreshold`` 面向给定外部触发时刻的连续 TTE 搜索。
 它是独立的可恢复流水线，不要求 GBM 星上触发；不是全天连续盲搜。
-已有 ``fermi_gbm`` 的谱提取、上限和几何覆盖功能仍各自使用原接口。
+已有 :doc:`fermi_gbm` 的谱提取、上限和几何覆盖功能仍各自使用原接口。
 
 安装与输入
-----------
+------------
 
 在仓库根安装搜索依赖（天文分析使用 ``hea`` 环境）：
 
 .. code-block:: bash
 
    conda run -n hea python -m pip install -e 'packages/jinwu-fermi[search]'
-   # 需要概率天图时，另安装本地 jinwu-gw。
-   conda run -n hea python -m pip install -e packages/jinwu-gw
+   # 搜索天图读取使用核心 skymap，不要求完整 GW 包。
+   conda run -n hea python -m pip install -e 'packages/jinwu-fermi[search-skymap]'
 
 响应模板从 `FSSC 官方模板归档 <https://fermi.gsfc.nasa.gov/ssc/data/analysis/gbm/templates.tar.gz>`_
 取得并解包；传入含 ``direct/``、``atmo_nai/``、``atmo_bgo/`` 的 ``templates/GBM`` 目录。
@@ -52,7 +52,7 @@ Python 接口要求时间偏移带单位：
    print(result.science_status, result.products["report"])
 
 位置与结果
-----------
+------------
 
 ``position=SkyCoord(...)`` / ``--position RA DEC`` 或本地 ``skymap`` / ``--skymap``
 二选一。空间先验在每个窗口评分时参与计算，然后按该评分筛选和去重。
@@ -78,7 +78,7 @@ Python 接口要求时间偏移带单位：
 候选窗口端点响应与中点响应也会进行稳定性检查。
 
 离源 FAR
---------
+------------
 
 将经过审查、远离目标与已知瞬变的 UTC 时刻逐行写入 ``off_times.txt``，运行：
 
@@ -98,7 +98,7 @@ FAP 使用 Poisson 到达假设；离源时段的代表性和长期平稳性仍�
 本功能不附带已经校准的通用背景分布。软件测试和公开事件复现都不能替代 FAR 校准。
 
 来源与改动
-----------
+------------
 
 似然核及相关算法来自 `USRA-STI gamma-ray-targeted-search
 <https://github.com/USRA-STI/gamma-ray-targeted-search/tree/1bc1e913f97fd7195a7e297f8d6032a5c7758894>`_，

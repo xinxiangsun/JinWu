@@ -40,6 +40,10 @@ def test_units_and_dyadic_grid():
     assert set(np.round(windows[:, 1], 6)) == {.064, .128, .256, .512}
     assert 1.024 in make_search_windows(config, [(0, 2)])[:, 1]
     assert np.allclose(windows[:, 0] / .064, np.round(windows[:, 0] / .064))
+    malformed = SimpleNamespace(search_interval=[0, 2] * u.s, min_step=.064 * u.s,
+                                min_duration=.128 * u.s, max_duration=.064 * u.s, num_steps=8)
+    with pytest.raises(ValueError, match='max_duration'):
+        make_search_windows(malformed, [(0, 2)])
 
 
 def test_point_map_conflict_and_input_time(tmp_path):
@@ -94,6 +98,14 @@ def test_prior_preserves_hidden_probability_and_narrow_map():
     visible = np.array([True, False, True, True])
     weights, mass, offset = spatial_prior_weights(grid, visible, position=grid[1])
     assert mass == 0 and weights.sum() == 0 and offset == 0
+    limb_grid = SkyCoord([0, 5], [0, 0], unit="deg")
+    point = SkyCoord(1, 0, unit="deg")
+    weights, mass, offset = spatial_prior_weights(
+        limb_grid, [False, True], position=point, position_visible=True)
+    assert mass == 1 and weights.tolist() == [1.] and offset == pytest.approx(4.)
+    weights, mass, _ = spatial_prior_weights(
+        limb_grid, [False, True], position=point, position_visible=False)
+    assert mass == 0 and weights.sum() == 0
     vectors = SkyCoord([2, 89], [0, 0], unit="deg").cartesian.xyz.value.T
     weights, mass, _ = spatial_prior_weights(grid, visible, map_vectors=vectors, map_probability=[.2, .8])
     assert mass == pytest.approx(.2) and weights[0] == 1
@@ -189,6 +201,42 @@ def test_background_rate_is_per_live_second(monkeypatch):
     center = np.argmin(abs(prepared.edges[:-1]))
     assert prepared.rates[center, 0, 1] == pytest.approx(10., rel=.015)
     assert prepared.uncertainty[center, 0, 1] == pytest.approx(2.5, rel=.015)
+
+
+def test_source_free_control_blocks_exclude_full_background_support(monkeypatch):
+    import jinwu.fermi.gbm.subthreshold.data as module
+    from gdt.core.background import unbinned
+
+    event_times = np.arange(-34., 34., .1)
+    channels = np.array([10, 21, 34, 52, 86, 107])
+    times = np.repeat(event_times, len(channels))
+    channel_values = np.tile(channels, len(event_times))
+    monkeypatch.setattr(module, 'read_detector_events', lambda *a: (
+        times, channel_values, [(-34., 34.)], (None, 0., 0.)))
+
+    class ConstantModel:
+        def __init__(self, events): pass
+        def fit(self, **kwargs): pass
+        def interpolate(self, start, stop):
+            return np.full((len(start), 1), 100.), np.full((len(start), 1), 1.)
+
+    monkeypatch.setattr(unbinned, 'NaivePoisson', ConstantModel)
+    captured = []
+    def capture(obs, mu, sigma, *, times):
+        captured.extend(times)
+        return {'passed': True}
+    monkeypatch.setattr(module, 'validate_background_residuals', capture)
+    config = GBMTargetedSearchConfig(search_interval=[-1, 1] * u.s,
+                                     max_duration=.512 * u.s, background_window=2 * u.s,
+                                     background_context=2 * u.s, detectors=('n0',))
+    prepared, diagnostics = module.prepare_search_data(
+        {'n0': ['stub']}, Time('2017-01-01'), config)
+    assert diagnostics['n0']['control_blocks'] == len(captured) > 0
+    block = round(4.096 / .064)
+    block_halfwidth = block * .064 / 2
+    assert all(t + block_halfwidth + 1 <= -1 or t - block_halfwidth - 1 >= 1
+               for t in captured)
+    assert prepared.counts.sum() > 0
 
 
 def report(t0=0., interval=(0., 60.), contract=None):

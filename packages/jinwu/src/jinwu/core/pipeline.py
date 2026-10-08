@@ -69,9 +69,21 @@ class PipelineInput:
     output_root: Path | str | None = None
 
     def resolved_root(self) -> Path:
+        """解析输入根目录 / Resolve the input root to an absolute expanded path.
+
+        不创建或校验目录存在性；调用者仍需 validate_input。
+        Do not create the directory or validate existence; validate_input is separate."""
         return Path(self.root).expanduser().resolve()
 
     def resolved_output_root(self) -> Path:
+        """解析独立输出目录 / Resolve an explicit or target-derived output root.
+
+        显式 output_root 直接展开解析；否则清理 target_id 中不适合文件名的
+        字符，在输入 root 的同级创建路径 <target>_jinwu（本函数不 mkdir）。
+        清理后无有效字符抛 ValueError；不同原始标识可能归一化到同一名称。
+        Expand/resolve an explicit output_root, otherwise sanitize target_id and return
+        sibling <target>_jinwu. No directory is created. Empty sanitized identifiers
+        raise ValueError; distinct identifiers can normalize to the same filename."""
         if self.output_root is not None:
             return Path(self.output_root).expanduser().resolve()
         root = self.resolved_root()
@@ -108,18 +120,23 @@ _PIPELINES: dict[str, type["InstrumentPipeline[Any, Any]"]] = {}
 
 
 def register_pipeline(key: str):
-    """Register one concrete pipeline without importing it from config.
+    """注册流水线类装饰器 / Return a decorator registering a concrete pipeline.
 
-    Registration is idempotent for one implementation: ``python -m
-    pkg.module`` executes the module code a second time under ``__main__``
-    after the package import, recreating the class from the same source
-    file.  The already-registered class is reused in that case; a different
-    implementation claiming the same key still raises.
-    """
+    key 去首尾空白并小写，用于进程内 _PIPELINES。相同类重复注册可复用；
+    不同类若 inspect.getsourcefile 返回相同值也复用已有类，适配 -m 的
+    二次加载。来源不同却占用同 key 时抛 ValueError。导入后即注册，不运行。
+    Strip/lowercase key for the process-local registry. Reuse an identical class,
+    or an existing class whose inspect.getsourcefile value matches the new class
+    (for -m reloads). Different-source key collisions raise ValueError. Registration
+    occurs on decoration; no pipeline stages execute."""
 
     normalized = key.strip().lower()
 
     def decorator(cls):
+        """登记或复用类 / Register the class, or return its same-source predecessor.
+
+        修改进程注册表；返回实际注册类，键冲突抛 ValueError。
+        Mutate the process registry; return the registered class or raise on collision."""
         existing = _PIPELINES.get(normalized)
         if existing is not None and existing is not cls:
             if inspect.getsourcefile(existing) == inspect.getsourcefile(cls):
@@ -132,13 +149,14 @@ def register_pipeline(key: str):
 
 
 def _discover_pipelines(key: str) -> None:
-    """Import instrument packages declared via ``jinwu.instruments`` entry points.
+    """延迟加载仪器流水线 / Discover instrument pipelines through entry points.
 
-    Importing an instrument package triggers its ``register_pipeline``
-    decorators, populating ``_PIPELINES`` lazily. Only entry points whose
-    name matches the first segment of ``key`` are loaded (all of them if
-    nothing matches).
-    """
+    优先加载 jinwu.instruments 中与 key 首段同名的插件，未匹配则尝试全部。
+    导入触发注册装饰器，必要时导入余下 key 对应子模块。不返回流水线对象；
+    依赖导入失败会报告 ImportError，不能视为插件已成功安装或运行。
+    Prefer entry points matching key's first segment, otherwise try all. Loading
+    triggers registration and may import the dotted submodule. Return None;
+    ImportError reports dependency failures. Discovery does not execute stages."""
     try:
         from importlib import import_module
         from importlib.metadata import entry_points
@@ -179,7 +197,14 @@ def _discover_pipelines(key: str) -> None:
 
 
 def pipeline(config: PipelineConfigProtocol, input_data: PipelineInput, **kwargs):
-    """Construct the concrete pipeline selected by an instrument config."""
+    """按配置构造流水线 / Instantiate the pipeline selected by configuration.
+
+    config 须提供 name、pipeline、execution；input_data 为 PipelineInput。
+    kwargs 传给注册类构造器。未配置或未注册时抛 ValueError，按需发现
+    仪器插件。返回具体流水线实例；不会调用 run，也不创建科学产物。
+    Require config.name/pipeline/execution and PipelineInput. Forward kwargs to
+    the registered constructor, discovering plugins lazily. Missing/unknown keys
+    raise ValueError. Return the concrete instance without running stages."""
     if not config.pipeline:
         raise ValueError(f"Instrument {config.name} has no pipeline configured")
     key = config.pipeline.strip().lower()
@@ -199,17 +224,33 @@ def pipeline(config: PipelineConfigProtocol, input_data: PipelineInput, **kwargs
 
 
 def _fingerprint(value: Any) -> str:
+    """计算规范 JSON 指纹 / Hash the jsonable representation as canonical JSON.
+
+    通过 products.jsonable 处理对象，按键排序并去分隔空格，返回 SHA-256
+    十六进制字符串；此处不读取路径所指文件内容。
+    Serialize via products.jsonable with sorted keys/compact separators and return
+    SHA-256 hex. A path value alone does not cause its file contents to be read."""
     encoded = json.dumps(_jsonable(value), sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
 
 
 def _file_fingerprint(path: Path) -> str:
+    """计算文件内容指纹 / Return a file's content SHA-256 via products.sha256_file.
+
+    读取文件但不修改；I/O 错误向上传递。
+    Read without modifying the file; propagate I/O errors."""
     from .products import sha256_file
 
     return sha256_file(path)
 
 
 def _output_fingerprints(outputs: Mapping[str, str]) -> dict[str, str]:
+    """为实际输出文件建立指纹映射 / Hash outputs that currently identify files.
+
+    outputs 为名称到路径字符串的映射。跳过目录及不存在路径；不递归校验
+    目录内容。返回 {name: SHA256}，文件读取错误上抛。
+    Return {name: SHA256} for existing files, skipping directories/missing paths.
+    Directory contents are not recursively validated; file-read errors propagate."""
     fingerprints: dict[str, str] = {}
     for key, value in outputs.items():
         path = Path(value)
@@ -224,6 +265,12 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
     stages: ClassVar[tuple[PipelineStage, ...]] = ()
 
     def __init__(self, input_data: InputT, *, config: PipelineConfigProtocol):
+        """保存输入配置并推导工作区 / Initialize pipeline identity and workspace.
+
+        优先使用 config.execution.workspace，再使用 input_data 输出目录；
+        设置 .pipeline 清单路径和 pending 状态，不创建目录或执行阶段。
+        Prefer configured workspace over the input-derived output root. Initialize
+        manifest location and pending state, without creating directories/running stages."""
         self.input = input_data
         self.config = config
         configured = config.execution.workspace
@@ -237,7 +284,11 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
 
     @abstractmethod
     def validate_input(self) -> None:
-        """Validate immutable top-level inputs before any stage runs."""
+        """子类输入校验接口 / Validate top-level inputs before stages run.
+
+        子类负责实现，成功返回 None，失败抛异常；此接口不定义通用科学验收。
+        Subclass hook: return None on success and raise on invalid input. The base
+        contract does not provide instrument-specific scientific validation."""
 
     @abstractmethod
     def execute_stage(
@@ -245,19 +296,43 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         stage: PipelineStage,
         context: Mapping[str, StageResult],
     ) -> StageResult:
-        """Execute one concrete stage."""
+        """子类单阶段执行接口 / Execute one declared stage in a subclass.
+
+        stage 给出名称及依赖，context 包含已执行或缓存的阶段结果；须返回
+        StageResult。由子类负责具体 I/O 与科学计算，框架处理状态及清单。
+        stage names dependencies; context contains previous executed/cached results.
+        Return StageResult. The subclass owns scientific work/I/O; the framework owns
+        manifest/state handling. Raising an exception signals execution failure."""
 
     @abstractmethod
     def build_result(self, context: Mapping[str, StageResult]) -> ResultT:
-        """Build the public result, including partial review results."""
+        """组装公共结果的子类接口 / Build the public result from stage context.
+
+        context 可只包含部分阶段，例如 until 提前结束或 needs_review；
+        子类须保留这种部分状态，不假定所有科学产物都已存在。
+        Context may be partial after until or needs_review; subclasses must preserve
+        that status rather than assume all scientific products exist."""
 
     def status(self) -> PipelineRunState:
+        """读取当前内存状态 / Return the current in-memory PipelineRunState.
+
+        不读取磁盘清单、不启动阶段，也不证明输出科学有效。
+        No manifest reload or execution; status alone does not establish scientific validity."""
         return self._state
 
     def _stage_path(self, name: str) -> Path:
+        """推导阶段清单路径 / Return workspace/.pipeline/<name>.json without creating it."""
         return self._manifest_dir / f"{name}.json"
 
     def _input_fingerprint(self) -> str:
+        """建立整次运行身份 / Hash run input, implementation identity and optional config.
+
+        包含输入对象、具体类全名和可读取的类源码文件 SHA；配置是否纳入由
+        include_config_in_input_fingerprint 决定。源码字节改变（包括注释）可
+        影响该指纹；无法定位源码时实现哈希为 None。
+        Include input, concrete class identity and its source-file hash when readable;
+        include config according to the hook. Source-byte changes, including comments,
+        can invalidate identity. Unlocatable implementation source is recorded as None."""
         implementation = inspect.getsourcefile(type(self))
         implementation_hash = None
         if implementation is not None and Path(implementation).is_file():
@@ -277,27 +352,26 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         return _fingerprint(payload)
 
     def include_config_in_input_fingerprint(self) -> bool:
-        """Whether configuration belongs to the run-wide input identity.
+        """决定运行指纹是否含全部配置 / Decide whether run identity includes full config.
 
-        The default preserves the historical cache contract.  Pipelines with
-        independent preparation and fit stages may return ``False`` and
-        implement :meth:`stage_config_dependencies` so changing a fitting
-        option invalidates the fit/report stages without re-running data
-        preparation.
-        """
+        默认 True，保持整体配置变更使缓存失效。独立阶段适配器可覆盖为 False，
+        并用 stage_config_dependencies 声明每阶段真正依赖的配置。
+        Default True conservatively invalidates on any config change. Subclasses may
+        return False with precise per-stage stage_config_dependencies declarations."""
         return True
 
     def stage_config_dependencies(self, stage: PipelineStage) -> Any:
-        """Return the configuration values consumed by ``stage``.
+        """返回阶段消费的配置 / Return configuration values consumed by a stage.
 
-        Returning the complete config is conservative and is the default for
-        existing pipelines.  The value is serialized by the same canonical
-        fingerprint helper as inputs and is persisted in the stage manifest.
-        """
+        默认返回完整 self.config，忽略 stage。子类可返回较小的可 JSON 化
+        配置子集；遗漏真实依赖会导致陈旧缓存，因此需与阶段实现一起维护。
+        Default returns full self.config, ignoring stage. Subclasses may return a
+        smaller jsonable subset; declarations must reflect actual stage dependencies."""
         del stage
         return self.config
 
     def _stage_config_fingerprint(self, stage: PipelineStage) -> str:
+        """计算阶段配置指纹 / Hash the values returned by stage_config_dependencies."""
         return _fingerprint(self.stage_config_dependencies(stage))
 
     def _dependency_fingerprint(
@@ -305,6 +379,12 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         stage: PipelineStage,
         context: Mapping[str, StageResult],
     ) -> str:
+        """对上游结果及输出文件建立指纹 / Hash declared upstream results and file outputs.
+
+        按 stage.dependencies 从 context 取 StageResult，并加入已存在输出文件
+        内容哈希；缺少依赖会抛 KeyError，目录内容不递归哈希。
+        Read declared dependencies from context and hash results plus existing output
+        files. Missing dependencies raise KeyError; directories are not recursively hashed."""
         return _fingerprint(
             {
                 name: {
@@ -316,19 +396,29 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         )
 
     def stage_code_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
-        """Additional source files whose changes invalidate a cached stage."""
+        """声明额外代码依赖 / Declare extra source files that invalidate a cached stage.
+
+        默认空元组。子类返回当前安装中的实际文件路径，指纹按内容而非 AST。
+        Default empty tuple; subclasses return actual installed paths. Fingerprints
+        use file contents, so documentation changes also invalidate declared dependencies."""
         return ()
 
     def stage_input_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
-        """External input files that determine one stage's cached result.
+        """声明外部数据文件依赖 / Declare external scientific inputs of a stage.
 
-        Pipelines commonly receive a directory or catalog path rather than the
-        file contents themselves.  Declaring those files here keeps a manifest
-        valid only while its scientific inputs are unchanged.
-        """
+        默认空元组；目录型顶层输入不自动递归展开，子类应声明会影响结果的
+        具体数据、响应和配置文件。
+        Default empty tuple. Top-level directory inputs are not recursively expanded;
+        subclasses declare specific data, response and config files affecting results."""
         return ()
 
     def _stage_input_fingerprint(self, stage: PipelineStage) -> str:
+        """指纹化外部输入路径及内容 / Fingerprint declared external input dependencies.
+
+        常规文件使用内容 SHA；目录只记录路径与 mtime_ns，不递归读取；缺失
+        路径记录 missing。返回规范 JSON 的 SHA，不修改输入文件。
+        Hash files by content, directories by path/mtime_ns without recursion, and
+        record missing paths. Return canonical payload SHA; do not modify inputs."""
         files = []
         for path in self.stage_input_dependencies(stage):
             resolved = Path(path).expanduser().resolve()
@@ -360,6 +450,12 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         return _fingerprint(files)
 
     def _stage_code_fingerprint(self, stage: PipelineStage) -> str:
+        """指纹化额外源文件 / Hash declared code dependency paths and contents.
+
+        路径须为实际文件，否则 RuntimeError；空依赖集合也有确定的指纹。
+        使用完整字节哈希，含注释，不按算法语义判断是否改变。
+        Require actual files or raise RuntimeError. Empty dependencies still yield a
+        deterministic hash. Full bytes, including comments, determine invalidation."""
         files = []
         for path in self.stage_code_dependencies(stage):
             resolved = Path(path).expanduser().resolve()
@@ -383,6 +479,15 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         stage: PipelineStage,
         context: Mapping[str, StageResult],
     ) -> StageResult | None:
+        """读取可复用的完成阶段 / Load a valid completed-stage cache, otherwise None.
+
+        要求输入、配置、上游、代码、外部输入与输出文件指纹一致，且所有声明
+        输出路径存在。needs_review 和非 completed 状态始终重跑。文件缺失、
+        JSON 读取失败或指纹不匹配返回 None；部分非法 payload 仍可能抛异常。
+        Require matching input/config/upstream/code/external/output fingerprints and
+        existing output paths. Only completed stages are reusable; review stages rerun.
+        Missing/unreadable/stale manifests return None; malformed payload types/statuses
+        can still raise. Existing directory outputs are not content-hashed."""
         path = self._stage_path(stage.name)
         if not path.is_file():
             return None
@@ -428,6 +533,13 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         result: StageResult,
         context: Mapping[str, StageResult],
     ) -> None:
+        """原子替换阶段清单 / Write a stage manifest through a temporary sibling file.
+
+        创建 .pipeline 目录，记录 schema=2、结果、运行环境和各类指纹；
+        临时文件写完后 replace 目标 JSON。返回 None；指纹/I/O 异常向上传递。
+        Create manifest directory and store schema 2, result, runtime and fingerprints.
+        Write a temporary sibling then replace target. Return None; hashing/I/O errors
+        propagate. This records status and does not independently validate science."""
         self._manifest_dir.mkdir(parents=True, exist_ok=True)
         payload = {
             "schema_version": 2,
@@ -455,7 +567,14 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
 
     @contextmanager
     def stage_environment(self, stage_name: str) -> Iterator[dict[str, str]]:
-        """Yield an external-tool environment with process-local PFILES."""
+        """提供阶段工具环境副本 / Yield an external-tool environment with local PFILES.
+
+        context manager 创建 workspace/.pfiles/<stage_name>，复制 os.environ，
+        设置 PFILES、HEADASNOQUERY 和 HEADASPROMPT。不修改父进程环境，
+        退出时不删除参数目录。调用者须将 yield 的字典传给外部进程。
+        Create a stage-local PFILES directory and yield a copy of os.environ with
+        HEASoft prompt settings. Parent environment is unchanged; directories persist
+        on exit. Callers pass the returned mapping to external tool processes."""
         env = os.environ.copy()
         pfiles = self.workspace / ".pfiles" / stage_name
         pfiles.mkdir(parents=True, exist_ok=True)
@@ -476,6 +595,35 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         until: str | None = None,
         resume: bool | None = None,
     ) -> ResultT:
+        """顺序执行或恢复流水线 / Run or resume stages in their declared order.
+
+        Parameters
+        ----------
+        until : str or None
+            执行到该阶段并包含该阶段；None 执行全部。未知名称抛 ValueError。
+            Stop after this stage, inclusive; None runs all. Unknown names raise ValueError.
+        resume : bool or None
+            True 尝试复用校验通过的 completed 清单；None 使用 execution.resume。
+            Try valid completed caches if True; None uses execution.resume.
+
+        Returns
+        -------
+        ResultT
+            经 build_result 组装的完整或部分结果。needs_review 立即返回部分结果；
+            until 在非末阶段停止时总体状态为 pending，而非 completed。
+            Public full/partial result from build_result. needs_review returns early;
+            stopping before the final stage leaves overall state pending.
+
+        Notes
+        -----
+        先 validate_input 再创建工作区。缺少前置依赖抛 RuntimeError。执行阶段
+        抛异常时尝试记录 failed 清单与状态后重新抛出；返回非 completed/
+        needs_review 的状态会报 RuntimeError。清单写入或 build_result 也可报错。
+        Validate input before mkdir. Missing predecessors raise RuntimeError. Stage
+        exceptions are recorded as failed when manifest writing succeeds, then reraised.
+        Returned statuses other than completed/needs_review raise RuntimeError. Manifest
+        writing and result-building errors also propagate. Completion describes workflow
+        execution; scientific acceptance belongs to the concrete stages."""
         self.validate_input()
         self.workspace.mkdir(parents=True, exist_ok=True)
         use_resume = self.config.execution.resume if resume is None else bool(resume)
@@ -530,4 +678,10 @@ class InstrumentPipeline(ABC, Generic[InputT, ResultT]):
         return self.build_result(context)
 
     def run_stage(self, stage: str, *, resume: bool = True) -> ResultT:
+        """从首阶段执行至指定阶段 / Run from the first stage through the named stage.
+
+        转交 run(until=stage, resume=resume)，包含此前依赖；不是只执行单一阶段。
+        默认 resume=True，返回完整或部分公共结果。
+        Delegate to run(until=stage, resume=resume), including predecessors. This is
+        not a standalone one-stage call. Default resume=True; return the public result."""
         return self.run(until=stage, resume=resume)

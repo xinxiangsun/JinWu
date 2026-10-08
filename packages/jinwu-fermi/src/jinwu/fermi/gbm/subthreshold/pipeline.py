@@ -70,7 +70,7 @@ class GBMTargetedSearchPipeline(InstrumentPipeline):
     def stage_code_dependencies(self, stage):
         root = Path(__file__).parent
         import jinwu.core.time as time_module
-        return tuple(sorted(root.rglob("*.py"))) + (root.parent / "pipeline.py", root.parent / "poshist.py", Path(time_module.__file__))
+        return tuple(sorted(root.rglob("*.py"))) + (root.parent / "pipeline.py", root.parent / "poshist.py", root.parent / "tte.py", Path(time_module.__file__))
 
     def _bounds(self):
         lo, hi = seconds(self.config.search_interval)

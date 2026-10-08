@@ -307,9 +307,9 @@ def estimate_gbm_orbit_period(paths: Sequence[str | Path]) -> u.Quantity:
 def _poshist_time_range(path: Path) -> tuple[Time, Time]:
     from gdt.missions.fermi.gbm.poshist import GbmPosHist
 
-    history = GbmPosHist.open(path)
-    times = history.get_spacecraft_states().time
-    return Time(np.min(times.fermi), format="fermi"), Time(np.max(times.fermi), format="fermi")
+    with GbmPosHist.open(path) as history:
+        times = history.get_spacecraft_states().time
+        return Time(np.min(times.fermi), format="fermi"), Time(np.max(times.fermi), format="fermi")
 
 
 def find_gbm_poshist(
@@ -513,9 +513,10 @@ def check_gbm_coverage(
 
     The result is evaluated on the native position-history cadence.  Cells are
     represented by midpoints between samples, which makes duration accounting
-    well-defined at the requested flare boundaries.
+    well-defined at the requested flare boundaries. File paths are opened and
+    closed here; a supplied POSHIST object remains caller-owned.
     """
-    # 方法：基于 GBM poshist（50 ms 采样航天器位置/姿态/状态）的覆盖判定：
+    # 方法：按 POSHIST 文件实际采样间隔判定覆盖（本地实测日文件约 1 s 采样）：
     #       对每格（相邻样本中点代表元）同时要求源未被地球遮挡
     #       （GDT location_visible，含地平俯角）、非 SAA（南大西洋异常区标志）、
     #       航天器状态 good（观测约束满足），再与 TTE GTI 求交；持续时间按
@@ -554,10 +555,29 @@ def check_gbm_coverage(
                 tte_gti_applied=tte_gti is not None,
                 cadence_s=None,
             )
-        path_value = str(Path(poshist).resolve())
-    else:
-        history = poshist
-        path_value = getattr(history, "filename", None)
+        with history:
+            return _check_gbm_coverage_from_history(
+                interval,
+                history,
+                tte_gti=tte_gti,
+                path_value=str(Path(poshist).resolve()),
+            )
+    return _check_gbm_coverage_from_history(
+        interval,
+        poshist,
+        tte_gti=tte_gti,
+        path_value=getattr(poshist, "filename", None),
+    )
+
+
+def _check_gbm_coverage_from_history(
+    interval: GBMFlareInterval,
+    history: Any,
+    *,
+    tte_gti: Sequence[tuple[float, float]] | None,
+    path_value: str | None,
+) -> GBMCoverageResult:
+    """Evaluate coverage while the caller keeps any owned POSHIST file open."""
     states = history.get_spacecraft_states()
     met = np.asarray(states.time.fermi, dtype=float)
     if met.ndim != 1 or met.size < 2:

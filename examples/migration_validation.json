@@ -1,0 +1,12 @@
+{
+  "notebook_schema_and_code_syntax_passed": 11,
+  "paired_script_syntax_passed": 11,
+  "remaining_test_notebooks": 0,
+  "automated_test_scripts_retained": 50,
+  "root_gitignore_changed": false,
+  "notebooks_reexecuted": 0,
+  "script_smoke": {
+    "coordinates/teldef.py": "completed; round-trip geometry mismatch; needs_review"
+  },
+  "data_dependent_analyses_rerun": false
+}

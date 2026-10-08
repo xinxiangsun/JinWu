@@ -1,5 +1,8 @@
-Fermi GBM Continuous-Data Pipeline
-==================================
+Fermi GBM continuous 流程
+=========================
+
+以坐标、UTC 区间、POSHIST 与 TTE/CSPEC 为输入，选择探测器、拟合背景、
+提取谱并生成响应，给出固定谱形的上限与质量状态。缺失覆盖/响应不能解释为源未探测。
 
 :mod:`jinwu.fermi.gbm` provides a resumable, single-target pipeline for
 Fermi/GBM continuous (TTE/CSPEC) data, registered as ``"fermi.gbm"`` and
@@ -21,7 +24,7 @@ environment, while the ``rsp`` extra needs the BALROG detector database
 environment.
 
 Stages
-~~~~~~
+~~~~~~~~~~~~
 
 ::
 
@@ -95,7 +98,7 @@ Exit codes: ``0`` = completed, ``2`` = finished with
 ``needs_review`` outcomes that require human judgement, ``1`` = failure.
 
 Python API
-~~~~~~~~~~
+~~~~~~~~~~~~
 
 The :class:`jinwu.core.config.GBMContinuous` preset carries the
 instrument configuration; analysis parameters (detector angle limits,
@@ -159,7 +162,7 @@ is reported as a fixed-position model-significance diagnostic, and the
 conditional upper limit is only quoted below the significance threshold.
 
 See also
-~~~~~~~~
+~~~~~~~~~~~~
 
 * :doc:`upperlimits` — the ``poisson_gaussian_profile`` statistics shared
   with BAT survey upper limits.

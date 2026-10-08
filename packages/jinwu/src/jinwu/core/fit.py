@@ -777,16 +777,14 @@ class LightcurveFitter:
         # 准备误差
         if sigma is None:
             sigma = self.error if self.error is not None else np.ones_like(self.value)
-        # 防止 0 或 NaN 权重导致发散。
-        # 注意必须复制：np.asarray 对 ndarray 不拷贝，原地替换非法值
-        # 会污染调用者的 LightcurveData.error，导致二次拟合结果错误。
+        # Invalid measurement errors do not define a least-squares likelihood.
+        # Reject them rather than inventing an uncertainty or extreme weight.
         if sigma is not None:
             sigma = np.array(sigma, dtype=float, copy=True)
-            # 用数据的 10% 或极小值替换非法/非正误差
-            bad = ~np.isfinite(sigma) | (sigma <= 0)
-            if np.any(bad):
-                fallback = 0.1 * np.maximum(np.abs(self.value), np.finfo(float).eps)
-                sigma[bad] = fallback[bad] if fallback.shape == sigma.shape else np.nan_to_num(fallback, nan=1.0)
+            if sigma.shape != self.value.shape or np.any(~np.isfinite(sigma)) or np.any(sigma <= 0):
+                raise ValueError("sigma must match the data and contain finite positive measurement errors")
+        if not np.all(np.isfinite(self.time)) or not np.all(np.isfinite(self.value)):
+            raise ValueError("Lightcurve fitting requires finite time and value arrays")
         
         # 初值估计
         if p0 is None:
@@ -894,8 +892,17 @@ class LightcurveFitter:
             dof = len(self.time) - len(popt)
             reduced_chisq = chisq / dof if dof > 0 else np.inf
             
-            success = True
-            message = f"astropy {astropy_method} converged successfully"
+            info = fitter.fit_info
+            converged = bool(info.get('success', False))
+            finite = (np.all(np.isfinite(popt)) and np.all(np.isfinite(fitted))
+                      and np.all(np.isfinite(residuals)) and np.isfinite(chisq))
+            success = bool(converged and finite)
+            message = str(info.get('message', f"astropy {astropy_method} termination status unavailable"))
+            if not finite:
+                message += "; nonfinite parameters, model, residuals or fit statistic"
+            if not success:
+                pcov = None
+                errors = np.full(len(pnames), np.nan)
             
         except Exception as e:
             warnings.warn(f"astropy fitting failed: {e}")
@@ -2424,7 +2431,8 @@ def _prepared_error_parameters(
     delta_stat: float = 1.0,
 ) -> str:
     parameter_indices = []
-    prefix = "1." if float(delta_stat) == 1.0 else f"{float(delta_stat):g}"
+    # XSPEC distinguishes integer parameter IDs from real delta-stat values.
+    prefix = repr(float(delta_stat))
     if intrinsic_nh_mode == "free" and "ztbabs" in model_name.lower():
         for _, component in _prepared_ztbabs_components(model):
             if hasattr(component, "nH"):
