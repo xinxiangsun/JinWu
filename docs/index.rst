@@ -4,7 +4,7 @@ JinWu 使用手册
 **从观测产品到可追溯的光变、能谱与统计推断。**
 
 JinWu（金乌）为高能瞬变分析提供统一的数据对象、时间处理、统计接口和仪器流程。
-本手册覆盖当前 **0.2.2 工作区版本**，包括 WXT、Swift BAT/XRT、Fermi GBM、GW 覆盖，
+本手册覆盖当前 |release| 版本，包括 WXT、Swift BAT/XRT、Fermi GBM、GW 覆盖，
 以及有符号净计数时标、计数实验 SNR 和 Haar MVT。工作区功能不等同于已发布 wheel；安装时请核对版本。
 
 .. container:: jinwu-start-grid

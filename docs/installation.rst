@@ -5,7 +5,7 @@
 ------------------
 
 核心包负责 FITS、时间、统计与绘图；仪器包共用 ``jinwu`` namespace。
-各包当前源码版本为 **0.2.2**，声明 Python ≥ 3.11，本手册的构建环境为 Python 3.12。
+各包当前源码版本为 |release|，声明 Python ≥ 3.11，本手册的构建环境为 Python 3.12。
 HEASoft、PyXspec、任务校准库与外部任务程序按流程配置，不由普通 pip 安装代替。
 
 .. list-table:: 依赖选择
@@ -46,7 +46,25 @@ HEASoft、PyXspec、任务校准库与外部任务程序按流程配置，不由
      - ``jinwurs`` 或 ``jinwu[rust]``
      - 可选；源码构建需 Rust / maturin
 
-安装当前工作区
+安装发布版
+----------
+
+核心与仪器插件为独立发行包，按需安装；固定版本号可避免混用不同版本：
+
+.. code-block:: bash
+
+   python -m pip install 'jinwu==0.2.3'
+   # 按需选择仪器插件和 Rust 扩展
+   python -m pip install 'jinwu-ep==0.2.3'
+   python -m pip install 'jinwu-swift[ukssdc,survey]==0.2.3'
+   python -m pip install 'jinwu-fermi[search,rsp]==0.2.3'
+   python -m pip install 'jinwu-gw==0.2.3'
+   python -m pip install 'jinwurs==0.2.3'
+
+PyPI 的实际文件决定可安装版本与平台。``jinwurs`` 的发布目标为 Linux x86_64 与
+macOS arm64；其他平台可使用 Python 实现，或自行构建 Rust 扩展。
+
+安装当前源码
 --------------
 
 仓库根目录是多包管理入口，不能直接 ``pip install -e .``。
@@ -63,8 +81,7 @@ HEASoft、PyXspec、任务校准库与外部任务程序按流程配置，不由
    python -m pip install -e ./packages/jinwu-gw
    python -m pip install -e './packages/jinwu[bxa]'
 
-普通发布包可以通过 ``python -m pip install jinwu`` 安装，再加所需插件。
-本手册包含尚未证明已发布的工作区功能；请用源码安装复现本版本，不能用 PyPI 的包名推断功能相同。
+源码安装适用于开发与尚未发布的后续变更；复现发布版时请检出相应版本标签。
 
 核对运行环境
 ------------
