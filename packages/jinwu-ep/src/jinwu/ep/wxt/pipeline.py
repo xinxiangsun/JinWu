@@ -1363,6 +1363,47 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
 
         return cast(WXTPointingResult, super().run(until=until, resume=resume))
 
+    def include_config_in_input_fingerprint(self) -> bool:
+        """Let each WXT stage track its own configuration dependencies."""
+        return False
+
+    def stage_config_dependencies(self, stage: PipelineStage) -> Any:
+        """Track consumed configuration groups; upstream hashes cover propagation.
+
+        Extraction groups are conservative: shared extraction options may refresh
+        several extraction stages. The report records the entire configuration,
+        so any configuration change refreshes it without discarding analysis.
+        """
+        config = self.config
+        groups = {
+            "discover": (),
+            "galactic_absorption": ("galactic_absorption",),
+            "pipeline_spectrum": ("spectrum", "energy_range_keV"),
+            "regions": ("regions",),
+            "provisional_events": ("extraction",),
+            "exposure_arm_qc": ("background_scaling", "regions"),
+            "final_events": ("extraction",),
+            "duration": ("duration", "mission", "plotting"),
+            "lightcurves": ("extraction", "plotting"),
+            "t100_spectra": ("extraction",),
+            "t90_spectra": ("extraction",),
+            "ogip_finalize": ("background_scaling", "extraction", "spectrum", "energy_range_keV"),
+            "bayesian_block_spectra": ("bayesian_block_spectra", "extraction", "background_scaling"),
+            "fit": ("fitting", "bxa", "spectrum", "plotting"),
+            "fluxcurve": ("flux_curve", "spectrum", "energy_range_keV", "plotting"),
+        }
+        if stage.name not in groups:
+            # Report serializes all config; unknown stages stay conservative.
+            return config
+        dependencies = {name: getattr(config, name) for name in groups[stage.name]}
+        dependencies["instrument"] = (config.name, config.pipeline)
+        if stage.name in {
+            "provisional_events", "final_events", "lightcurves",
+            "t100_spectra", "t90_spectra", "bayesian_block_spectra",
+        }:
+            dependencies["command_timeout_s"] = config.execution.command_timeout_s
+        return dependencies
+
     def stage_code_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
         """声明各阶段依赖的核心源码文件，用于阶段缓存失效指纹（AUD-01）。
 
