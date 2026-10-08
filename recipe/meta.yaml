@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwu-{{ version }}.tar.gz
-  sha256: eec45a732414c380fc9f33e026e04fca060bc71de04a85c47063f8b8a321e45a
+  sha256: 4afca98cd99fb68253ec9c9c65e7806df2be2c3ff07a9df53372afe367ea90ae
 
 build:
   noarch: python
