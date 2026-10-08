@@ -76,6 +76,17 @@ WXT 输入与最小运行
 fit 参数 ``error_status``、背景/曝光来源、flux 来源与未完成阶段都应保留。
 结果文件存在不能替代响应、时间和区域验收。
 
+WXT 报告选项
+------------
+
+``config.reporting.enabled=False`` 跳过报告生成和摘要打印，分析结果仍然可用；
+返回的 ``result.report`` 与 ``result.summary`` 为 ``None``。已有报告文件保留，
+但不会作为本次结果返回。仅关闭控制台打印时，使用 ``print_summary=False``。
+
+启用报告时，目前仅支持 ``language="zh"``。其他语言为未来实现；
+例如 ``language="en"`` 会在运行入口抛出 ``NotImplementedError``，
+不会继续生成与配置不符的中文报告。关闭报告时不检查语言。
+
 FXT 扫描与能谱
 --------------
 

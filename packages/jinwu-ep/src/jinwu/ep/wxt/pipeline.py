@@ -1534,6 +1534,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def validate_input(self) -> None:
         if self.config.name.upper() != "WXT":
             raise ValueError(f"WXTPointingPipeline requires WXT config, got {self.config.name}")
+        if self.config.reporting.enabled and self.config.reporting.language != "zh":
+            raise NotImplementedError(
+                "WXT 报告目前仅支持 language='zh'；其他语言为未来实现"
+            )
         root = self.input.resolved_root()
         if not root.is_dir():
             raise FileNotFoundError(f"WXT product directory does not exist: {root}")
@@ -2799,6 +2803,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         )
 
     def _stage_report(self, context) -> StageResult:
+        if not self.config.reporting.enabled:
+            return StageResult(data={"enabled": False})
         report = self.workspace / "report" / "wxt_pipeline_report.json"
         payload = {
             "target_id": self.input.target_id,
@@ -3034,6 +3040,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "0.5-4 keV flux curve",
                 (context["fluxcurve"].outputs.get("plot_png"), context["fluxcurve"].outputs.get("plot_svg")),
             )
+        report_outputs = context["report"].outputs if "report" in context else {}
         return WXTPointingResult(
             workspace=self.workspace,
             status=self.status().status.value,
@@ -3043,10 +3050,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             t90_source_pha=Path(ogip.outputs["source_pha"]) if ogip else None,
             t90_background_pha=Path(ogip.outputs["background_pha"]) if ogip else None,
             segments=segments,
-            report=Path(context["report"].outputs["report"]) if "report" in context else None,
+            report=Path(report_outputs["report"]) if report_outputs.get("report") else None,
             summary=(
-                Path(context["report"].outputs["summary_txt"])
-                if "report" in context else None
+                Path(report_outputs["summary_txt"])
+                if report_outputs.get("summary_txt") else None
             ),
             plot_groups=plot_groups,
         )
