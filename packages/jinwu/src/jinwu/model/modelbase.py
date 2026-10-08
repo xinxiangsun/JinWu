@@ -1,5 +1,10 @@
 """
-Model base classes inspired by XSPEC:
+Experimental model interfaces inspired by XSPEC.
+
+Existing subclasses can implement ``evaluate`` and use the component helpers.
+A native likelihood/fitting backend is a future feature.
+
+Component roles:
  AdditiveModel: produces a spectrum to be summed
  MultiplicativeModel: produces a transmission factor to multiply
  ConvolutionModel: convolves an input spectrum

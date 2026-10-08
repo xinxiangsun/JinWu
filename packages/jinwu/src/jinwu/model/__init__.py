@@ -1,4 +1,8 @@
-"""Spectral and temporal model components with XSPEC-inspired architecture.
+"""Experimental spectral component interfaces with XSPEC-inspired semantics.
+
+The existing public classes are retained for user-defined ``evaluate`` methods.
+A native JinWu likelihood or fitting backend is a future feature; these
+interfaces alone do not provide spectral fitting.
 
 This module provides:
 - ModelBase: Abstract base class for all model components

@@ -9,8 +9,8 @@
 exponential、gaussian、constant 和 linear，见 :doc:`lightcurve`。
 
 ``jinwu.model.modelbase`` 提供 ``ModelBase``、``AdditiveModel``、
-``MultiplicativeModel``、``ConvolutionModel`` 抽象接口，用于扩展模型协议；
-这些基类不等于完整的独立能谱拟合后端。仪器特有的响应或校准模型应与可复用源模型分开。
+``MultiplicativeModel``、``ConvolutionModel`` 实验接口，保留现有公开类及用户子类的 ``evaluate`` 用法。
+原生 likelihood 和独立能谱拟合后端属于未来实现；这些基类本身不提供拟合。仪器特有的响应或校准模型应与可复用源模型分开。
 
 背景先验
 ------------

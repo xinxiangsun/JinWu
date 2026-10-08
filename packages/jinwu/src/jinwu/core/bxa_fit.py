@@ -1054,44 +1054,25 @@ def fit_xray_models_bxa(
     return comparison
 
 
-def _build_jinwu_model_solver(base_cls):
-    """Construct the ``JinwuModelBXASolver`` subclass of ``base_cls``.
+class JinwuModelBXASolver:
+    """Compatibility name for the future native fitting backend.
 
-    The subclass is built lazily (never at import time) so ``jinwu.core`` stays
-    importable without BXA.  Its ``log_likelihood`` is a placeholder that must
-    be implemented once a native ``jinwu.model`` likelihood engine exists; for
-    now it raises ``NotImplementedError``.
+    This unexported placeholder is not a BXA solver. Construction fails
+    immediately, without importing BXA or creating fitting products.
     """
 
-    class JinwuModelBXASolver(base_cls):  # type: ignore[misc, valid-type]
-        """BXA solver backed by a native ``jinwu.model`` likelihood (stub).
-
-        Reserved for the future non-XSPEC likelihood engine.  The current
-        XSPEC-backed path (:func:`fit_prepared_bxa`) is unaffected.
-        """
-
-        def log_likelihood(self, params):  # pragma: no cover - stub
-            raise NotImplementedError(
-                "JinwuModelBXASolver.log_likelihood requires a native "
-                "jinwu.model likelihood engine, which is not implemented yet. "
-                "Use fit_prepared_bxa (XSPEC-backed BXA) for now."
-            )
-
-    JinwuModelBXASolver.__name__ = "JinwuModelBXASolver"
-    JinwuModelBXASolver.__qualname__ = "JinwuModelBXASolver"
-    return JinwuModelBXASolver
+    def __init__(self, *args: Any, **kwargs: Any):
+        raise NotImplementedError(
+            "未来实现：native jinwu.model likelihood backend. "
+            "Use fit_prepared_bxa for XSPEC-backed BXA fitting."
+        )
 
 
 def fit_prepared_jinwu_model(*args: Any, **kwargs: Any):
-    """Placeholder for a native ``jinwu.model`` Bayesian fit (not exported).
-
-    Raises ``NotImplementedError``: reserved for the future non-XSPEC
-    likelihood backend.  Deliberately excluded from ``__all__``.
-    """
+    """Future native fitting entry point, excluded from ``__all__``."""
     raise NotImplementedError(
-        "fit_prepared_jinwu_model is a placeholder for the future native "
-        "jinwu.model likelihood backend; use fit_prepared_bxa (XSPEC-backed "
-        "BXA nested sampling) instead."
+        "未来实现：native jinwu.model likelihood backend. "
+        "Use fit_prepared_bxa for XSPEC-backed BXA fitting."
     )
 
 
@@ -1171,16 +1152,3 @@ def run_bxa_pipeline(
         encoding="utf-8",
     )
     return summary
-
-
-def __getattr__(name: str) -> Any:
-    """Lazily expose ``JinwuModelBXASolver`` without importing BXA at module
-    load time.  Constructing the subclass requires ``bxa``; accessing it in a
-    dependency-free environment raises the standard install guidance.
-    """
-    if name == "JinwuModelBXASolver":
-        bxa = _require_bxa()
-        cls = _build_jinwu_model_solver(bxa.BXASolver)
-        globals()[name] = cls
-        return cls
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

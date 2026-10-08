@@ -88,9 +88,9 @@ already present.
     run a Bayesian fit.
 
 ``backend`` -- *which likelihood engine* evaluates the model
-    Currently only ``"xspec"``.  A native ``jinwu.model`` engine is reserved
-    for the future (see `jinwu.model placeholder`_ below).  You normally never
-    change this.
+    Currently only ``"xspec"``. A native ``jinwu.model`` engine is a future
+    feature (see `jinwu.model placeholder`_ below). You normally never change
+    this.
 
 Both fields are validated on construction: an unknown ``method`` or ``backend``
 raises ``ValueError``.
@@ -366,14 +366,17 @@ failures (also written to ``bxa_pipeline.json``):
 ``jinwu.model`` placeholder
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A form-compatible seam exists for a future **native** (non-XSPEC) likelihood
-engine: ``JinwuModelBXASolver`` (a ``bxa.xspec.BXASolver`` subclass overriding
-``log_likelihood``) and ``fit_prepared_jinwu_model`` (same signature as
-``fit_prepared_bxa``).  **Both currently raise ``NotImplementedError``.**  They
-are reserved so that a future ``jinwu.model`` backend can be dropped in without
-changing call sites, and are deliberately excluded from ``jinwu.core.__all__``
-to prevent accidental use.  For now, use the XSPEC-backed path
-(``model_name=...``).
+A native (non-XSPEC) ``jinwu.model`` likelihood backend is a future feature.
+``JinwuModelBXASolver`` and ``fit_prepared_jinwu_model`` remain available by
+explicit import from ``jinwu.core.bxa_fit`` for compatibility, but are excluded
+from ``__all__``. Calling either immediately raises ``NotImplementedError``
+with a "未来实现" message, even without BXA installed.
+
+``JinwuModelBXASolver`` is now an explicit placeholder, not a
+``bxa.xspec.BXASolver`` subclass: it no longer imports BXA or constructs a
+solver before failing later in ``log_likelihood``. Existing public
+``jinwu.model`` component interfaces remain usable for custom ``evaluate``
+implementations. Use ``fit_prepared_bxa`` for supported XSPEC-backed fitting.
 
 
 Key constraints
