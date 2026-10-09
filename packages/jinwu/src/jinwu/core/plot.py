@@ -1130,21 +1130,6 @@ def plot_event_txx(
                 return tz_evt
         return np.nan
 
-    def _time_scalar(t_in: Any) -> Any:
-        if AstroTime is not None and isinstance(t_in, AstroTime):
-            try:
-                if bool(getattr(t_in, "isscalar", True)):
-                    return t_in
-            except Exception:
-                return t_in
-            try:
-                if len(t_in) == 0:
-                    raise ValueError("timezero 为 Time 数组时不能为空")
-                return t_in[0]
-            except Exception:
-                return t_in
-        return t_in
-
     evt_tz = _event_timezero()
     evt_tz_obj = getattr(evt, "timezero_obj", None)
 
@@ -1159,7 +1144,12 @@ def plot_event_txx(
             return float(value), None
 
         if AstroTime is not None and isinstance(value, AstroTime):
-            t0_obj = _time_scalar(value)
+            if value.isscalar:
+                t0_obj = value
+            else:
+                if len(value) == 0:
+                    raise ValueError("timezero 为 Time 数组时不能为空")
+                t0_obj = value[0]
             if (not np.isfinite(evt_tz)) or (evt_tz_obj is None):
                 raise ValueError("传入 astropy.time.Time 作为 timezero 时，事件对象需包含 timezero 与 timezero_obj")
             dt_sec = float((t0_obj - evt_tz_obj).to_value("sec"))

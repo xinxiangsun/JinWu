@@ -4,6 +4,9 @@ Changelog
 Unreleased
 ----------
 
+* ``plot_event_txx`` 直接校验 ``Time`` 时间零点，空数组抛出明确错误；
+  非空数组仍取第一项，其他时间输入及绘图行为不变。
+
 * Fermi 包入口直接导入 GBM，内部依赖或实现的导入错误原样抛出，
   不再静默变成空包；``GBMObservation`` 保留现有延迟导入边界。
 
