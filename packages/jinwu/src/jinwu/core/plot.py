@@ -680,13 +680,14 @@ def plot_lightcurve(
     title: Optional[str] = None,
     grid: bool = True,
     out: Optional[PathLike] = None,
-    flux_array: Optional[np.ndarray] = None,  # TODO: 待基类扩展后改为 LightcurveData.flux 字段并支持自动推导
+    flux_array: Optional[np.ndarray] = None,
 ) -> Union[Axes, List[Axes]]:
     """绘制光变曲线（单能段或多能段）。
 
     参数
     - src: 可为 LightcurveData 或 LC 文件路径（或 HDUList）。
     - srcname: 源名称（源昵称），若提供则在标题/标签中显示
+    - T0: 保留兼容；不修改时间数组或时间标签。
     - ykind: "rate" 或 "counts" 或 "flux"；auto 时根据 is_rate 自动选择
     - multiband: True/"auto" 时若 value 为 (N,M) 则按行分面绘制
     - color: 线条颜色
@@ -694,7 +695,9 @@ def plot_lightcurve(
     - title: 图表标题（若为 None 则自动生成）
     - grid: 是否显示网格线；默认跟随统一样式（rcParams），False 显式关闭
     - out: 若提供路径，则保存图片
-    - flux_array: 若 ykind='flux' 需要手动提供 flux 数组
+    - flux_array: 若 ykind='flux' 需要手动提供 flux 数组；自动反演为未来实现
+    - HDUList 转换 counts/rate 需要 TIMEDEL（秒），有 FRACEXP 时乘有效曝光比例。
+      缺少曝光时明确报错；LightcurveData 保留原生单位回退行为。
 
     说明
     - 对于从 join() 得到的多条 LC，横轴使用 "Time since <TIMEZERO_0>" 格式
@@ -794,7 +797,7 @@ def plot_lightcurve(
         ax_.set_xlabel(xlabel)
         ax_.set_ylabel(ylab)
 
-    # 情况 A：LightcurveData
+    # 入口只提取数组与元信息；单位选择和绘图共用下方逻辑。
     if lc is not None:
         # 时间轴（必须存在）
         time = np.asarray(lc.time, float)
@@ -808,10 +811,7 @@ def plot_lightcurve(
                 val_raw = lc.rate
         if val_raw is None:
             raise ValueError("LightcurveData 缺少 value/counts/rate，无法绘图")
-        try:
-            val_arr = np.asarray(val_raw, float)
-        except Exception as exc:
-            raise ValueError("无法将光变曲线主数据转换为 numpy 数组") from exc
+        val_arr = np.asarray(val_raw, float)
 
         # 误差列：优先 error，缺失时回退到 counts_err/rate_err
         err_raw = getattr(lc, "error", None)
@@ -875,99 +875,16 @@ def plot_lightcurve(
         if label_eff is None and lc_kind is not None:
             label_eff = lc_kind
 
-        # 根据 is_rate / ykind 选择绘制 counts 还是 rate；必要时用 dt/bin_exposure 进行转换
-        def _width_array_like(v: np.ndarray) -> Optional[np.ndarray]:
-            width = None
-            if getattr(lc, 'bin_exposure', None) is not None:
-                width = np.asarray(lc.bin_exposure, float)
-            elif getattr(lc, 'bin_width', None) is not None:
-                width = np.asarray(lc.bin_width, float)
-            elif getattr(lc, 'dt', None) is not None:
-                dt_raw = lc.dt
-                dt_arr = np.asarray(dt_raw, float)
-                if dt_arr.ndim == 0:
-                    dt_val = float(dt_arr)
-                    width = dt_val if (np.isfinite(dt_val) and dt_val > 0) else None
-                else:
-                    width = dt_arr
-            if width is None:
-                return None
-            if np.ndim(width) == 0:
-                return np.full(v.shape[0], float(width), dtype=float)
-            width_arr = np.asarray(width, float)
-            if width_arr.shape[0] != v.shape[0]:
-                return None
-            return width_arr
-
-        def _to_rate(v: np.ndarray, e: Optional[np.ndarray]) -> tuple[np.ndarray, Optional[np.ndarray], bool]:
-            w = _width_array_like(v)
-            if w is None:
-                return v, e, False
-            w = np.where(w > 0.0, w, np.nan)
-            w_b = w[:, None] if (v.ndim == 2 and w.ndim == 1) else w
-            rate_val = v / w_b
-            rate_err = e / w_b if e is not None else None
-            return rate_val, rate_err, True
-
-        def _to_counts(v: np.ndarray, e: Optional[np.ndarray]) -> tuple[np.ndarray, Optional[np.ndarray], bool]:
-            w = _width_array_like(v)
-            if w is None:
-                return v, e, False
-            w = np.where(w > 0.0, w, np.nan)
-            w_b = w[:, None] if (v.ndim == 2 and w.ndim == 1) else w
-            cnt_val = v * w_b
-            cnt_err = e * w_b if e is not None else None
-            return cnt_val, cnt_err, True
-
-        if ykind == 'auto':
-            eff_kind: Literal['rate', 'counts', 'flux'] = 'rate' if lc.is_rate else 'counts'
-        else:
-            eff_kind = ykind  # type: ignore[assignment]
-
-        ylab = "Rate (counts s$^{-1}$)" if eff_kind == 'rate' else ("Counts" if eff_kind == 'counts' else "Flux (erg cm$^{-2}$ s$^{-1}$)")
-
-        # TODO: 后续基类扩展 LightcurveData 时，添加 flux / flux_error 字段以及可选的响应矩阵信息
-        #       以便自动从 counts/rate 反演 flux；目前需要外部提供 flux_array。
-        if eff_kind == 'flux':
-            if flux_array is not None:
-                y = np.asarray(flux_array, float)
-                # TODO: 计算 flux_error 的传播（需要 counts/rate error + 响应矩阵）
-                yerr = None
-            else:
-                # 未提供 flux_array 则降级到 rate
-                warnings.warn("ykind='flux' 但未提供 flux_array；降级到 rate", UserWarning)
-                eff_kind = 'rate'
-                ylab = "Rate (counts s$^{-1}$)"
-                if lc.is_rate:
-                    y = val_arr
-                    yerr = err
-                else:
-                    y, yerr, ok = _to_rate(val_arr, err)
-                    if not ok:
-                        y, yerr = val_arr, err
-                        ylab = "Counts"
-        elif eff_kind == 'rate':
-            if lc.is_rate:
-                y = val_arr
-                yerr = err
-            else:
-                y, yerr, ok = _to_rate(val_arr, err)
-                if not ok:
-                    # 无法转换则退回 counts 并更新标签
-                    y, yerr = val_arr, err
-                    ylab = "Counts"
-            # 如果转换导致标签变化，保持 ylab 与实际一致
-        else:  # eff_kind == 'counts'
-            if not lc.is_rate:
-                y = val_arr
-                yerr = err
-            else:
-                y, yerr, ok = _to_counts(val_arr, err)
-                if not ok:
-                    # 无法转换则退回 rate 并更新标签
-                    y, yerr = val_arr, err
-                    ylab = "Rate (counts s$^{-1}$)"
-
+        is_rate = lc.is_rate
+        width = None
+        for attr in ('bin_exposure', 'bin_width', 'dt'):
+            width = getattr(lc, attr, None)
+            if width is not None:
+                if attr == 'dt':
+                    dt_arr = np.asarray(width, float)
+                    if dt_arr.ndim == 0 and (not np.isfinite(dt_arr) or dt_arr <= 0):
+                        width = None
+                break
         # 使用原始 TIME，不再减去 TRIGTIME/T0；仅在标签中标注 TIMEZERO
         t = time
         tz = None
@@ -1000,150 +917,119 @@ def plot_lightcurve(
             )
             tz = 0.0
 
-        # 多能段还是单能段
-        if val_arr.ndim == 2 and val_arr.shape[1] > 1 and (multiband is True or multiband == "auto"):
-            nb = val_arr.shape[1]
-            fig, axes = plt.subplots(nb, 1, sharex=True, figsize=(8.0, 1.9 * nb), constrained_layout=True)
-            if nb == 1:
-                axes = [axes]
-            for i in range(nb):
-                yerr_i = yerr[:, i] if (yerr is not None and yerr.ndim == 2 and yerr.shape[1] == nb) else None
-                _draw(
-                    axes[i],
-                    t,
-                    y[:, i],
-                    yerr_i,
-                    (label_eff or f"Band {i+1}"),
-                    tz,
-                    ylab,
-                    timezero_obj=timezero_obj_lc,
-                    instrume=instrume,
-                    binsize=binsize_val,
-                    lc_kind=lc_kind,
-                )
-                axes[i].legend(loc="upper right", fontsize=9)
-            if title is None:
-                base = Path(getattr(lc, "path", "")).name
-                if srcname:
-                    title = f"{srcname} Lightcurve" if base else srcname
-                else:
-                    title = base or "Lightcurve"
-            axes[0].set_title(title)
-            axes_to_return: Union[List[Axes], Axes]
-            axes_to_return = list(axes)
-        else:
-            ax = _ensure_axes(ax)
-            y1d = y.reshape(-1) if y.ndim > 1 else y
-            yerr1d = yerr.reshape(-1) if (yerr is not None and yerr.ndim > 1) else yerr
-            _draw(
-                ax,
-                t,
-                y1d,
-                yerr1d,
-                label_eff,
-                tz,
-                ylab,
-                timezero_obj=timezero_obj_lc,
-                instrume=instrume,
-                binsize=binsize_val,
-                lc_kind=lc_kind,
-            )
-            if title is None:
-                base = Path(getattr(lc, "path", "")).name
-                if srcname:
-                    title = f"{srcname} ({base})" if base else srcname
-                else:
-                    title = base or "Lightcurve"
-            ax.set_title(title)
-            if label_eff:
-                ax.legend(loc="best")
-            axes_to_return = ax
-
-    # 情况 B：HDUList（兜底）
     else:
         assert hdul is not None
-        rate_hdu = None
-        for h in hdul[1:]:
-            if isinstance(h, fits.BinTableHDU) and h.name.upper() in ("RATE", "LIGHTCURVE", "LC"):
-                rate_hdu = h
-                break
+        rate_hdu = next((h for h in hdul[1:] if isinstance(h, fits.BinTableHDU)
+                         and h.name.upper() in ("RATE", "LIGHTCURVE", "LC")), None)
         if rate_hdu is None:
-            for h in hdul[1:]:
-                if isinstance(h, fits.BinTableHDU):
-                    rate_hdu = h
-                    break
+            rate_hdu = next((h for h in hdul[1:] if isinstance(h, fits.BinTableHDU)), None)
         if rate_hdu is None:
             raise ValueError("未在 HDUList 中找到 RATE/LC 表")
         d = rate_hdu.data
-        cols = list(getattr(rate_hdu.columns, "names", []) or [])
-        time = np.asarray(d["TIME"], float)
-        # 安全获取 header
-        hdr0_dict: dict = {}
-        if hasattr(hdul[0], "header"):
-            hdr_raw = getattr(hdul[0], "header")
-            if hasattr(hdr_raw, "get"):
-                hdr0_dict = hdr_raw  # type: ignore
-        # Raw TIME for HDUList case
-        t = time
-        tz = None
-        hv_meta = hdr0_dict.get('TIMEZERO')
-        if hv_meta is not None:
-            try:
-                tz = float(hv_meta)
-            except Exception:
-                tz = None
-
-        # 优先 TOT_RATE；否则 RATE 可能为 (N, M)
-        if "TOT_RATE" in cols:
-            val = np.asarray(d["TOT_RATE"], float)
-            err = np.asarray(d["TOT_ERROR"], float) if "TOT_ERROR" in cols else None
-            ax = _ensure_axes(ax)
-            _draw(ax, t, val, err, label, tz, "Rate (counts s$^{-1}$)", timezero_obj=None, instrume=None, binsize=None, lc_kind=None)
-            axes_to_return = ax
+        cols = rate_hdu.columns.names
+        t = np.asarray(d["TIME"], float)  # 保留 HDUList 原始 TIME，不改时间基准。
+        hv = hdul[0].header.get('TIMEZERO')
+        try:
+            tz = float(hv) if hv is not None else None
+        except (TypeError, ValueError):
+            tz = None
+        # TOT_RATE 是全能段汇总列，优先于可能为二维的 RATE。
+        value_col = next((name for name in ("TOT_RATE", "RATE", "COUNTS") if name in cols), None)
+        if value_col is None:
+            raise ValueError("LC 表缺少 TOT_RATE/RATE/COUNTS，无法绘图")
+        val_arr = np.asarray(d[value_col], float)
+        error_col = "TOT_ERROR" if value_col == "TOT_RATE" else "ERROR"
+        err = np.asarray(d[error_col], float) if error_col in cols else None
+        is_rate = value_col != "COUNTS"
+        width = None
+        if "TIMEDEL" in cols:
+            width = np.asarray(d["TIMEDEL"], float)
         else:
-            rate = d["RATE"] if "RATE" in cols else d["COUNTS"]
-            val = np.asarray(rate)
-            err = np.asarray(d["ERROR"], float) if "ERROR" in cols else None
-            ylab = "Rate (counts s$^{-1}$)" if "RATE" in cols else "Counts"
-            if val.ndim == 2 and val.shape[1] > 1 and (multiband is True or multiband == "auto"):
-                nb = val.shape[1]
-                fig, axes = plt.subplots(nb, 1, sharex=True, figsize=(8.0, 1.9 * nb), constrained_layout=True)
-                if nb == 1:
-                    axes = [axes]
-                for i in range(nb):
-                    yerr_i = err[:, i] if (err is not None and err.ndim == 2 and err.shape[1] == nb) else None
-                    _draw(axes[i], t, val[:, i], yerr_i, (label or f"Band {i+1}"), tz, ylab, timezero_obj=None, instrume=None, binsize=None, lc_kind=None)
-                axes_to_return = list(axes)
+            width = rate_hdu.header.get("TIMEDEL", hdul[0].header.get("TIMEDEL"))
+        if width is not None and "FRACEXP" in cols:
+            fracexp = np.asarray(d["FRACEXP"], float)
+            # 与现有 LC reader 相同：非有限值取 1，比例限制为 [0, 1]。
+            fracexp = np.clip(np.where(np.isfinite(fracexp), fracexp, 1.0), 0.0, 1.0)
+            width = np.asarray(width, float) * fracexp
+        instrume = binsize_val = lc_kind = timezero_obj_lc = None
+        label_eff = label
+
+    # 对象与原始 HDU 使用同一套单位选择和误差传播。
+    eff_kind = ('rate' if is_rate else 'counts') if ykind == 'auto' else ykind
+    if eff_kind == 'flux' and flux_array is None:
+        warnings.warn("ykind='flux' 但未提供 flux_array；自动反演为未来实现，降级到 rate", UserWarning)
+        eff_kind = 'rate'
+    y, yerr = val_arr, err
+    if eff_kind == 'flux':
+        y, yerr = np.asarray(flux_array, float), None
+        if y.shape != val_arr.shape:
+            raise ValueError("flux_array 形状必须与光变数据一致")
+    elif (eff_kind == 'rate') != bool(is_rate):
+        if width is not None:
+            width = np.asarray(width, float)
+            if width.ndim == 0:
+                width = np.full(val_arr.shape[0], float(width))
+            elif width.shape[0] != val_arr.shape[0]:
+                width = None
+        if width is None:
+            if hdul is not None:
+                raise ValueError("HDUList 转换 counts/rate 需要每 bin 曝光 TIMEDEL")
+            eff_kind = 'rate' if is_rate else 'counts'
+        else:
+            width = np.where(width > 0.0, width, np.nan)
+            if val_arr.ndim == 2 and width.ndim == 1:
+                width = width[:, None]
+            if eff_kind == 'rate':
+                y = val_arr / width
+                yerr = err / width if err is not None else None
             else:
-                ax = _ensure_axes(ax)
-                _draw(ax, t, val.reshape(-1), err.reshape(-1) if (err is not None and err.ndim > 1) else err, label, tz, ylab, timezero_obj=None, instrume=None, binsize=None, lc_kind=None)
-                axes_to_return = ax
+                y = val_arr * width
+                yerr = err * width if err is not None else None
+    ylab = {
+        "rate": "Rate (counts s$^{-1}$)",
+        "counts": "Counts",
+        "flux": "Flux (erg cm$^{-2}$ s$^{-1}$)",
+    }[eff_kind]
 
-        if title is None:
-            base_name = ""
-            if hasattr(hdul, "filename"):
-                try:
-                    base_name = Path(str(hdul.filename())).name  # type: ignore[attr-defined]
-                except Exception:
-                    base_name = ""
-            title = base_name or "Lightcurve"
-        if isinstance(axes_to_return, list):
-            axes_to_return[0].set_title(title)
+    # 同一条绘图路径处理单能段/多能段，保留两种输入各自的标题/图例惯例。
+    split_bands = (val_arr.ndim == 2 and val_arr.shape[1] > 1
+                   and (multiband is True or multiband == "auto"))
+    if split_bands:
+        nb = val_arr.shape[1]
+        fig, axes = plt.subplots(nb, 1, sharex=True, figsize=(8.0, 1.9 * nb), constrained_layout=True)
+        axes_to_return: Union[List[Axes], Axes] = list(axes)
+    else:
+        axes_to_return = _ensure_axes(ax)
+    axes_list = axes_to_return if isinstance(axes_to_return, list) else [axes_to_return]
+    for i, axis in enumerate(axes_list):
+        yi = y[:, i] if split_bands else y.reshape(-1)
+        if split_bands:
+            yerri = yerr[:, i] if yerr is not None and yerr.ndim == 2 and yerr.shape[1] == nb else None
         else:
-            axes_to_return.set_title(title)
-
+            yerri = yerr.reshape(-1) if yerr is not None else None
+        _draw(axis, t, yi, yerri, (label_eff or f"Band {i+1}") if split_bands else label_eff,
+              tz, ylab, timezero_obj=timezero_obj_lc, instrume=instrume,
+              binsize=binsize_val, lc_kind=lc_kind)
+        if lc is not None:
+            if split_bands:
+                axis.legend(loc="upper right", fontsize=9)
+            elif label_eff:
+                axis.legend(loc="best")
+    if title is None:
+        if lc is not None:
+            base = Path(getattr(lc, "path", "")).name
+            if srcname and base:
+                title = f"{srcname} Lightcurve" if split_bands else f"{srcname} ({base})"
+            else:
+                title = srcname or base or "Lightcurve"
+        else:
+            title = Path(str(hdul.filename())).name or "Lightcurve"
+    axes_list[0].set_title(title)
     if not grid:
-        for axis_ in axes_to_return if isinstance(axes_to_return, list) else [axes_to_return]:
-            axis_.grid(False)
-
-    # 保存文件（若需要）
+        for axis in axes_list:
+            axis.grid(False)
     if out is not None:
-        if isinstance(axes_to_return, list):
-            ax0 = axes_to_return[0]
-            fig = cast(Figure, ax0.get_figure() if hasattr(ax0, "get_figure") else plt.gcf())
-        else:
-            ax_ = axes_to_return
-            fig = cast(Figure, ax_.get_figure() if hasattr(ax_, "get_figure") else plt.gcf())
+        fig = cast(Figure, axes_list[0].get_figure())
         suffix = Path(str(out)).suffix.lstrip(".") or "png"
         save_figure(fig, Path(str(out)).with_suffix(""), formats=(suffix,))
     return axes_to_return
