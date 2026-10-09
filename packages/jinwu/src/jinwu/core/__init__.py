@@ -142,6 +142,28 @@ _BXA_EXPORTS = {
 	'resolve_priors', 'run_bxa_pipeline',
 }
 
+# Each existing export group names its actual defining module; the lookup
+# keeps lazy attribute resolution in one place without importing those modules.
+_ATTRIBUTE_MODULES = {
+	name: module
+	for module, names in (
+		('significance', _SIGNIFICANCE_EXPORTS),
+		('ogip', _OGIP_EXPORTS),
+		('base', _BASE_EXPORTS),
+		('data', _DATA_EXPORTS),
+		('io', _IO_EXPORTS),
+		('ops', _OPS_EXPORTS),
+		('datasets', _DATASET_EXPORTS),
+		('plotpanel', _PLOTPANEL_EXPORTS),
+		('time', _TIME_EXPORTS),
+		('upperlimit', _UPPER_LIMIT_EXPORTS),
+		('config', _FIT_SETTINGS_EXPORTS),
+		('fit', _FIT_EXPORTS),
+		('bxa_fit', _BXA_EXPORTS),
+	)
+	for name in names
+}
+
 __all__ = [
 	# Submodules
 	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift', 'timescale', 'model_comparison',
@@ -188,96 +210,22 @@ __all__ = [
 def __getattr__(name: str):
 	"""延迟加载 core 公共导出 / Lazily resolve a public core export.
 
-	按导出集合导入所属模块，返回模块、类或函数并缓存到 globals；避免
+	按导出映射导入所属模块，返回模块、类或函数并缓存到 globals；避免
 	基础导入时立即加载所有可选后端。未知名称抛 AttributeError，后端
 	导入错误向上传递。首次访问可能触发目标模块的导入副作用。
-	Resolve modules/classes/functions via their export sets and cache in globals.
+	Resolve modules/classes/functions via the export mapping and cache in globals.
 	Avoid eager loading of optional backends. Unknown names raise AttributeError;
 	backend import errors propagate and first access can trigger module side effects."""
-	if name in _SIGNIFICANCE_EXPORTS:
-		mod = import_module('.significance', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
 	if name in _MODULE_EXPORTS:
-		mod = import_module(f'.{name}', __name__)
-		globals()[name] = mod
-		return mod
+		value = import_module(f'.{name}', __name__)
+	else:
+		module = _ATTRIBUTE_MODULES.get(name)
+		if module is None:
+			raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+		value = getattr(import_module(f'.{module}', __name__), name)
 
-	if name in _OGIP_EXPORTS:
-		mod = import_module('.ogip', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _BASE_EXPORTS:
-		mod = import_module('.base', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _DATA_EXPORTS:
-		mod = import_module('.data', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _IO_EXPORTS:
-		mod = import_module('.io', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _OPS_EXPORTS:
-		mod = import_module('.ops', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _DATASET_EXPORTS:
-		mod = import_module('.datasets', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _PLOTPANEL_EXPORTS:
-		mod = import_module('.plotpanel', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _TIME_EXPORTS:
-		mod = import_module('.time', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _UPPER_LIMIT_EXPORTS:
-		mod = import_module('.upperlimit', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _FIT_SETTINGS_EXPORTS:
-		mod = import_module('.config', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _FIT_EXPORTS:
-		mod = import_module('.fit', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	if name in _BXA_EXPORTS:
-		mod = import_module('.bxa_fit', __name__)
-		value = getattr(mod, name)
-		globals()[name] = value
-		return value
-
-	raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+	globals()[name] = value
+	return value
 
 
 def __dir__() -> list[str]:
