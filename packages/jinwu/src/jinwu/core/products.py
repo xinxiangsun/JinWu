@@ -47,10 +47,6 @@ __all__ = [
 ]
 
 
-def _sha256(path: Path) -> str:
-    return sha256_file(path)
-
-
 def sha256_file(path: str | Path) -> str:
     """文件的 SHA256 摘要（分块读取；全库唯一的文件哈希实现）。"""
     digest = hashlib.sha256()
@@ -94,10 +90,6 @@ def jsonable(value: Any) -> Any:
     return value
 
 
-def _jsonable(value: Any) -> Any:
-    return jsonable(value)
-
-
 def write_json(path: str | Path, payload: Any) -> Path:
     """原子写入 JSON（tmp + replace），统一缩进与键排序。"""
     path = Path(path)
@@ -109,10 +101,6 @@ def write_json(path: str | Path, payload: Any) -> Path:
     )
     temporary.replace(path)
     return path
-
-
-def _write_json(path: Path, payload: Any) -> Path:
-    return write_json(path, payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,7 +199,7 @@ def collect_xselect_artifacts(result: Any) -> ExternalRunArtifacts:
     missing = [path for path in files if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Missing XSELECT artifacts: {', '.join(map(str, missing))}")
-    checksums = {path.name: _sha256(path) for path in files}
+    checksums = {path.name: sha256_file(path) for path in files}
     return ExternalRunArtifacts(
         products=products,
         command_file=command_file,
@@ -241,7 +229,7 @@ def build_artifact_index(
                     "role": str(role),
                     "path": str(path),
                     "size_bytes": path.stat().st_size,
-                    "sha256": _sha256(path),
+                    "sha256": sha256_file(path),
                 }
             )
     return tuple(artifacts)
@@ -692,7 +680,7 @@ def save_flux_curve(
     manifest = base.with_suffix(".json")
     table.write(ecsv, format="ascii.ecsv", overwrite=True)
     table.write(csv, format="ascii.csv", overwrite=True)
-    _write_json(manifest, result)
+    write_json(manifest, result)
     outputs = {"ecsv": ecsv, "csv": csv, "manifest": manifest}
     if not formats:
         return outputs
@@ -797,7 +785,7 @@ def save_xspec_session(
     log_lines.append(transcript.rstrip())
     log.write_text("\n".join(log_lines).rstrip() + "\n", encoding="utf-8")
     result_json = output / f"{label}_fit.json"
-    _write_json(result_json, result)
+    write_json(result_json, result)
     return FitProductSet(
         result_json=result_json,
         report_txt=Path(report_txt),
