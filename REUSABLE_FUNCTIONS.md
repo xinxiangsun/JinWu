@@ -152,3 +152,4 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `BackgroundCountsPosterior._observation` / `_exposure` / `_validate` | `packages/jinwu/src/jinwu/background/backprior.py` | 在采样、期望值和更新边界校验背景计数、秒曝光和后验参数 | 是 |
 | `_grppha_output_error` | `packages/jinwu/src/jinwu/ftools/grppha_hsp.py` | 共用于两种 HEASoft 后端，检查任务状态、FATAL 信息与分组 PHA 结构 | 是 |
 | `_parse_ds9_region_shape` / `parse_ds9_region_line` | `packages/jinwu/src/jinwu/ftools/region.py` | 解析 DS9 区域、保留排除符号及坐标系统；赤道六十进制坐标和显式角秒/角分尺寸 | 是 |
+| `_place_lightcurve_fit_labels` | `packages/jinwu/src/jinwu/core/plot.py` | `LightcurveFitter.plot_fit` 的智能斜率/折断标签排版；集中像素障碍、碰撞搜索和模型标签职责，使拟合入口直接保留主曲线与残差 | 是 |
