@@ -9,8 +9,6 @@ Submodules:
 
 from __future__ import annotations
 
-try:
-    from . import gbm
-    __all__ = ['gbm']
-except ImportError:
-    __all__ = []
+from . import gbm
+
+__all__ = ['gbm']

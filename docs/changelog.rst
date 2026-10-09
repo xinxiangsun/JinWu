@@ -4,6 +4,9 @@ Changelog
 Unreleased
 ----------
 
+* Fermi 包入口直接导入 GBM，内部依赖或实现的导入错误原样抛出，
+  不再静默变成空包；``GBMObservation`` 保留现有延迟导入边界。
+
 * WXT 拟合方法始终取仪器配置，包括默认或显式 ``method="mle"``；进程级
   ``set_fit_method("bxa")`` 不再覆盖 WXT。需要 BXA 时设置 ``config.fitting.method="bxa"``。
 
