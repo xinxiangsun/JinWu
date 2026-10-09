@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Literal
-import hashlib
 import warnings
 
 import astropy.units as u
 import numpy as np
+
+from jinwu.core.products import sha256_file as _sha256
 
 from .models import CoverageResult, SkyFootprint, SkyMap, scalar_time
 from .skymap import ProbabilityIntegral, probability_in_footprint, refined_probability
@@ -33,14 +34,6 @@ def _union_of(builders, order: int):
     for builder in builders[1:]:
         union = union.union(builder(order))
     return union
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _moc_from_mask(skymap: SkyMap, mask: np.ndarray):

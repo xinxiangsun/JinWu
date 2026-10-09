@@ -12,7 +12,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 import csv
 from dataclasses import asdict, dataclass, field, replace
-import hashlib
 import json
 import math
 from pathlib import Path
@@ -29,6 +28,7 @@ from scipy.optimize import brentq, minimize, minimize_scalar
 from scipy.special import xlogy
 
 from jinwu.core.config import InstrumentConfig, UpperLimitConfig
+from jinwu.core.products import sha256_file
 from jinwu.core.fit import (
     XspecChainResult,
     _require_xspec,
@@ -2713,11 +2713,7 @@ def _path_provenance(value: str | None) -> dict[str, Any] | None:
     path = Path(value)
     result: dict[str, Any] = {"path": str(path), "exists": path.exists()}
     if path.is_file():
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        result["sha256"] = digest.hexdigest()
+        result["sha256"] = sha256_file(path)
         result["size"] = path.stat().st_size
     return result
 

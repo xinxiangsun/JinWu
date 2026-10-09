@@ -14,7 +14,6 @@ from datetime import datetime, timedelta, timezone
 import csv
 import functools
 import gzip
-import hashlib
 import json
 import logging
 import math
@@ -40,6 +39,7 @@ from jinwu.core.pipeline import (
     StageResult,
     register_pipeline,
 )
+from jinwu.core.products import sha256_file as _sha256
 from jinwu.core.time import Time
 
 __all__ = [
@@ -1632,14 +1632,6 @@ def _unique_paths(paths: Iterable[Path]) -> list[Path]:
             seen.add(resolved)
             result.append(resolved)
     return result
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _is_valid_fits(path: Path) -> bool:
