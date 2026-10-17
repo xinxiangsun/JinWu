@@ -986,10 +986,11 @@ class IterativeBBResult:
     bb_index : 变点箱索引（块 ``i`` 覆盖原始箱 ``bb_index[i]:bb_index[i+1]``）
     block_left/right/rates : 贝叶斯块的时间边界与块率
     bkg_counts : 每原始箱的背景模型计数
-    signal_range : 显著信号区间 ``(tstart, tstop)``（prominence 定界 + 缓冲区外推）
+    signal_range : 候选活动区间 ``(tstart, tstop)``（prominence 定界）
     peak : 信号区间内的峰时刻
     n_iterations / converged : 迭代收敛信息
     bkg_times : 最终用于拟合背景的时间区间
+    segmentation_exposure / signal_range_status : 分块曝光选择和峰是否被夹定。
     """
 
     bb_index: np.ndarray
@@ -1002,6 +1003,8 @@ class IterativeBBResult:
     n_iterations: int
     converged: bool
     bkg_times: list[tuple[float, float]] = field(default_factory=list)
+    segmentation_exposure: str = "background_counts"
+    signal_range_status: str = "not_identified"
 
 
 def _fit_poly_background_counts(
@@ -1019,6 +1022,7 @@ def _fit_poly_background_counts(
     mask = np.zeros(times.size, dtype=bool)
     for a, b in intervals:
         mask |= (times >= a) & (times <= b)
+    mask &= exposure > 0
     order = int(max(0, min(order, max(mask.sum() - 1, 0))))
     if mask.sum() == 0:
         # 无背景区间：退化为全段常数背景
@@ -1068,6 +1072,12 @@ def iterative_bayesian_blocks(
     p0 / poly / buffer_blocks / max_iter : 同原实现语义。
     signal_range : 可选的信号区间初值。
 
+    When a positive-count bin has zero expected background, the background-time
+    transformation is undefined. Segment with actual live exposure instead,
+    retaining the supplied background for signed subtraction. The result marks
+    this fallback; it does not regularize zero background or measure a signal
+    significance. Positive-background inputs retain the original algorithm.
+
     返回 :class:`IterativeBBResult`。
     """
     from scipy.signal import argrelmax, peak_prominences
@@ -1082,6 +1092,11 @@ def iterative_bayesian_blocks(
         raise ValueError("输入光变为空")
     times = 0.5 * (left + right)
     expo = np.asarray(exposure, dtype=float) if exposure is not None else (right - left)
+    if (counts.ndim != 1 or not (left.shape == right.shape == expo.shape == counts.shape)
+            or not np.all(np.isfinite([left, right, counts, expo]))
+            or np.any(right <= left) or np.any(counts < 0) or np.any(expo < 0)
+            or np.any((expo == 0) & (counts > 0))):
+        raise ValueError("Finite aligned bins, nonnegative counts and valid live exposure are required")
     t_lo, t_hi = float(left[0]), float(right[-1])
 
     # 初始背景区间：全域，或由信号初值切成左右两段
@@ -1100,6 +1115,8 @@ def iterative_bayesian_blocks(
     block_right = np.asarray([t_hi])
     block_rates = np.asarray([float(counts.sum()) / max(float(expo.sum()), 1e-12)])
     signal_tstart, signal_tstop = t_lo, t_hi
+    segmentation_exposure = "background_counts"
+    signal_range_status = "not_identified"
 
     for iteration in range(int(max_iter)):
         # ---- 1. 背景模型 ----
@@ -1112,7 +1129,17 @@ def iterative_bayesian_blocks(
             )
 
         # ---- 2. 贝叶斯块（Giacomo 技巧：曝光 := 背景计数）----
-        bb_index = bayesian_blocks_exposure(counts, bkg_counts, p0=p0)
+        if (bkg_counts.shape != counts.shape or not np.all(np.isfinite(bkg_counts))
+                or np.any(bkg_counts < 0)):
+            raise ValueError("Background counts must be finite, nonnegative and match the source bins")
+        bb_exposure = bkg_counts
+        if np.any((bkg_counts == 0) & (counts > 0)):
+            if segmentation_exposure == "background_counts":
+                warnings.warn("Zero-background bins with source counts: using live-exposure segmentation; "
+                              "background subtraction is unchanged", RuntimeWarning, stacklevel=2)
+            segmentation_exposure = "live_exposure_zero_background"
+            bb_exposure = expo
+        bb_index = bayesian_blocks_exposure(counts, bb_exposure, p0=p0)
         block_left = left[bb_index[:-1]]
         block_right = right[bb_index[1:] - 1]
         block_expo = np.asarray(
@@ -1127,7 +1154,9 @@ def iterative_bayesian_blocks(
         # ---- 3. 峰与 prominence 定信号边界 ----
         peaks = argrelmax(block_rates)[0]
         if peaks.size == 0:
-            # 原实现此处直接报错返回；这里退化为"无显著信号"，由上层决定处理。
+            # No internal prominence peak brackets the signal. Keep the
+            # numerical diagnostic, without claiming a measured burst window.
+            signal_range_status = "peak_not_bracketed"
             break
         prominence, left_base, right_base = peak_prominences(block_rates, peaks)
         leftmost_base = int(np.min(left_base))
@@ -1137,6 +1166,7 @@ def iterative_bayesian_blocks(
         new_stop_signal = int(bb_index[rightmost_base])
         signal_tstart = float(left[new_start_signal])
         signal_tstop = float(right[new_stop_signal - 1])
+        signal_range_status = "prominence_bracketed"
 
         # 缓冲区：向外再排除若干"边缘块宽度"，避免信号翼污染背景拟合；
         # 且不外推超过到光变两端距离的一半（同原实现）。
@@ -1203,6 +1233,8 @@ def iterative_bayesian_blocks(
         n_iterations=iteration + 1,
         converged=converged,
         bkg_times=bkg_times,
+        segmentation_exposure=segmentation_exposure,
+        signal_range_status=signal_range_status,
     )
 
 
@@ -1394,8 +1426,10 @@ def txx_iterbkg(
     以及 ``alpha``（源/背景缩放因子，无法推断或无背景时为 ``None``）和
     ``time_reference``（``"absolute"`` 表示各 ``*_tstart/_tstop`` 与
     ``peak`` 为绝对 MET——输入 timezero 非零；``"relative"`` 表示相对秒）。
+    ``status='needs_review'`` / ``duration_scope='diagnostic_only'`` 表示峰未被
+    两侧夹定或迭代未收敛；此时数值仅作条件诊断，不是可信的完整暴发时长。
     """
-    from .ops import _effective_exposure_from_lc, _infer_bin_geometry, _resolve_alpha_for_src_bkg
+    from .ops import _infer_bin_geometry, _resolve_alpha_for_src_bkg
 
     # ---- 输入归一：统一到分箱光变的 (left, right, counts, exposure) ----
     def _to_binned(obj):
@@ -1429,13 +1463,14 @@ def txx_iterbkg(
         if tz != 0.0:
             left = left + tz
             right = right + tz
-        expo = _effective_exposure_from_lc(obj, width)
+        declared_exposure = getattr(obj, 'bin_exposure', None)
+        expo = width if declared_exposure is None else np.asarray(declared_exposure, dtype=float)
         vals = np.asarray(obj.value, dtype=float)
         if obj.is_rate:
             counts = vals * expo
         else:
             counts = vals.copy()
-        return left, right, np.maximum(counts, 0.0), np.asarray(expo, dtype=float), obj
+        return left, right, counts, np.asarray(expo, dtype=float), obj
 
     left, right, counts, expo, lc_obj = _to_binned(lc_src)
 
@@ -1563,6 +1598,9 @@ def txx_iterbkg(
     )
     return {
         "method": "iterbkg_bblocks_burstcube",
+        "status": "completed" if result.converged else "needs_review",
+        "duration_scope": "selected_signal_window" if result.converged else "diagnostic_only",
+        "signal_range_status": result.signal_range_status,
         "alpha": (float(alpha_val) if alpha_val is not None else None),
         "time_reference": time_reference,
         "percent": user_percent,
@@ -1595,6 +1633,7 @@ def txx_iterbkg(
         "peak": float(result.peak),
         "n_iterations": int(result.n_iterations),
         "converged": bool(result.converged),
+        "segmentation_exposure": result.segmentation_exposure,
         "bb_edges_time": np.concatenate((result.block_left, [float(result.block_right[-1])])),
         "background_rate": result.bkg_counts / seg_width,
         "background_model_counts": result.bkg_counts,

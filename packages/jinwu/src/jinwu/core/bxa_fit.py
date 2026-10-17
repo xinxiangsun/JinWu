@@ -463,6 +463,10 @@ def fit_prepared_bxa(
     session is cleared on entry *and* exit.
     """
     prepared_spectra = _resolve_prepared_spectra(prepared)
+    if "apec" in model_name.lower():
+        redshift = 0.0
+        if redshift_absorbers is not None:
+            redshift_absorbers = tuple(0.0 for _ in redshift_absorbers)
 
     xspec = _require_xspec()
     bxa = _require_bxa()

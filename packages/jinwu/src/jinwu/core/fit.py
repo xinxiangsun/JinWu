@@ -305,6 +305,15 @@ _XRAY_MODEL_SPECS: tuple[XRayModelSpec, ...] = (
         ("powerlaw.PhoIndex",),
     ),
     XRayModelSpec("apec", "cflux*apec", "apec", "none", ("apec.kT",)),
+    XRayModelSpec("apec_free_nh", "tbabs*ztbabs*cflux*apec", "apec", "free", ("apec.kT",)),
+    XRayModelSpec("apec_nh0", "tbabs*ztbabs*cflux*apec", "apec", "zero", ("apec.kT",)),
+    XRayModelSpec("bbpl_free_nh", "tbabs*ztbabs*cflux*(bbody+powerlaw)", "bbpl", "free", ("bbody.kT", "powerlaw.PhoIndex", "bbody.norm")),
+    XRayModelSpec("bbpl_nh0", "tbabs*ztbabs*cflux*(bbody+powerlaw)", "bbpl", "zero", ("bbody.kT", "powerlaw.PhoIndex", "bbody.norm")),
+    XRayModelSpec("grbm_free_nh", "tbabs*ztbabs*cflux*grbm", "grbm", "free", ("grbm.alpha", "grbm.beta", "grbm.tem")),
+    XRayModelSpec("grbm_nh0", "tbabs*ztbabs*cflux*grbm", "grbm", "zero", ("grbm.alpha", "grbm.beta", "grbm.tem")),
+    XRayModelSpec("double_apec", "cflux*(apec+apec)", "double_apec", "none", ("apec.kT",)),
+    XRayModelSpec("double_apec_free_nh", "tbabs*ztbabs*cflux*(apec+apec)", "double_apec", "free", ("apec.kT",)),
+    XRayModelSpec("double_apec_nh0", "tbabs*ztbabs*cflux*(apec+apec)", "double_apec", "zero", ("apec.kT",)),
     XRayModelSpec(
         "bbody_free_nh", "tbabs*ztbabs*cflux*bbody", "bbody", "free",
         ("bbody.kT",),
@@ -350,10 +359,15 @@ def resolve_xray_model_specs(
 
     allowed_families = {"powerlaw", "bknpower"}
     if model_class == "auto":
+        # Preserve generic/BXA callers' historical candidate set. WXT's six
+        # families are selected explicitly by its configured candidate_keys.
         allowed_families.update({"apec", "bbody"})
     selected = []
     for spec in _XRAY_MODEL_SPECS:
         if spec.family not in allowed_families:
+            continue
+        if (absorption_mode == "auto" and spec.family in {"apec", "double_apec"}
+                and spec.absorption_mode != "none"):
             continue
         if spec.absorption_mode == "none" or absorption_mode == "auto":
             selected.append(spec)
@@ -368,8 +382,15 @@ def calculate_model_fit_metrics(
     statistic: float,
     dof: int,
     free_parameters: int,
+    *,
+    channel_count: int | None = None,
 ) -> ModelFitMetrics:
-    """Calculate AIC, AICc, and BIC from one likelihood fit."""
+    """Calculate information-criterion scores using fitted grouped bins as n.
+
+    For a profiled Poisson background these are profile-likelihood diagnostics,
+    not marginal Bayesian evidence. ``channel_count`` is the noticed bin count;
+    the compatible fallback is XSPEC's ``dof + free_parameters``.
+    """
 
     statistic = float(statistic)
     dof = int(dof)
@@ -378,7 +399,7 @@ def calculate_model_fit_metrics(
         raise ValueError("fit statistic must be finite")
     if dof < 0 or free_parameters < 0:
         raise ValueError("dof and free_parameters must be non-negative")
-    n = dof + free_parameters
+    n = dof + free_parameters if channel_count is None else int(channel_count)
     if n <= 0:
         raise ValueError("effective bin count must be positive")
     aic = statistic + 2.0 * free_parameters
@@ -1146,6 +1167,7 @@ class LightcurveFitter:
         model_func: Optional[Callable] = None,
         n_samples: int = 200,
         ax=None,
+        figsize: Optional[tuple[float, float]] = None,
         show_residuals: bool = True,
         source_name: Optional[str] = None,
         xlabel: str = "Time (s)",
@@ -1174,6 +1196,9 @@ class LightcurveFitter:
             拟合曲线采样点数
         ax : matplotlib axes, optional
             绘图轴（若为 None 则创建新图）
+        figsize : tuple, optional
+            新图尺寸；缺省采用 paper_style 画布，否则有残差为 (10, 8)、
+            无残差为 (10, 6)。显式 ax 时忽略。
         show_residuals : bool
             是否在下方子图显示残差
         source_name : str, optional
@@ -1197,7 +1222,7 @@ class LightcurveFitter:
             raise ImportError(
                 "matplotlib is required for plotting; install it with `pip install matplotlib`"
             ) from exc
-        from jinwu.core.plotstyle import PALETTE, apply_style
+        from jinwu.core.plotstyle import PALETTE, apply_style, paper_figsize
 
         apply_style()
         if model_func is None:
@@ -1205,11 +1230,13 @@ class LightcurveFitter:
             model_func = result.model
 
         if ax is None:
+            default_size = (10, 8) if show_residuals else (10, 6)
+            size = paper_figsize(default_size) if figsize is None else tuple(figsize)
             if show_residuals:
-                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True,
+                fig, (ax1, ax2) = plt.subplots(2, 1, figsize=size, sharex=True,
                                                gridspec_kw={'height_ratios': [3, 1]})
             else:
-                fig, ax1 = plt.subplots(figsize=(10, 6))
+                fig, ax1 = plt.subplots(figsize=size)
                 ax2 = None
         else:
             ax1 = ax
@@ -1386,7 +1413,8 @@ class LightcurveFitter:
             ax1.set_xlabel(xlabel)
 
         try:
-            plt.tight_layout()
+            if not plt.rcParams["figure.constrained_layout.use"]:
+                plt.tight_layout()
         except (ValueError, RuntimeError) as e:
             # tight_layout 可能在某些情况下失败（特别是智能标签放置后）
             # 静默忽略，布局可能略有偏差但不影响使用
@@ -1913,6 +1941,21 @@ def _generate_xspec_result(
         'photons_cm2_s': flux_photons,
         'energy_range_keV': (emin, emax) if emin is not None and emax is not None else None,
     }
+    if hasattr(model, "cflux"):
+        _cflux_source_components(model, model.expression)
+        flux_parameter = result["parameters"].get("cflux.lg10Flux", {})
+        log_flux = flux_parameter.get("value")
+        unabsorbed = 10.0 ** float(log_flux) if log_flux is not None else None
+        error_lo, error_hi = flux_parameter.get("error_lo"), flux_parameter.get("error_hi")
+        result["flux_unabs"] = {
+            "erg_cm2_s": unabsorbed,
+            "error_lo": None if error_lo is None else unabsorbed - 10.0 ** (float(log_flux) - float(error_lo)),
+            "error_hi": None if error_hi is None else 10.0 ** (float(log_flux) + float(error_hi)) - unabsorbed,
+            "energy_range_keV": (model.cflux.Emin.values[0], model.cflux.Emax.values[0]),
+            "frame": "observer",
+            "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+            "error_status": flux_parameter.get("error_status", "fixed" if flux_parameter.get("frozen") else "unavailable"),
+        }
 
     if flux_erg is not None and emin is not None and emax is not None:
         lines.append(f"Absorbed Flux ({emin:.1f}-{emax:.1f} keV): {flux_erg:.4e} erg/cm²/s")
@@ -2023,37 +2066,19 @@ def _prepared_error_parameters(
     intrinsic_nh_mode: str = "free",
     delta_stat: float = 1.0,
 ) -> str:
+    # Cover every independently fitted parameter, including repeated components
+    # and the separate shapes of time bins. Linked parameters are not new DOFs.
     parameter_indices = []
-    # XSPEC distinguishes integer parameter IDs from real delta-stat values.
-    prefix = repr(float(delta_stat))
-    if intrinsic_nh_mode == "free" and "ztbabs" in model_name.lower():
-        for _, component in _prepared_ztbabs_components(model):
-            if hasattr(component, "nH"):
-                parameter_indices.append(
-                    str(_model_parameter_index(model, component.nH))
-                )
     for group_model in models or [model]:
-        if hasattr(group_model, "cflux") and hasattr(group_model.cflux, "lg10Flux"):
-            parameter_indices.append(
-                str(_model_parameter_index(group_model, group_model.cflux.lg10Flux))
-            )
-    if hasattr(model, "powerlaw") and hasattr(model.powerlaw, "PhoIndex"):
-        parameter_indices.append(str(_model_parameter_index(model, model.powerlaw.PhoIndex)))
-        if not hasattr(model, "cflux") and hasattr(model.powerlaw, "norm"):
-            parameter_indices.append(str(_model_parameter_index(model, model.powerlaw.norm)))
-    elif hasattr(model, "zpowerlw") and hasattr(model.zpowerlw, "PhoIndex"):
-        parameter_indices.append(str(_model_parameter_index(model, model.zpowerlw.PhoIndex)))
-        if not hasattr(model, "cflux") and hasattr(model.zpowerlw, "norm"):
-            parameter_indices.append(str(_model_parameter_index(model, model.zpowerlw.norm)))
-    elif hasattr(model, "apec") and hasattr(model.apec, "kT"):
-        parameter_indices.append(str(_model_parameter_index(model, model.apec.kT)))
-    elif hasattr(model, "bbody") and hasattr(model.bbody, "kT"):
-        parameter_indices.append(str(_model_parameter_index(model, model.bbody.kT)))
-    elif hasattr(model, "bknpower"):
-        for name in ("PhoIndx1", "BreakE", "PhoIndx2"):
-            parameter = getattr(model.bknpower, name, None)
-            if parameter is not None:
-                parameter_indices.append(str(_model_parameter_index(model, parameter)))
+        for component_name in group_model.componentNames:
+            component = getattr(group_model, component_name, None)
+            if component is None:
+                continue
+            for name in component.parameterNames:
+                parameter = getattr(component, name)
+                if not parameter.frozen and not str(parameter.link or "").strip():
+                    parameter_indices.append(str(_model_parameter_index(group_model, parameter)))
+    prefix = repr(float(delta_stat))
     return " ".join((prefix, *parameter_indices)) if parameter_indices else ""
 
 
@@ -2156,6 +2181,50 @@ def _prepared_ztbabs_components(model) -> list[tuple[str, Any]]:
     return [(name, getattr(model, name)) for name in names]
 
 
+def _prepared_components(model, family: str) -> list[tuple[str, Any]]:
+    """Resolve repeated XSPEC components without assuming their numbered names."""
+    names = [name for name in getattr(model, "componentNames", ())
+             if str(name).lower().split("_")[0] == family.lower()]
+    if not names and hasattr(model, family):
+        names = [family]
+    return [(name, getattr(model, name)) for name in names]
+
+
+def _cflux_source_components(model, model_name: str) -> list[tuple[str, Any]]:
+    """Resolve the additive source of one outer-absorption cflux expression.
+
+    Support ``[foreground factors *] cflux * (source [+ source ...])``.
+    Reject internal absorption/convolutions and partial-source fluxes rather
+    than label their flux as the total unabsorbed source flux. Source components
+    must expose a ``norm`` parameter. No physical quantities are calculated.
+    """
+    expression = re.sub(r"\s+", "", getattr(model, "expression", model_name))
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", expression)
+    if sum(token.lower() == "cflux" for token in tokens) != 1:
+        raise ValueError("Unabsorbed flux fitting requires exactly one cflux component")
+    # XSPEC renders cflux*(a+b) as cflux(a+b).
+    parts = re.split(r"\bcflux(?:\*|(?=\())", expression, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) != 2:
+        raise ValueError("Use absorption*cflux*(source [+ source ...])")
+    prefix, source = parts
+    if (not re.fullmatch(r"(?:[A-Za-z_][A-Za-z0-9_]*\*)*", prefix)
+            or not re.fullmatch(r"[A-Za-z0-9_()+]+", source)):
+        raise ValueError("Use absorption*cflux*(source [+ source ...]); internal absorption "
+                         "and cflux applied to only part of the source are not supported")
+    depth = 0
+    for character in source:
+        if character == "+" and depth == 0:
+            raise ValueError("Enclose the complete source sum in cflux*(source + source)")
+        depth += (character == "(") - (character == ")")
+    names = list(getattr(model, "componentNames", ())) or tokens
+    first_source = next(i for i, token in enumerate(tokens) if token.lower() == "cflux") + 1
+    components = [(name, getattr(model, name)) for name in names[first_source:]]
+    if not components or any(not hasattr(component, "norm") for _, component in components):
+        raise ValueError("cflux must enclose additive source components with norm; "
+                         "keep all absorption to the left of cflux")
+    return components
+
+
 def _configure_prepared_model(
     model,
     *,
@@ -2167,9 +2236,11 @@ def _configure_prepared_model(
     galactic_nh_1e22: float | None,
     freeze_galactic_nh: bool,
     intrinsic_nh_mode: str = "free",
+    flux_band_keV: tuple[float, float] | None = None,
 ) -> None:
     if intrinsic_nh_mode not in {"free", "zero"}:
         raise ValueError("intrinsic_nh_mode must be 'free' or 'zero'")
+    additive = _cflux_source_components(model, model_name) if hasattr(model, "cflux") else []
     if hasattr(model, "TBabs") and hasattr(model.TBabs, "nH"):
         if galactic_nh_1e22 is not None:
             if not np.isfinite(galactic_nh_1e22) or galactic_nh_1e22 < 0:
@@ -2202,11 +2273,12 @@ def _configure_prepared_model(
                 absorber.Redshift.frozen = True
 
     if hasattr(model, "cflux"):
+        flux_emin, flux_emax = flux_band_keV or (emin, emax)
         if hasattr(model.cflux, "Emin"):
-            model.cflux.Emin = emin
+            model.cflux.Emin = flux_emin
             model.cflux.Emin.frozen = True
         if hasattr(model.cflux, "Emax"):
-            model.cflux.Emax = emax
+            model.cflux.Emax = flux_emax
             model.cflux.Emax.frozen = True
         if hasattr(model.cflux, "lg10Flux"):
             model.cflux.lg10Flux = -10.0
@@ -2234,27 +2306,18 @@ def _configure_prepared_model(
             model.zpowerlw.norm = 1.0
             model.zpowerlw.norm.frozen = True
 
-    if hasattr(model, "apec"):
-        if hasattr(model.apec, "kT"):
-            model.apec.kT = 1.0
-            _set_prepared_parameter_bounds(model.apec.kT, 1.0, 0.008, 64.0)
-        if hasattr(model.apec, "Abundanc"):
-            model.apec.Abundanc = 1.0
-            model.apec.Abundanc.frozen = True
-        if hasattr(model.apec, "Redshift"):
-            model.apec.Redshift = redshift
-            model.apec.Redshift.frozen = True
-        if hasattr(model.apec, "norm"):
-            model.apec.norm = 1.0
-            model.apec.norm.frozen = True
+    for index, (_, component) in enumerate(_prepared_components(model, "apec")):
+        component.kT = 1.0 if index == 0 else 3.0
+        _set_prepared_parameter_bounds(component.kT, component.kT.values[0], 0.008, 64.0)
+        component.Abundanc = 1.0
+        component.Abundanc.frozen = True
+        component.Redshift = 0.0  # APEC candidates describe nearby stars.
+        component.Redshift.frozen = True
 
     if hasattr(model, "bbody"):
         if hasattr(model.bbody, "kT"):
             model.bbody.kT = min(max(0.3, emin), emax)
             _set_prepared_parameter_bounds(model.bbody.kT, model.bbody.kT.values[0], 0.01, max(10.0, emax))
-        if hasattr(model.bbody, "norm"):
-            model.bbody.norm = 1.0
-            model.bbody.norm.frozen = True
 
     if hasattr(model, "bknpower"):
         if hasattr(model.bknpower, "PhoIndx1"):
@@ -2267,9 +2330,23 @@ def _configure_prepared_model(
         if hasattr(model.bknpower, "PhoIndx2"):
             model.bknpower.PhoIndx2 = 2.5
             _set_prepared_parameter_bounds(model.bknpower.PhoIndx2, 2.5, 0.0, 9.0)
-        if hasattr(model.bknpower, "norm"):
-            model.bknpower.norm = 1.0
-            model.bknpower.norm.frozen = True
+    if hasattr(model, "grbm"):
+        # XSPEC's default E0 >= 10 keV cannot explore a soft-X-ray turnover.
+        # These are starting values and computational bounds, not priors.
+        model.grbm.alpha = -1.0
+        model.grbm.beta = -2.5
+        energy = math.sqrt(emin * emax)
+        _set_prepared_parameter_bounds(model.grbm.tem, energy, 0.001, 10000.0)
+        model.grbm.tem = energy
+    # cflux supplies the common amplitude. Freeze exactly one additive norm;
+    # all other norms describe mixture fractions and must remain independent.
+    # Preserve the established reference component in existing mixtures.
+    priority = ("powerlaw", "zpowerlw", "bbody", "apec", "bknpower", "grbm", "cutoffpl")
+    additive.sort(key=lambda item: priority.index(item[0].lower().split("_")[0])
+                  if item[0].lower().split("_")[0] in priority else len(priority))
+    for index, (_, component) in enumerate(additive):
+        component.norm = 1.0
+        component.norm.frozen = index == 0
 
 
 def _prepared_input_dict(prepared) -> dict[str, str | int | None]:
@@ -2328,13 +2405,13 @@ def _prepared_energy_ranges(
     return resolved
 
 
-def _prepared_data_groups(prepared_spectra, fit_ranges) -> list[dict[str, Any]]:
-    groups: dict[tuple[str, float, float], dict[str, Any]] = {}
+def _prepared_data_groups(prepared_spectra, fit_ranges, *, shared_absorption_only=False) -> list[dict[str, Any]]:
+    groups: dict[tuple, dict[str, Any]] = {}
     ordered_groups = []
     for spectrum_index, spectrum in enumerate(prepared_spectra, start=1):
         spectrum_key = _prepared_spectrum_key(spectrum)
         emin, emax = fit_ranges[spectrum_key]
-        key = (spectrum.instrument, emin, emax)
+        key = (spectrum.instrument, emin, emax, spectrum_index if shared_absorption_only else None)
         group = groups.get(key)
         if group is None:
             group = {
@@ -2369,7 +2446,7 @@ def _link_parameter(parameter, reference) -> None:
         parameter.link = str(getattr(reference, "index", reference))
 
 
-def _link_default_prepared_model_groups(models, model_name: str) -> None:
+def _link_default_prepared_model_groups(models, model_name: str, *, shared_absorption_only=False) -> None:
     if len(models) <= 1:
         return
     reference = models[0]
@@ -2383,24 +2460,23 @@ def _link_default_prepared_model_groups(models, model_name: str) -> None:
         for (_, reference_absorber), (_, absorber) in zip(reference_absorbers, absorbers):
             if hasattr(reference_absorber, "nH") and hasattr(absorber, "nH"):
                 _link_parameter(absorber.nH, reference_absorber.nH)
-        if hasattr(reference, "powerlaw") and hasattr(model, "powerlaw"):
-            if hasattr(reference.powerlaw, "PhoIndex") and hasattr(model.powerlaw, "PhoIndex"):
-                _link_parameter(model.powerlaw.PhoIndex, reference.powerlaw.PhoIndex)
-        for component_name, parameter_names in (
-            ("apec", ("kT", "Abundanc", "Redshift")),
-            ("bbody", ("kT",)),
-            ("bknpower", ("PhoIndx1", "BreakE", "PhoIndx2")),
-        ):
-            reference_component = getattr(reference, component_name, None)
-            component = getattr(model, component_name, None)
-            if reference_component is None or component is None:
+        if shared_absorption_only:
+            continue
+        # Ordinary joint fits share the full source shape, including mixture
+        # ratios and every repeated APEC. The flux of each band stays separate.
+        for component_name in getattr(reference, "componentNames", ()):
+            reference_component = getattr(reference, component_name)
+            if not hasattr(reference_component, "norm"):
                 continue
-            for parameter_name in parameter_names:
+            component = getattr(model, component_name)
+            for parameter_name in getattr(component, "parameterNames", ()):
+                if parameter_name == "norm" and not hasattr(model, "cflux"):
+                    continue
                 reference_parameter = getattr(reference_component, parameter_name, None)
                 parameter = getattr(component, parameter_name, None)
                 if reference_parameter is None or parameter is None:
                     continue
-                if not bool(getattr(parameter, "frozen", False)):
+                if parameter_name == "norm" or not bool(getattr(parameter, "frozen", False)):
                     _link_parameter(parameter, reference_parameter)
 
 
@@ -2558,6 +2634,8 @@ def fit_prepared(
     emin: float | None = None,
     emax: float | None = None,
     energy_ranges: Mapping[str, tuple[float, float]] | None = None,
+    flux_band_keV: tuple[float, float] | None = None,
+    shared_absorption_only: bool = False,
     model_name: str = "tbabs*ztbabs*cflux*powerlaw",
     frozen_parameters: Mapping[str, float] | None = None,
     redshift: float = 0.0,
@@ -2571,6 +2649,7 @@ def fit_prepared(
     stat_method: str = "cstat",
     abundance: str = "wilm",
     cross_section: str = "vern",
+    apec_root: str | Path | None = None,
     galactic_nh_1e22: float | None = None,
     freeze_galactic_nh: bool = True,
     intrinsic_nh_mode: Literal["free", "zero"] = "free",
@@ -2587,7 +2666,22 @@ def fit_prepared(
     plot_density: int = 300,
     plot_required: bool = False,
 ) -> dict:
-    """Fit one prepared spectrum or multiple prepared spectra with XSPEC."""
+    """Fit prepared spectra with XSPEC.
+
+    ``flux_band_keV`` sets the observer-frame cflux band independently of the
+    fitted energy range (both in keV). With ``shared_absorption_only=True`` each
+    input has its own shape and flux in one joint likelihood; only the absorption
+    columns are linked. The default preserves ordinary detector joint fitting.
+    Prefer a model containing ``cflux``: one additive norm is fixed at 1 and
+    any remaining norms describe mixture ratios. APEC models represent nearby
+    stars here; their emission and absorption redshifts are fixed at zero.
+    Flux-fitting expressions must have the form
+    ``[foreground factors *] cflux * (source [+ source ...])``. Internal
+    absorption and partial-source cflux expressions are rejected explicitly.
+    ``apec_root`` is an optional complete filename prefix for a paired AtomDB
+    ``_line.fits``/``_coco.fits`` dataset. The original APECROOT setting is restored
+    after saving the fit; the explicit override is currently supported for MLE.
+    """
     from jinwu.core.plot import plotfit
     from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum
 
@@ -2622,293 +2716,372 @@ def fit_prepared(
     )
     first_key = _prepared_spectrum_key(prepared_spectra[0])
     fit_emin, fit_emax = fit_ranges[first_key]
+    for lower, upper in [*fit_ranges.values(), *([flux_band_keV] if flux_band_keV is not None else [])]:
+        if not (math.isfinite(float(lower)) and math.isfinite(float(upper)) and 0 < lower < upper):
+            raise ValueError("energy bands must have finite limits with 0 < lower < upper (keV)")
 
     xspec.AllChains.clear()
     xspec.AllData.clear()
     xspec.AllModels.clear()
     xspec.Xset.abund = abundance
     xspec.Xset.xsect = cross_section
-    xspec.Fit.query = "yes"
-    xspec.Fit.statMethod = stat_method
-
-    data_groups = _prepared_data_groups(prepared_spectra, fit_ranges)
-    group_for_index = {
-        spectrum_index: group
-        for group in data_groups
-        for spectrum_index in group["spectrum_indices"]
-    }
-    xspec_spectra = []
-    if len(prepared_spectra) == 1:
-        xspec_spectrum = _load_prepared_xspec_spectrum(xspec, prepared_spectra[0])
-        _set_prepared_xspec_links(xspec_spectrum, prepared_spectra[0])
-        xspec_spectra.append(xspec_spectrum)
-    else:
-        for index, spectrum in enumerate(prepared_spectra, start=1):
-            xspec_spectrum = _load_prepared_xspec_spectrum(
-                xspec,
-                spectrum,
-                index=index,
-                data_group=group_for_index[index]["group_index"],
-            )
-            _set_prepared_xspec_links(xspec_spectrum, spectrum)
-            xspec_spectra.append(xspec_spectrum)
-
-    xspec.AllData.ignore("bad")
-    for xspec_spectrum, spectrum in zip(xspec_spectra, prepared_spectra):
-        spectrum_emin, spectrum_emax = fit_ranges[_prepared_spectrum_key(spectrum)]
-        xspec_spectrum.ignore(f"**-{spectrum_emin} {spectrum_emax}-**")
-
-    model = xspec.Model(model_name)
-    group_models = []
-    for group in data_groups:
-        group_model = _xspec_model_for_group(xspec, model, group["group_index"])
-        group_models.append(group_model)
-        _configure_prepared_model(
-            group_model,
-            model_name=model_name,
-            emin=group["energy_range"]["emin"],
-            emax=group["energy_range"]["emax"],
-            redshift=redshift,
-            redshift_absorbers=redshift_absorbers,
-            galactic_nh_1e22=galactic_nh_1e22,
-            freeze_galactic_nh=freeze_galactic_nh,
-            intrinsic_nh_mode=intrinsic_nh_mode,
-        )
-        _freeze_prepared_parameters(group_model, frozen_parameters)
-    _link_default_prepared_model_groups(group_models, model_name)
-    perform_text = _capture_xspec_log(
-        xspec,
-        output / "fit_prepared.xspec_perform.tmp.log",
-        xspec.Fit.perform,
-        warnings_list,
-    )
-
-    command = error_command or _prepared_error_parameters(
-        model,
-        model_name,
-        group_models,
-        intrinsic_nh_mode=intrinsic_nh_mode,
-        delta_stat=error_delta_stat,
-    )
-    error_text = ""
-    profile_errors_succeeded = False
-    error_log_path = output / "fit_prepared.xspec_error.tmp.log"
-    if calculate_errors and command:
+    previous_apec_root = None
+    uses_apec = "apec" in model_name.lower()
+    if uses_apec:
+        redshift = 0.0
+        if redshift_absorbers is not None:
+            redshift_absorbers = tuple(0.0 for _ in redshift_absorbers)
+        if apec_root is not None:
+            apec_root = str(Path(apec_root).expanduser().resolve())
+            missing = [f"{apec_root}_{kind}.fits" for kind in ("line", "coco")
+                       if not Path(f"{apec_root}_{kind}.fits").is_file()]
+            if missing:
+                raise FileNotFoundError("APEC requires its paired atomic tables: " + ", ".join(missing))
         try:
-            error_text = _capture_xspec_log(
-                xspec,
-                error_log_path,
-                lambda: xspec.Fit.error(command),
-                warnings_list,
+            previous_apec_root = xspec.Xset.getModelString("APECROOT")
+        except Exception:
+            pass
+    try:
+        if uses_apec and apec_root is not None:
+            xspec.Xset.addModelString("APECROOT", str(apec_root))
+        xspec.Fit.query = "yes"
+        xspec.Fit.statMethod = stat_method
+
+        data_groups = _prepared_data_groups(prepared_spectra, fit_ranges, shared_absorption_only=shared_absorption_only)
+        group_for_index = {
+            spectrum_index: group
+            for group in data_groups
+            for spectrum_index in group["spectrum_indices"]
+        }
+        xspec_spectra = []
+        if len(prepared_spectra) == 1:
+            xspec_spectrum = _load_prepared_xspec_spectrum(xspec, prepared_spectra[0])
+            _set_prepared_xspec_links(xspec_spectrum, prepared_spectra[0])
+            xspec_spectra.append(xspec_spectrum)
+        else:
+            for index, spectrum in enumerate(prepared_spectra, start=1):
+                xspec_spectrum = _load_prepared_xspec_spectrum(
+                    xspec,
+                    spectrum,
+                    index=index,
+                    data_group=group_for_index[index]["group_index"],
+                )
+                _set_prepared_xspec_links(xspec_spectrum, spectrum)
+                xspec_spectra.append(xspec_spectrum)
+
+        xspec.AllData.ignore("bad")
+        for xspec_spectrum, spectrum in zip(xspec_spectra, prepared_spectra):
+            spectrum_emin, spectrum_emax = fit_ranges[_prepared_spectrum_key(spectrum)]
+            xspec_spectrum.ignore(f"**-{spectrum_emin} {spectrum_emax}-**")
+
+        model = xspec.Model(model_name)
+        group_models = []
+        for group in data_groups:
+            group_model = _xspec_model_for_group(xspec, model, group["group_index"])
+            group_models.append(group_model)
+            # XSPEC initially links later data-group parameters to group 1. Clear
+            # these implicit links before applying this call's explicit strategy.
+            if group["group_index"] > 1:
+                for component_name in group_model.componentNames:
+                    component = getattr(group_model, component_name)
+                    for name in component.parameterNames:
+                        getattr(component, name).link = ""
+            _configure_prepared_model(
+                group_model,
+                model_name=model_name,
+                emin=group["energy_range"]["emin"],
+                emax=group["energy_range"]["emax"],
+                redshift=redshift,
+                redshift_absorbers=redshift_absorbers,
+                galactic_nh_1e22=galactic_nh_1e22,
+                freeze_galactic_nh=freeze_galactic_nh,
+                intrinsic_nh_mode=intrinsic_nh_mode,
+                flux_band_keV=flux_band_keV,
             )
-            profile_errors_succeeded = True
-            for line in error_text.splitlines():
-                if "warning" in line.lower() or "pegged" in line.lower():
-                    warnings_list.append(f"XSPEC profile error: {line.strip()}")
-        except Exception as exc:
-            warnings_list.append(f"XSPEC error calculation failed: {exc}")
-            # error 命令失败但拟合本身成功：把转录并入报告后清理临时日志
-            try:
-                transcript = error_log_path.read_text(encoding="utf-8", errors="ignore")
-                error_text = transcript or str(exc)
-                error_log_path.unlink()
-            except OSError:
-                error_text = str(exc)
-
-    results = _generate_xspec_result(
-        model,
-        xspec_spectra[0],
-        flux_range_keV=fit_ranges[first_key],
-        warnings_list=warnings_list,
-        errors_computed=profile_errors_succeeded,
-    )
-    prepared_inputs = [_prepared_input_dict(spectrum) for spectrum in prepared_spectra]
-    if srcname is None:
-        first = prepared_spectra[0]
-        srcname = "_".join(
-            str(value)
-            for value in (first.obsid, first.module or first.detector, first.source_id)
-            if value
-        ) or "prepared"
-    if instname is None:
-        instname = "+".join(
-            spectrum.module or spectrum.detector or spectrum.instrument
-            for spectrum in prepared_spectra
+            _freeze_prepared_parameters(group_model, frozen_parameters)
+        _link_default_prepared_model_groups(group_models, model_name, shared_absorption_only=shared_absorption_only)
+        perform_text = _capture_xspec_log(
+            xspec,
+            output / "fit_prepared.xspec_perform.tmp.log",
+            xspec.Fit.perform,
+            warnings_list,
         )
-    label = re.sub(r"[^A-Za-z0-9_.+-]+", "_", f"{srcname}_{instname}").strip("_")
 
-    per_group = []
-    for group, group_model in zip(data_groups, group_models):
-        spectrum_index = group["spectrum_indices"][0]
-        group_result = _generate_xspec_result(
-            group_model,
-            xspec_spectra[spectrum_index - 1],
-            flux_range_keV=(
-                group["energy_range"]["emin"],
-                group["energy_range"]["emax"],
-            ),
+        command = error_command or _prepared_error_parameters(
+            model,
+            model_name,
+            group_models,
+            intrinsic_nh_mode=intrinsic_nh_mode,
+            delta_stat=error_delta_stat,
+        )
+        error_text = ""
+        profile_errors_succeeded = False
+        error_log_path = output / "fit_prepared.xspec_error.tmp.log"
+        if calculate_errors and command:
+            try:
+                error_text = _capture_xspec_log(
+                    xspec,
+                    error_log_path,
+                    lambda: xspec.Fit.error(command),
+                    warnings_list,
+                )
+                profile_errors_succeeded = True
+                for line in error_text.splitlines():
+                    if "warning" in line.lower() or "pegged" in line.lower():
+                        warnings_list.append(f"XSPEC profile error: {line.strip()}")
+            except Exception as exc:
+                warnings_list.append(f"XSPEC error calculation failed: {exc}")
+                # error 命令失败但拟合本身成功：把转录并入报告后清理临时日志
+                try:
+                    transcript = error_log_path.read_text(encoding="utf-8", errors="ignore")
+                    error_text = transcript or str(exc)
+                    error_log_path.unlink()
+                except OSError:
+                    error_text = str(exc)
+
+        results = _generate_xspec_result(
+            model,
+            xspec_spectra[0],
+            flux_range_keV=fit_ranges[first_key],
             warnings_list=warnings_list,
             errors_computed=profile_errors_succeeded,
         )
-        cflux = {}
-        if hasattr(group_model, "cflux"):
-            for name in ("Emin", "Emax", "lg10Flux"):
-                parameter = getattr(group_model.cflux, name, None)
-                if parameter is not None:
-                    cflux[name] = _xspec_parameter_value(parameter)
-        per_group.append(
-            {
-                "group_index": group["group_index"],
-                "instrument": group["instrument"],
-                "energy_range": group["energy_range"],
-                "member_spectra": list(group["spectrum_keys"]),
-                "spectrum_indices": list(group["spectrum_indices"]),
-                "model": group_result.get("model"),
-                "parameters": group_result.get("parameters"),
-                "flux_abs": group_result.get("flux_abs"),
-                "cflux": cflux,
-            }
-        )
-
-    show_text = _xspec_show_text(xspec, output, label, warnings_list)
-    report = _write_prepared_report(
-        path=output / f"{label}_fit.txt",
-        prepared_inputs=prepared_inputs,
-        results=results,
-        show_text=show_text,
-        error_command=command if calculate_errors else None,
-        error_text=error_text,
-        warnings_list=warnings_list,
-        data_groups=data_groups,
-        per_group=per_group,
-    )
-
-    results["energy_range"] = {"emin": fit_emin, "emax": fit_emax}
-    results["energy_ranges"] = {
-        key: {"emin": limits[0], "emax": limits[1]}
-        for key, limits in fit_ranges.items()
-    }
-    results["data_groups"] = [
-        {
-            key: value
-            for key, value in group.items()
-            if key != "spectra"
-        }
-        for group in data_groups
-    ]
-    results["per_group"] = per_group
-    results["input_files"] = prepared_inputs
-    results["report_txt"] = str(report)
-    results["warnings"] = warnings_list
-    results["error_parameters"] = (
-        [int(token) for token in str(command).split()[1:] if token.isdigit()]
-        if (calculate_errors and command)
-        else []
-    )
-    results["group_min"] = prepared_spectra[0].group_min
-    results["xspec_settings"] = {
-        "abundance": abundance,
-        "cross_section": cross_section,
-        "requested_statistic": stat_method,
-        "galactic_nh_1e22": galactic_nh_1e22,
-        "freeze_galactic_nh": freeze_galactic_nh,
-        "intrinsic_nh_mode": intrinsic_nh_mode,
-        "redshift_absorbers": (
-            list(redshift_absorbers) if redshift_absorbers is not None else [redshift]
-        ),
-        **error_metadata,
-        "calculate_errors": calculate_errors,
-        "frozen_parameters": (
-            {str(key): float(value) for key, value in frozen_parameters.items()}
-            if frozen_parameters
-            else {}
-        ),
-        "error_command": command if calculate_errors else None,
-        "profile_errors_succeeded": profile_errors_succeeded,
-    }
-    # 方法：XSPEC 统计命令选 cstat 且光谱挂载 Poisson 背景文件时，实际计算的是 W 统计量——对每 bin 背景率 f̂ 做 profile likelihood 解析消去背景阈值参数（s>0,b>0 分支 f̂ 由二次方程 ti*f^2+(ti*y-s-b)*f-b*y=0 的正根给出，总统计量=2Σ半贡献），故此处把 (cstat+背景) 报告为 wstat
-    # 参考：Cash 1979, ApJ 228, 939；Humphrey, Liu & Buote 2009, ApJ 693, 822（W 统计量推导）；XSPEC manual Appendix B "Statistics in XSPEC"；本地 HEASoft 6.37 源码 Xspec/src/XSStat/CstatVariants.cxx（specificPerformB 五分支闭式）与 Cstat.h:307（statValues*=2.0）
-    results["effective_statistic"] = (
-        "wstat"
-        if stat_method.lower() == "cstat"
-        and any(spectrum.background_pha is not None for spectrum in prepared_spectra)
-        else stat_method.lower()
-    )
-    results["free_parameter_count"] = _count_free_xspec_parameters(group_models)
-    results["group_mins"] = {
-        _prepared_spectrum_key(spectrum): spectrum.group_min
-        for spectrum in prepared_spectra
-    }
-
-    requested_formats = (
-        tuple(plot_formats) if plot_formats is not None else (plot_format,)
-    )
-    plot_paths = []
-    plot_errors = []
-    for requested_format in requested_formats:
-        try:
-            figure_path, figure = plotfit(
-                srcname=srcname,
-                instname=instname,
-                group_min=prepared_spectra[0].group_min,
-                modelname=model_name,
-                redshift=redshift,
-                outputdir=output,
-                backend=plot_backend,
-                output_format=requested_format,
-                density=plot_density,
+        prepared_inputs = [_prepared_input_dict(spectrum) for spectrum in prepared_spectra]
+        if srcname is None:
+            first = prepared_spectra[0]
+            srcname = "_".join(
+                str(value)
+                for value in (first.obsid, first.module or first.detector, first.source_id)
+                if value
+            ) or "prepared"
+        if instname is None:
+            instname = "+".join(
+                spectrum.module or spectrum.detector or spectrum.instrument
+                for spectrum in prepared_spectra
             )
-            if figure_path is not None:
-                plot_paths.append(str(figure_path))
-            if figure is not None:
-                try:
-                    import matplotlib.pyplot as plt
+        label = re.sub(r"[^A-Za-z0-9_.+-]+", "_", f"{srcname}_{instname}").strip("_")
 
-                    plt.close(figure)
-                except Exception:
-                    pass
-        except Exception as exc:
-            plot_errors.append(f"{requested_format}: {exc}")
-    results["plot_fit"] = plot_paths[0] if plot_paths else None
-    results["plot_fits"] = plot_paths
-    if plot_errors:
-        results["plot_fit_error"] = "; ".join(plot_errors)
-        warnings_list.extend(f"fit plot failed: {message}" for message in plot_errors)
-    if plot_required and len(plot_paths) != len(requested_formats):
-        raise RuntimeError(
-            "Required XSPEC fit plots were not produced: " + "; ".join(plot_errors)
+        per_group = []
+        for group, group_model in zip(data_groups, group_models):
+            spectrum_index = group["spectrum_indices"][0]
+            group_result = _generate_xspec_result(
+                group_model,
+                xspec_spectra[spectrum_index - 1],
+                flux_range_keV=(
+                    group["energy_range"]["emin"],
+                    group["energy_range"]["emax"],
+                ),
+                warnings_list=warnings_list,
+                errors_computed=profile_errors_succeeded,
+            )
+            cflux = {}
+            if hasattr(group_model, "cflux"):
+                for name in ("Emin", "Emax", "lg10Flux"):
+                    parameter = getattr(group_model.cflux, name, None)
+                    if parameter is not None:
+                        cflux[name] = _xspec_parameter_value(parameter)
+            per_group.append(
+                {
+                    "group_index": group["group_index"],
+                    "instrument": group["instrument"],
+                    "energy_range": group["energy_range"],
+                    "member_spectra": list(group["spectrum_keys"]),
+                    "spectrum_indices": list(group["spectrum_indices"]),
+                    "model": group_result.get("model"),
+                    "parameters": group_result.get("parameters"),
+                    "flux_abs": group_result.get("flux_abs"),
+                    "flux_unabs": group_result.get("flux_unabs"),
+                    "cflux": cflux,
+                }
+            )
+
+        show_text = _xspec_show_text(xspec, output, label, warnings_list)
+        report = _write_prepared_report(
+            path=output / f"{label}_fit.txt",
+            prepared_inputs=prepared_inputs,
+            results=results,
+            show_text=show_text,
+            error_command=command if calculate_errors else None,
+            error_text=error_text,
+            warnings_list=warnings_list,
+            data_groups=data_groups,
+            per_group=per_group,
         )
 
-    from jinwu.core.products import save_xspec_session
+        results["energy_range"] = {"emin": fit_emin, "emax": fit_emax}
+        results["energy_ranges"] = {
+            key: {"emin": limits[0], "emax": limits[1]}
+            for key, limits in fit_ranges.items()
+        }
+        results["data_groups"] = [
+            {
+                key: value
+                for key, value in group.items()
+                if key != "spectra"
+            }
+            for group in data_groups
+        ]
+        results["per_group"] = per_group
+        results["flux_band_keV"] = list(flux_band_keV or (fit_emin, fit_emax))
+        results["shared_absorption_only"] = bool(shared_absorption_only)
+        results["input_files"] = prepared_inputs
+        results["report_txt"] = str(report)
+        results["warnings"] = warnings_list
+        results["error_parameters"] = (
+            [int(token) for token in str(command).split()[1:] if token.isdigit()]
+            if (calculate_errors and command)
+            else []
+        )
+        results["group_min"] = prepared_spectra[0].group_min
+        results["xspec_settings"] = {
+            "abundance": abundance,
+            "cross_section": cross_section,
+            "apec_root": str(apec_root) if apec_root is not None else previous_apec_root or "XSPEC default AtomDB version",
+            "requested_statistic": stat_method,
+            "galactic_nh_1e22": galactic_nh_1e22,
+            "freeze_galactic_nh": freeze_galactic_nh,
+            "intrinsic_nh_mode": intrinsic_nh_mode,
+            "redshift_absorbers": (
+                list(redshift_absorbers) if redshift_absorbers is not None else [redshift]
+            ),
+            **error_metadata,
+            "calculate_errors": calculate_errors,
+            "frozen_parameters": (
+                {str(key): float(value) for key, value in frozen_parameters.items()}
+                if frozen_parameters
+                else {}
+            ),
+            "error_command": command if calculate_errors else None,
+            "profile_errors_succeeded": profile_errors_succeeded,
+        }
+        # 方法：XSPEC 统计命令选 cstat 且光谱挂载 Poisson 背景文件时，实际计算的是 W 统计量——对每 bin 背景率 f̂ 做 profile likelihood 解析消去背景阈值参数（s>0,b>0 分支 f̂ 由二次方程 ti*f^2+(ti*y-s-b)*f-b*y=0 的正根给出，总统计量=2Σ半贡献），故此处把 (cstat+背景) 报告为 wstat
+        # 参考：Cash 1979, ApJ 228, 939；Humphrey, Liu & Buote 2009, ApJ 693, 822（W 统计量推导）；XSPEC manual Appendix B "Statistics in XSPEC"；本地 HEASoft 6.37 源码 Xspec/src/XSStat/CstatVariants.cxx（specificPerformB 五分支闭式）与 Cstat.h:307（statValues*=2.0）
+        poisson_flags = []
+        for spectrum, prepared_item in zip(xspec_spectra, prepared_spectra):
+            background_flag = None
+            try:
+                background_object = spectrum.background
+            except Exception:
+                background_object = None
+            has_background = background_object is not None or prepared_item.background_pha is not None
+            if background_object is not None and hasattr(background_object, "isPoisson"):
+                background_flag = bool(background_object.isPoisson)
+            poisson_flags.append({"source_is_poisson": getattr(spectrum, "isPoisson", None),
+                                  "background_is_poisson": background_flag,
+                                  "has_background": has_background})
+        results["poisson_flags"] = poisson_flags
+        effective_per_spectrum = [stat_method.lower() for _ in poisson_flags]
+        if stat_method.lower() == "cstat":
+            effective_per_spectrum = [
+                "cstat" if not item["has_background"] else
+                "cstat_background_requires_review" if item["background_is_poisson"] is False else "wstat"
+                for item in poisson_flags
+            ]
+        unique_statistics = set(effective_per_spectrum)
+        results["effective_statistic"] = (
+            next(iter(unique_statistics)) if len(unique_statistics) == 1 else "mixed_cstat_wstat"
+            if unique_statistics == {"cstat", "wstat"} else "mixed_statistics_requires_review"
+        )
+        results["effective_statistics_per_spectrum"] = effective_per_spectrum
+        results["effective_statistic_definition"] = "sum of per-spectrum statistics; cstat without background, wstat with Poisson background"
+        if "cstat_background_requires_review" in unique_statistics:
+            warnings_list.append("Non-Poisson background: effective statistic cannot be identified as W-stat.")
+        results["effective_statistic_verified"] = all(
+            not item["has_background"] or item["background_is_poisson"] is not None
+            for item in poisson_flags
+        )
+        results["free_parameter_count"] = _count_free_xspec_parameters(group_models)
+        results["free_parameter_count_definition"] = "thawed unlinked source/calibration parameters; profiled background rates excluded"
+        results["channel_count"] = int(results["statistics"]["dof"]) + results["free_parameter_count"]
+        results["channel_count_definition"] = "XSPEC noticed grouped fit bins (dof + independent free parameters)"
+        results["noticed_channel_count"] = (
+            sum(len(spectrum.noticed) for spectrum in xspec_spectra)
+            if all(hasattr(spectrum, "noticed") for spectrum in xspec_spectra) else None
+        )
+        results["information_criterion_kind"] = (
+            "profile_likelihood_score" if "wstat" in effective_per_spectrum
+            else "likelihood_score"
+        )
+        results["group_mins"] = {
+            _prepared_spectrum_key(spectrum): spectrum.group_min
+            for spectrum in prepared_spectra
+        }
 
-    products = save_xspec_session(
-        xspec,
-        output_dir=output,
-        label=label,
-        result=results,
-        report_txt=report,
-        transcript="\n\n".join(
-            part
-            for part in (perform_text.strip(), error_text.strip(), show_text.strip())
-            if part
-        ),
-        plots=plot_paths,
-        input_paths=[
-            value
-            for item in prepared_inputs
-            for value in item.values()
-            if isinstance(value, str) and Path(value).exists()
-        ],
-    )
-    results["fit_products"] = {
-        "result_json": str(products.result_json),
-        "report_txt": str(products.report_txt),
-        "xspec_log": str(products.xspec_log),
-        "xcm": str(products.xcm),
-        "plots": [str(path) for path in products.plots],
-        "replay_cwd": str(products.replay_cwd),
-    }
-    return results
+        requested_formats = (
+            tuple(plot_formats) if plot_formats is not None else (plot_format,)
+        )
+        plot_paths = []
+        plot_errors = []
+        for requested_format in requested_formats:
+            try:
+                figure_path, figure = plotfit(
+                    srcname=srcname,
+                    instname=instname,
+                    group_min=prepared_spectra[0].group_min,
+                    modelname=model_name,
+                    redshift=redshift,
+                    outputdir=output,
+                    backend=plot_backend,
+                    output_format=requested_format,
+                    density=plot_density,
+                )
+                if figure_path is not None:
+                    plot_paths.append(str(figure_path))
+                if figure is not None:
+                    try:
+                        import matplotlib.pyplot as plt
+
+                        plt.close(figure)
+                    except Exception:
+                        pass
+            except Exception as exc:
+                plot_errors.append(f"{requested_format}: {exc}")
+        results["plot_fit"] = plot_paths[0] if plot_paths else None
+        results["plot_fits"] = plot_paths
+        if plot_errors:
+            results["plot_fit_error"] = "; ".join(plot_errors)
+            warnings_list.extend(f"fit plot failed: {message}" for message in plot_errors)
+        if plot_required and len(plot_paths) != len(requested_formats):
+            raise RuntimeError(
+                "Required XSPEC fit plots were not produced: " + "; ".join(plot_errors)
+            )
+
+        from jinwu.core.products import save_xspec_session
+
+        products = save_xspec_session(
+            xspec,
+            output_dir=output,
+            label=label,
+            result=results,
+            report_txt=report,
+            transcript="\n\n".join(
+                part
+                for part in (perform_text.strip(), error_text.strip(), show_text.strip())
+                if part
+            ),
+            plots=plot_paths,
+            input_paths=[
+                value
+                for item in prepared_inputs
+                for value in item.values()
+                if isinstance(value, str) and Path(value).exists()
+            ],
+        )
+        results["fit_products"] = {
+            "result_json": str(products.result_json),
+            "report_txt": str(products.report_txt),
+            "xspec_log": str(products.xspec_log),
+            "xcm": str(products.xcm),
+            "plots": [str(path) for path in products.plots],
+            "replay_cwd": str(products.replay_cwd),
+        }
+        return results
+    finally:
+        if uses_apec and apec_root is not None:
+            if previous_apec_root:
+                xspec.Xset.addModelString("APECROOT", previous_apec_root)
+            else:
+                xspec.Xset.delModelString("APECROOT")
 
 
 def fit_spectral(
@@ -2957,11 +3130,15 @@ def fit_spectral(
         fit_kwargs.setdefault("stat_method", settings.statistic)
         fit_kwargs.setdefault("abundance", settings.abundance)
         fit_kwargs.setdefault("cross_section", settings.cross_section)
+        if getattr(settings, "apec_root", None) is not None:
+            fit_kwargs.setdefault("apec_root", settings.apec_root)
 
     if resolved_method == "bxa":
         from jinwu.core.bxa_fit import fit_prepared_bxa
 
         return fit_prepared_bxa(prepared, outdir=output, **fit_kwargs)
+    if resolved_method == "chain" and fit_kwargs.get("apec_root") is not None:
+        raise ValueError("An explicit apec_root currently supports MLE; the chain needs its own AtomDB setting scope")
 
     result = fit_prepared(prepared, outdir=output, **fit_kwargs)
     if resolved_method == "mle":
@@ -2986,8 +3163,12 @@ def _compact_xray_fit(result: Mapping[str, Any]) -> dict[str, Any]:
     keys = (
         "model_key", "model_family", "absorption_mode", "model", "parameters",
         "statistics", "effective_statistic", "free_parameter_count", "energy_range", "energy_ranges",
-        "flux_abs", "rate", "fit_products", "report_txt", "plot_fit", "plot_fits",
+        "flux_abs", "flux_unabs", "flux_band_keV", "rate", "fit_products", "report_txt", "plot_fit", "plot_fits",
         "warnings", "xspec_settings", "derived_parameters", "metrics",
+        "per_group", "data_groups", "shared_absorption_only", "channel_count", "noticed_channel_count",
+        "channel_count_definition", "information_criterion_kind", "shape_status",
+        "effective_statistic_verified", "poisson_flags", "free_parameter_count_definition",
+        "effective_statistics_per_spectrum", "effective_statistic_definition",
     )
     return {key: result.get(key) for key in keys if key in result}
 
@@ -3038,7 +3219,7 @@ def _decorate_model_metrics(
         delta_aicc = {
             key: float(item.aicc) - best_aicc for key, item in metrics.items()
         }
-        weight_deltas = delta_aicc
+        weight_deltas = delta_aic if metric == "aic" else delta_aicc
     else:
         delta_aicc = {key: None for key in metrics}
         weight_deltas = delta_aic
@@ -3073,9 +3254,24 @@ def _candidate_is_well_constrained(
     spec: XRayModelSpec,
     result: Mapping[str, Any],
 ) -> tuple[bool, list[str]]:
+    if result.get("per_group"):
+        problems = []
+        for group in result["per_group"]:
+            group_parameters = dict(group.get("parameters") or {})
+            # The shared column is fitted in group 1; linked copies do not have
+            # independently computed profile intervals.
+            for name, parameter in group_parameters.items():
+                if parameter.get("link") and name in (result.get("parameters") or {}):
+                    group_parameters[name] = result["parameters"][name]
+            _, group_problems = _candidate_is_well_constrained(spec, {"parameters": group_parameters})
+            problems.extend(f"group {group['group_index']}: {item}" for item in group_problems)
+        return not problems, problems
     parameters = result.get("parameters") or {}
     problems: list[str] = []
     critical_parameters = list(spec.critical_parameters)
+    if spec.family == "double_apec":
+        critical_parameters.extend(name for name in parameters
+                                   if name.lower().startswith("apec_") and name.endswith((".kT", ".norm")))
     if spec.absorption_mode == "free":
         critical_parameters.append("zTBabs.nH")
     for name in critical_parameters:
@@ -3100,7 +3296,9 @@ def _candidate_is_well_constrained(
             if lower is not None and upper is not None
             else 0.0
         )
-        boundary_tolerance = max(1e-5 * scale, 1e-3 * max(span, 0.0))
+        # Relative component norms have enormous XSPEC default upper bounds;
+        # their boundary tolerance must not be scaled by that entire range.
+        boundary_tolerance = 1e-5 * scale
         if lower is not None and value - float(lower) <= boundary_tolerance:
             problems.append(f"{name} is at its lower bound")
         if upper is not None and float(upper) - value <= boundary_tolerance:
@@ -3111,7 +3309,43 @@ def _candidate_is_well_constrained(
         if error_high is not None and upper is not None:
             if value + float(error_high) >= float(upper):
                 problems.append(f"{name} profile interval reaches its upper bound")
+    if spec.family == "grbm":
+        alpha = _parameter_by_name(parameters, "grbm.alpha") or {}
+        beta = _parameter_by_name(parameters, "grbm.beta") or {}
+        if alpha.get("value", -math.inf) <= beta.get("value", math.inf):
+            problems.append("Band requires alpha > beta")
     return not problems, problems
+
+
+def _xray_shape_diagnostics(spec: XRayModelSpec, result: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep unresolved curvature/mixtures explicit instead of a classification."""
+    constrained, problems = _candidate_is_well_constrained(spec, result)
+    states = []
+    groups = result.get("per_group") or [{"group_index": 1, "parameters": result.get("parameters") or {}}]
+    thermal = []
+    for group in groups:
+        parameters = group.get("parameters") or {}
+        if spec.family == "grbm":
+            alpha = _parameter_by_name(parameters, "grbm.alpha") or {}
+            beta = _parameter_by_name(parameters, "grbm.beta") or {}
+            if alpha.get("value", -math.inf) <= beta.get("value", math.inf):
+                states.append("invalid_band_index_order")
+        if spec.family == "double_apec":
+            components = []
+            for name, parameter in parameters.items():
+                if name.lower().startswith("apec") and name.endswith(".kT"):
+                    component = name.rsplit(".", 1)[0]
+                    components.append({"component": component, "kT_keV": parameter,
+                                       "relative_norm": parameters.get(f"{component}.norm")})
+            components.sort(key=lambda item: item["kT_keV"]["value"])
+            thermal.append({"group_index": group["group_index"], "temperature_order": "cool_to_hot", "components": components})
+    if problems:
+        states.append("shape_parameters_not_constrained")
+    if spec.family in {"bbpl", "double_apec"} and any("norm" in problem for problem in problems):
+        states.append("components_not_separately_constrained")
+    return {"status": "constrained" if constrained and not states else "requires_review",
+            "states": list(dict.fromkeys(states)), "problems": problems,
+            **({"thermal_components": thermal} if thermal else {})}
 
 
 # 方法：ΔC 的朴素似然比 p 值按 χ²1 上尾计算：p=P(χ²1>ΔC)=0.5*erfc(sqrt(ΔC/2))；因检验对象 nH=0 位于参数空间边界，朴素 χ² LRT p 值不成立（正确零分布为 0.5χ²0+0.5χ²1 混合），故该值仅作描述性参考（字段名 boundary_lrt_p_reference_only）并显式警告、不使用 F 检验
@@ -3121,7 +3355,7 @@ def _absorption_comparisons(
     metrics: Mapping[str, ModelFitMetrics],
 ) -> dict[str, dict[str, Any]]:
     comparisons: dict[str, dict[str, Any]] = {}
-    for family in ("powerlaw", "bbody", "bknpower"):
+    for family in ("powerlaw", "bbody", "bbpl", "apec", "double_apec", "grbm", "bknpower"):
         free_key = f"{family}_free_nh"
         zero_key = f"{family}_nh0"
         if free_key not in candidates or zero_key not in candidates:
@@ -3221,7 +3455,7 @@ def _choose_xray_model(
             f"diagnostics requiring review: {'; '.join(baseline_problems)}."
         )
     challengers = []
-    for family in ("apec", "bbody", "bknpower"):
+    for family in ("apec", "bbody", "bbpl", "double_apec", "grbm", "bknpower"):
         key = best_family(family)
         if key is None:
             continue
@@ -3252,7 +3486,7 @@ def _write_xray_candidate_summary(
     failure: str | None = None,
 ) -> None:
     lines = [f"候选模型：{spec.key}", f"XSPEC 表达式：{spec.expression}"]
-    if spec.family == "apec":
+    if spec.absorption_mode == "none":
         lines.append("吸收假设：按配置完全不包含银河系或本征吸收。")
     else:
         lines.append(
@@ -3404,10 +3638,12 @@ def fit_xray_models(
                 statistics["value"],
                 statistics["dof"],
                 result.get("free_parameter_count", 0),
+                channel_count=result.get("channel_count"),
             )
             result["model_key"] = spec.key
             result["model_family"] = spec.family
             result["absorption_mode"] = spec.absorption_mode
+            result["shape_status"] = _xray_shape_diagnostics(spec, result)
             result["derived_parameters"] = {}
             if spec.family == "bbody":
                 parameter = _parameter_by_name(result.get("parameters") or {}, "bbody.kT")
@@ -3421,7 +3657,7 @@ def fit_xray_models(
                     result["derived_parameters"]["rest_break_energy_keV"] = (
                         (1.0 + float(redshift)) * float(parameter["value"])
                     )
-            if spec.family == "apec":
+            if spec.family in {"apec", "double_apec"} and spec.absorption_mode == "none":
                 message = (
                     "APEC candidate intentionally omits both Galactic and intrinsic "
                     "absorption; its information criterion tests that distinct assumption."

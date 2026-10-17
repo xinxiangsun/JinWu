@@ -36,10 +36,10 @@ from astropy.io import fits
 from typing import Tuple, List, Dict, Optional, Union, cast
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.dates import DateFormatter
+from matplotlib.dates import AutoDateLocator, DateFormatter
 import astropy.units as u
 
-from .plotstyle import PALETTE, SERIES_COLORS, apply_style
+from .plotstyle import PALETTE, SERIES_COLORS, apply_style, paper_figsize
 
 
 __all__ = [
@@ -1123,7 +1123,7 @@ def compare_time_intervals(
 def plot_time_intervals(
     intervals: List[Dict[str, Union[Time, str]]],
     reference_time: Optional[Time] = None,
-    figsize: Tuple[float, float] = (14, 6),
+    figsize: Optional[Tuple[float, float]] = None,
     title: str = "Observation Time Intervals",
     save_path: Optional[str] = None,
     show_utc: bool = True,
@@ -1145,7 +1145,8 @@ def plot_time_intervals(
     reference_time : Time, optional
         参考时间（用于相对时间显示） | Reference time
     figsize : tuple, optional
-        图形大小 | Figure size
+        图形大小；缺省采用 paper_style 画布，否则为 (14, 6)
+        Figure size; defaults to the active paper_style canvas, else (14, 6)
     title : str, optional
         图形标题 | Figure title
     save_path : str, optional
@@ -1177,7 +1178,9 @@ def plot_time_intervals(
     if n_axes == 0:
         raise ValueError("At least one time axis must be shown")
 
+    figsize = paper_figsize((14, 6)) if figsize is None else tuple(figsize)
     fig, axes = plt.subplots(n_axes, 1, figsize=figsize, sharex=False)
+    narrow = fig.get_figwidth() < 7
     if n_axes == 1:
         axes = [axes]
 
@@ -1230,26 +1233,32 @@ def plot_time_intervals(
                 label=f"{name} ({duration:.1f} s)"
             )
             
-            # 添加标签
+            # 添加标签；窄画布直接把时长写在条内，避免图例覆盖数据。
+            bar_label = (f"  {name} ({duration:.1f} s)" if narrow
+                         else f"  {name}")
             ax.text(
                 start_dt,
                 i,
-                f"  {name}",
+                bar_label,
                 va='center',
                 ha='left',
-                fontsize=10,
                 fontweight='bold'
             )
         
         ax.set_yticks(range(n_intervals))
         ax.set_yticklabels([])
-        ax.set_xlabel('UTC Time', fontsize=12)
-        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_xlabel('UTC Time')
+        ax.set_title(title, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='x')
-        ax.legend(loc='upper right', fontsize=9)
+        if not narrow:
+            ax.legend(loc='upper right')
         
-        # 格式化时间轴
-        ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d\n%H:%M:%S'))
+        # 格式化时间轴；窄画布减少刻度并省略年份，避免标签重叠。
+        if narrow:
+            ax.xaxis.set_major_locator(AutoDateLocator(maxticks=4))
+            ax.xaxis.set_major_formatter(DateFormatter('%m-%d\n%H:%M'))
+        else:
+            ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d\n%H:%M:%S'))
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=0, ha='center')
         
         ax_idx += 1
@@ -1291,49 +1300,54 @@ def plot_time_intervals(
                 label=f"{name} ({duration:.1f} s)"
             )
             
-            # 添加标签
+            # 添加标签；窄画布直接把时长写在条内，避免图例覆盖数据。
+            bar_label = (f"  {name} ({duration:.1f} s)" if narrow
+                         else f"  {name}")
             ax.text(
                 start_rel,
                 i,
-                f"  {name}",
+                bar_label,
                 va='center',
                 ha='left',
-                fontsize=10,
                 fontweight='bold'
             )
             
-            # 标注起止时间
-            ax.text(
-                start_rel,
-                i - 0.35,
-                f"{start_rel:.1f}",
-                va='top',
-                ha='center',
-                fontsize=8,
-                color=PALETTE['muted']
-            )
-            ax.text(
-                end_rel,
-                i - 0.35,
-                f"{end_rel:.1f}",
-                va='top',
-                ha='center',
-                fontsize=8,
-                color=PALETTE['muted']
-            )
+            # 标注起止时间；窄画布省略，避免与刻度或相邻条重叠。
+            if not narrow:
+                annotation_size = 0.8 * plt.rcParams['font.size']
+                ax.text(
+                    start_rel,
+                    i - 0.35,
+                    f"{start_rel:.1f}",
+                    va='top',
+                    ha='left',
+                    fontsize=annotation_size,
+                    color=PALETTE['muted']
+                )
+                ax.text(
+                    end_rel,
+                    i - 0.35,
+                    f"{end_rel:.1f}",
+                    va='top',
+                    ha='right',
+                    fontsize=annotation_size,
+                    color=PALETTE['muted']
+                )
         
         # 标记参考时间（T=0）
         ax.axvline(0, color=PALETTE['reference'], linestyle='--', linewidth=1.5, alpha=0.7, label='Reference Time T0')
         
         ax.set_yticks(range(n_intervals))
         ax.set_yticklabels([])
-        ax.set_xlabel(f'Relative Time (s)\nT0 = {reference_time.iso}', fontsize=12)
+        ax.set_xlabel(f'Relative Time (s)\nT0 = {reference_time.iso}')
         if not show_utc:
-            ax.set_title(title, fontsize=14, fontweight='bold')
+            ax.set_title(title, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='x')
-        ax.legend(loc='upper right', fontsize=9)
+        if not narrow:
+            ax.legend(loc='upper right')
     
-    plt.tight_layout()
+    if not plt.rcParams["figure.constrained_layout.use"]:
+        plt.tight_layout()
 
     if save_path:
         from .plotstyle import save_figure

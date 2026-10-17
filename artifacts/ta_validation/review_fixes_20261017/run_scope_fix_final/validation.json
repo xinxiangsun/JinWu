@@ -1,0 +1,2420 @@
+{
+  "apec_root": "/home/xinxiang/research/jinwu/external_sources/heasoft-6.36/Xspec/src/spectral/modelData/apec_v3.1.3",
+  "environment": {
+    "CALDB": null,
+    "CALDBCONFIG": null,
+    "HEADAS": "/home/xinxiang/miniconda3/envs/hea/heasoft",
+    "heasoft_version": "26Sep2025_V6.36",
+    "jinwu_version": "0.2.3",
+    "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+    "python_executable": "/home/xinxiang/miniconda3/envs/hea/bin/python",
+    "python_version": "3.12.15",
+    "xspec_version": [
+      "2.1.5",
+      "12.15.1"
+    ]
+  },
+  "error_disabled_powerlaw_statistic": 26.253199052003072,
+  "fx_module_coverage": {
+    "FXTA": {
+      "EXPOSURE": 6049.726492166519,
+      "TSTART": 190972450.8871541,
+      "TSTOP": 190981224.7545
+    },
+    "FXTB": {
+      "EXPOSURE": 6049.693115472794,
+      "TSTART": 190972450.8935392,
+      "TSTOP": 190981224.7545
+    }
+  },
+  "galactic_nh_1e22": 0.0145,
+  "head": "90d8393e5982d006aaee217665b44e2e0fd4dce5",
+  "input_target_redshift": 5.461,
+  "inputs_sha256": {
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/EP260119a_fxta_groupmin3_06800001128.pha": "1860992a7ecd0004e1d7d9a1f0f6e21dfd10f485a183e0cefbbcde6656479558",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/EP260119a_fxtb_groupmin3_06800001128.pha": "47f033618b2003427c8e632feed76ee8739cc9e0fc4c23ad7ce46090444a0d5f",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_bkg_3cc.pha": "2e55df92e84b02f747dab90af89aee46f2ae495af61575ed5b10fde34d1703c2",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_src_3cc.arf": "4ae1ca828dd9fc4358cbea97a1484cb6dae43352239bba95679e0f22e41d8889",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_src_3cc.pha": "b088ebe340dbdbe6093bff3d7906a2b19a97b73dab8327d95ae6aebd2af5492a",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_src_3cc.rmf": "0b6dbdb036c750e67c0993597969f9db416ac557b07f23518e878b22c5e76938",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_bkg_3cc.pha": "9beec20ccaa2d5358d6e6acf53bdf24dfce59eb337c95e7c0d41234f6b556cf3",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_src_3cc.arf": "897bae6b0f670b3526e5bcf332d4103e4cc2e2e722a9943ffdad0b96f3d07066",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_src_3cc.pha": "41053bf00a41aaef8bbd9f4eb395a9172564f146bed9b5e960102a008c29a112",
+    "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_src_3cc.rmf": "95a7dc025f2b4f004a8b5f1a3672024463b7fffb2b07c072d9868ef92116b36d",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/prepared/unknown_obsid/WXT/t100/grouped_g1.pha": "4bd130d326bb055bb7aaf7d28e78ada491c4c407b874f883cae3a90cc545469e",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_bkg_spec.pha": "91ff5e12acac46db6ac719c6c29fb2f7fa5b4d44e45532b26d291168574f854d",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_src_spec.pha": "1219acf680730c4056953244d06f7854032c9044be972a7b4fe8967a7863c5d1",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48.rmf": "f4eb7285a9518bf10a670ff374b0ff1b5571cf7f6f9fcedacf3c841927b7fa87",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48s1.arf": "125ab724f4d6fb7bdfa8f2bcb1f5ed8a6e5fb1384842993b34e4eca41da02e87"
+  },
+  "limitations": [
+    "EP260119a spectra validate implementation; these trial APEC fits do not identify a nearby star.",
+    "Profile intervals disabled for bounded regression; no parameter-constraint claim.",
+    "Pile-up and slew calibration remain deferred; no new event reduction was needed."
+  ],
+  "observer_flux_band_keV": [
+    0.5,
+    4.0
+  ],
+  "original_inputs_unchanged": true,
+  "powerlaw_reference": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/model_comparison.json",
+  "powerlaw_statistic_difference": 0.0,
+  "source_sha256": {
+    "/home/xinxiang/research/jinwu/packages/jinwu-ep/src/jinwu/ep/fxt/pipeline.py": "0a77d4044f6373be3182b160f3da85192c58b32b6fcf04115efd5a9f9ba8a125",
+    "/home/xinxiang/research/jinwu/packages/jinwu-ep/src/jinwu/ep/ta.py": "258016e62034cd0e8880433498b5ea01c1e3ba1ec1f1ea08ee345265d3322ef5",
+    "/home/xinxiang/research/jinwu/packages/jinwu/src/jinwu/core/fit.py": "28b8782896dd1e2fbe4e26175ca34c3f88e277e7fa017c097aaf64e61181e76c"
+  },
+  "ta_result": {
+    "flux_rows": [
+      {
+        "confidence": 0.682689492137,
+        "error_kind": "single_parameter_profile",
+        "error_minus": null,
+        "error_plus": null,
+        "error_status": "uncomputed",
+        "exposure_s": 6049.726492166519,
+        "extra_nh_interpretation": "local_stellar_absorption",
+        "flux": 3.209293558423524e-13,
+        "flux_band_keV": [
+          0.5,
+          4.0
+        ],
+        "flux_frame": "observer",
+        "flux_kind": "unabsorbed",
+        "flux_unit": "erg cm^-2 s^-1",
+        "galactic_nh_1e22": 0.0145,
+        "instrument": "FXT",
+        "is_upper_limit": false,
+        "model": "TBabs*zTBabs*cflux*apec",
+        "model_key": "apec_nh0",
+        "obsid": "06800001128",
+        "pileup_status": "deferred",
+        "redshift": 0.0,
+        "redshift_status": "fixed_stellar_zero",
+        "segment": "epoch",
+        "shape_status": "requires_review",
+        "status": "spectral_fit",
+        "t0_source": "user",
+        "t0_utc": "2026-01-19T00:13:08.8249",
+        "t_center": 32048.99592706561,
+        "t_center_ep": 190976837.82082707,
+        "t_start": 27662.062254101038,
+        "t_start_ep": 190972450.8871541,
+        "t_stop": 36435.92960000038,
+        "t_stop_ep": 190981224.7545,
+        "target_redshift": 5.461,
+        "time_reference": "seconds_since_t0",
+        "time_unit": "s"
+      }
+    ],
+    "fxt_result": {
+      "count_rows": [
+        {
+          "alpha": 0.061213999511338164,
+          "alpha_rate": 0.06121399951133816,
+          "background_exposure_s": 6049.726492166519,
+          "count_band_keV": [
+            0.5,
+            10.0
+          ],
+          "exposure_s": 6049.726492166519,
+          "instrument": "FXT",
+          "module": "FXTA",
+          "n_off": 102.0,
+          "n_on": 135.0,
+          "net_counts": 128.7561720498435,
+          "net_rate": 0.02128297406776377,
+          "net_rate_error": 0.0019232912619144339,
+          "obsid": "06800001128",
+          "segment": "epoch",
+          "significance": 21.41103877939138,
+          "t0_utc": "2026-01-19T00:13:08.8249",
+          "t_center": 32048.99592706561,
+          "t_start": 27662.062254101038,
+          "t_stop": 36435.92960000038,
+          "time_reference": "seconds_since_t0"
+        },
+        {
+          "alpha": 0.061213999511338164,
+          "alpha_rate": 0.06121399951133816,
+          "background_exposure_s": 6049.693115472794,
+          "count_band_keV": [
+            0.5,
+            10.0
+          ],
+          "exposure_s": 6049.693115472794,
+          "instrument": "FXT",
+          "module": "FXTB",
+          "n_off": 109.0,
+          "n_on": 205.0,
+          "net_counts": 198.32767405326413,
+          "net_rate": 0.03278309664105408,
+          "net_rate_error": 0.0023690585666541813,
+          "obsid": "06800001128",
+          "segment": "epoch",
+          "significance": 27.876986470011623,
+          "t0_utc": "2026-01-19T00:13:08.8249",
+          "t_center": 32048.99592706561,
+          "t_start": 27662.062254101038,
+          "t_stop": 36435.92960000038,
+          "time_reference": "seconds_since_t0"
+        }
+      ],
+      "epoch_results": [
+        {
+          "comparison": {
+            "absorption_comparisons": {},
+            "adopted_key": "apec_nh0",
+            "adopted_reason": "No power-law baseline succeeded; adopted the best available candidate.",
+            "candidates": {
+              "apec_nh0": {
+                "absorption_mode": "zero",
+                "channel_count": 99,
+                "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+                "data_groups": [
+                  {
+                    "energy_range": {
+                      "emax": 10.0,
+                      "emin": 0.5
+                    },
+                    "group_index": 1,
+                    "instrument": "FXT",
+                    "spectrum_indices": [
+                      1,
+                      2
+                    ],
+                    "spectrum_keys": [
+                      "06800001128:FXTA",
+                      "06800001128:FXTB"
+                    ]
+                  }
+                ],
+                "derived_parameters": {},
+                "effective_statistic": "wstat",
+                "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+                "effective_statistic_verified": true,
+                "effective_statistics_per_spectrum": [
+                  "wstat",
+                  "wstat"
+                ],
+                "energy_range": {
+                  "emax": 10.0,
+                  "emin": 0.5
+                },
+                "energy_ranges": {
+                  "06800001128:FXTA": {
+                    "emax": 10.0,
+                    "emin": 0.5
+                  },
+                  "06800001128:FXTB": {
+                    "emax": 10.0,
+                    "emin": 0.5
+                  }
+                },
+                "fit_products": {
+                  "plots": [
+                    "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA_FXTB_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin3.png"
+                  ],
+                  "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0",
+                  "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA+FXTB_fit.txt",
+                  "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA+FXTB_fit.json",
+                  "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA+FXTB_fit.xcm",
+                  "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA+FXTB_fit.log"
+                },
+                "flux_abs": {
+                  "energy_range_keV": [
+                    0.5,
+                    4.0
+                  ],
+                  "erg_cm2_s": 3.1487697002722844e-13,
+                  "photons_cm2_s": 0.0001490991676216416
+                },
+                "flux_band_keV": [
+                  0.5,
+                  4.0
+                ],
+                "flux_unabs": {
+                  "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+                  "energy_range_keV": [
+                    0.5,
+                    4.0
+                  ],
+                  "erg_cm2_s": 3.209293558423524e-13,
+                  "error_hi": null,
+                  "error_lo": null,
+                  "error_status": "uncomputed",
+                  "frame": "observer"
+                },
+                "free_parameter_count": 2,
+                "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+                "information_criterion_kind": "profile_likelihood_score",
+                "metrics": {
+                  "aic": 120.93424243003588,
+                  "aicc": 121.05924243003588,
+                  "akaike_weight": 1.0,
+                  "bic": 126.12448213030505,
+                  "delta": 0.0,
+                  "delta_aic": 0.0,
+                  "delta_aicc": 0.0,
+                  "delta_bic": 0.0,
+                  "dof": 97,
+                  "effective_bins": 99,
+                  "free_parameters": 2,
+                  "ranking_metric": "aic",
+                  "statistic": 116.93424243003588
+                },
+                "model": "TBabs*zTBabs*cflux*apec",
+                "model_family": "apec",
+                "model_key": "apec_nh0",
+                "noticed_channel_count": 99,
+                "parameters": {
+                  "TBabs.nH": {
+                    "frozen": true,
+                    "index": 1,
+                    "link": "",
+                    "max": 1000000.0,
+                    "min": 0.0,
+                    "value": 0.0145
+                  },
+                  "apec.Abundanc": {
+                    "frozen": true,
+                    "index": 8,
+                    "link": "",
+                    "max": 5.0,
+                    "min": 0.0,
+                    "value": 1.0
+                  },
+                  "apec.Redshift": {
+                    "frozen": true,
+                    "index": 9,
+                    "link": "",
+                    "max": 10.0,
+                    "min": -0.999,
+                    "value": 0.0
+                  },
+                  "apec.kT": {
+                    "error_status": "uncomputed",
+                    "frozen": false,
+                    "index": 7,
+                    "link": "",
+                    "max": 64.0,
+                    "min": 0.008,
+                    "value": 3.2417704285851165
+                  },
+                  "apec.norm": {
+                    "frozen": true,
+                    "index": 10,
+                    "link": "",
+                    "max": 1e+24,
+                    "min": 0.0,
+                    "value": 1.0
+                  },
+                  "cflux.Emax": {
+                    "frozen": true,
+                    "index": 5,
+                    "link": "",
+                    "max": 1000000.0,
+                    "min": 0.0,
+                    "value": 4.0
+                  },
+                  "cflux.Emin": {
+                    "frozen": true,
+                    "index": 4,
+                    "link": "",
+                    "max": 1000000.0,
+                    "min": 0.0,
+                    "value": 0.5
+                  },
+                  "cflux.lg10Flux": {
+                    "error_status": "uncomputed",
+                    "frozen": false,
+                    "index": 6,
+                    "link": "",
+                    "max": 10.0,
+                    "min": -20.0,
+                    "value": -12.493590555583712
+                  },
+                  "zTBabs.Redshift": {
+                    "frozen": true,
+                    "index": 3,
+                    "link": "",
+                    "max": 10.0,
+                    "min": -0.999,
+                    "value": 0.0
+                  },
+                  "zTBabs.nH": {
+                    "frozen": true,
+                    "index": 2,
+                    "link": "",
+                    "max": 100.0,
+                    "min": 0.0,
+                    "value": 0.0
+                  }
+                },
+                "per_group": [
+                  {
+                    "cflux": {
+                      "Emax": 4.0,
+                      "Emin": 0.5,
+                      "lg10Flux": -12.493590555583712
+                    },
+                    "energy_range": {
+                      "emax": 10.0,
+                      "emin": 0.5
+                    },
+                    "flux_abs": {
+                      "energy_range_keV": [
+                        0.5,
+                        4.0
+                      ],
+                      "erg_cm2_s": 3.1487697002722844e-13,
+                      "photons_cm2_s": 0.0001490991676216416
+                    },
+                    "flux_unabs": {
+                      "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+                      "energy_range_keV": [
+                        0.5,
+                        4.0
+                      ],
+                      "erg_cm2_s": 3.209293558423524e-13,
+                      "error_hi": null,
+                      "error_lo": null,
+                      "error_status": "uncomputed",
+                      "frame": "observer"
+                    },
+                    "group_index": 1,
+                    "instrument": "FXT",
+                    "member_spectra": [
+                      "06800001128:FXTA",
+                      "06800001128:FXTB"
+                    ],
+                    "model": "TBabs*zTBabs*cflux*apec",
+                    "parameters": {
+                      "TBabs.nH": {
+                        "frozen": true,
+                        "index": 1,
+                        "link": "",
+                        "max": 1000000.0,
+                        "min": 0.0,
+                        "value": 0.0145
+                      },
+                      "apec.Abundanc": {
+                        "frozen": true,
+                        "index": 8,
+                        "link": "",
+                        "max": 5.0,
+                        "min": 0.0,
+                        "value": 1.0
+                      },
+                      "apec.Redshift": {
+                        "frozen": true,
+                        "index": 9,
+                        "link": "",
+                        "max": 10.0,
+                        "min": -0.999,
+                        "value": 0.0
+                      },
+                      "apec.kT": {
+                        "error_status": "uncomputed",
+                        "frozen": false,
+                        "index": 7,
+                        "link": "",
+                        "max": 64.0,
+                        "min": 0.008,
+                        "value": 3.2417704285851165
+                      },
+                      "apec.norm": {
+                        "frozen": true,
+                        "index": 10,
+                        "link": "",
+                        "max": 1e+24,
+                        "min": 0.0,
+                        "value": 1.0
+                      },
+                      "cflux.Emax": {
+                        "frozen": true,
+                        "index": 5,
+                        "link": "",
+                        "max": 1000000.0,
+                        "min": 0.0,
+                        "value": 4.0
+                      },
+                      "cflux.Emin": {
+                        "frozen": true,
+                        "index": 4,
+                        "link": "",
+                        "max": 1000000.0,
+                        "min": 0.0,
+                        "value": 0.5
+                      },
+                      "cflux.lg10Flux": {
+                        "error_status": "uncomputed",
+                        "frozen": false,
+                        "index": 6,
+                        "link": "",
+                        "max": 10.0,
+                        "min": -20.0,
+                        "value": -12.493590555583712
+                      },
+                      "zTBabs.Redshift": {
+                        "frozen": true,
+                        "index": 3,
+                        "link": "",
+                        "max": 10.0,
+                        "min": -0.999,
+                        "value": 0.0
+                      },
+                      "zTBabs.nH": {
+                        "frozen": true,
+                        "index": 2,
+                        "link": "",
+                        "max": 100.0,
+                        "min": 0.0,
+                        "value": 0.0
+                      }
+                    },
+                    "spectrum_indices": [
+                      1,
+                      2
+                    ]
+                  }
+                ],
+                "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA_FXTB_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin3.png",
+                "plot_fits": [
+                  "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA_FXTB_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin3.png"
+                ],
+                "poisson_flags": [
+                  {
+                    "background_is_poisson": true,
+                    "has_background": true,
+                    "source_is_poisson": true
+                  },
+                  {
+                    "background_is_poisson": true,
+                    "has_background": true,
+                    "source_is_poisson": true
+                  }
+                ],
+                "rate": {
+                  "error": 0.0019086832118429542,
+                  "value": 0.021083918791128784
+                },
+                "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA+FXTB_fit.txt",
+                "shape_status": {
+                  "problems": [
+                    "group 1: profile error unavailable for apec.kT"
+                  ],
+                  "states": [
+                    "shape_parameters_not_constrained"
+                  ],
+                  "status": "requires_review"
+                },
+                "shared_absorption_only": false,
+                "statistics": {
+                  "dof": 97,
+                  "method": "cstat",
+                  "null_hypothesis_probability": 0.1696943127,
+                  "reduced": 1.2055076539178957,
+                  "value": 116.93424243003588
+                },
+                "warnings": [],
+                "xspec_settings": {
+                  "abundance": "wilm",
+                  "apec_root": "/home/xinxiang/research/jinwu/external_sources/heasoft-6.36/Xspec/src/spectral/modelData/apec_v3.1.3",
+                  "calculate_errors": false,
+                  "cross_section": "vern",
+                  "error_command": null,
+                  "error_delta_stat": 1.0,
+                  "freeze_galactic_nh": true,
+                  "frozen_parameters": {},
+                  "galactic_nh_1e22": 0.0145,
+                  "intrinsic_nh_mode": "zero",
+                  "profile_confidence": 0.682689492137,
+                  "profile_error_kind": "single_parameter_profile",
+                  "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+                  "profile_errors_succeeded": false,
+                  "profile_sigma": 1.0,
+                  "redshift_absorbers": [
+                    0.0
+                  ],
+                  "requested_statistic": "cstat"
+                }
+              }
+            },
+            "comparison_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/model_comparison.json",
+            "comparison_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/model_comparison.txt",
+            "failures": {},
+            "metrics": {
+              "apec_nh0": {
+                "aic": 120.93424243003588,
+                "aicc": 121.05924243003588,
+                "akaike_weight": 1.0,
+                "bic": 126.12448213030505,
+                "delta": 0.0,
+                "delta_aic": 0.0,
+                "delta_aicc": 0.0,
+                "delta_bic": 0.0,
+                "dof": 97,
+                "effective_bins": 99,
+                "free_parameters": 2,
+                "ranking_metric": "aic",
+                "statistic": 116.93424243003588
+              }
+            },
+            "ranking": [
+              "apec_nh0"
+            ],
+            "selection_metric": "aic",
+            "warnings": []
+          },
+          "exposure_s": 6049.726492166519,
+          "input_products": [
+            {
+              "module": "FXTA",
+              "products": {
+                "arf": {
+                  "calibration_history": [
+                    "CALDB path: /caldb",
+                    "fxtarfgen_1.30 spectrum file      = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_a_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtarfgen_1.30 exposure map file  = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_a_06800001128_ff_01_po_src_3cc.expo",
+                    "fxtarfgen_1.30 outfile            = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_a_06800001128_ff_01_po_src_3cc.arf",
+                    "fxtarfgen_1.30 extend             = 0",
+                    "fxtarfgen_1.30 src x              = -1",
+                    "fxtarfgen_1.30 src y              = -1",
+                    "fxtarfgen_1.30 psfcor             = 0",
+                    "CALDB path: /caldb",
+                    "fxtarfgen_1.30 spectrum file      = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_a_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtarfgen_1.30 exposure map file  = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_a_06800001128_ff_01_po_src_3cc.expo",
+                    "fxtarfgen_1.30 outfile            = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_a_06800001128_ff_01_po_src_3cc.arf",
+                    "fxtarfgen_1.30 extend             = 0",
+                    "fxtarfgen_1.30 src x              = -1",
+                    "fxtarfgen_1.30 src y              = -1",
+                    "fxtarfgen_1.30 psfcor             = 0"
+                  ],
+                  "creator": null,
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_src_3cc.arf"
+                },
+                "background_pha": {
+                  "calibration_history": [
+                    "CALDB gain file: /caldb/data/ep/fxt/bcf/gain/ep_fxt_a_ff_gain_20201101_v",
+                    "WMAP X axis is X",
+                    "WMAP Y axis is Y",
+                    "extractor v6.11",
+                    " FITS SPECTRUM extension written by WTPHA2 1.0.1",
+                    "extractor v6.11"
+                  ],
+                  "creator": "extractor v6.11",
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_bkg_3cc.pha"
+                },
+                "grouped_pha": {
+                  "calibration_history": [
+                    "CALDB gain file: /caldb/data/ep/fxt/bcf/gain/ep_fxt_a_ff_gain_20201101_v",
+                    "WMAP X axis is X",
+                    "WMAP Y axis is Y",
+                    "extractor v6.11",
+                    " FITS SPECTRUM extension written by UPDPHA 1.0.0",
+                    " FITS SPECTRUM extension written by WTPHA2 1.0.1",
+                    "extractor v6.11",
+                    " This extension has been written by WT_SPEC Ver 1.7.0",
+                    " The original fits file was fxt_a_06800001128_ff_01_po_src_3cc.pha"
+                  ],
+                  "creator": "grppha 3.1.0",
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/EP260119a_fxta_groupmin3_06800001128.pha"
+                },
+                "rmf": {
+                  "calibration_history": [
+                    "CALDB rmf file: /caldb/data/ep/fxt/cpf/rmf/ep_fxt_a_ff_g12_20260101_v2.r",
+                    "mf",
+                    "fxtrmfgen_1.30 input spectrum file = /work/EP260119a/fxtevt/06800001128_",
+                    "result1am/fxt_a_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtrmfgen_1.30 output file = /work/EP260119a/fxtevt/06800001128_result1a",
+                    "m/fxt_a_06800001128_ff_01_po_src_3cc.rmf",
+                    "processed with fxt_caldb software v0.1",
+                    "processed with fxt_caldb software v0.1",
+                    "processed with fxt_caldb software v0.1",
+                    "CALDB rmf file: /caldb/data/ep/fxt/cpf/rmf/ep_fxt_a_ff_g12_20260101_v2.r",
+                    "mf",
+                    "fxtrmfgen_1.30 input spectrum file = /work/EP260119a/fxtevt/06800001128_",
+                    "result1am/fxt_a_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtrmfgen_1.30 output file = /work/EP260119a/fxtevt/06800001128_result1a",
+                    "m/fxt_a_06800001128_ff_01_po_src_3cc.rmf"
+                  ],
+                  "creator": null,
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_src_3cc.rmf"
+                },
+                "source_pha": {
+                  "calibration_history": [
+                    "CALDB gain file: /caldb/data/ep/fxt/bcf/gain/ep_fxt_a_ff_gain_20201101_v",
+                    "WMAP X axis is X",
+                    "WMAP Y axis is Y",
+                    "extractor v6.11",
+                    " FITS SPECTRUM extension written by WTPHA2 1.0.1",
+                    "extractor v6.11"
+                  ],
+                  "creator": "extractor v6.11",
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_a_06800001128_ff_01_po_src_3cc.pha"
+                }
+              }
+            },
+            {
+              "module": "FXTB",
+              "products": {
+                "arf": {
+                  "calibration_history": [
+                    "CALDB path: /caldb",
+                    "fxtarfgen_1.30 spectrum file      = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_b_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtarfgen_1.30 exposure map file  = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_b_06800001128_ff_01_po_src_3cc.expo",
+                    "fxtarfgen_1.30 outfile            = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_b_06800001128_ff_01_po_src_3cc.arf",
+                    "fxtarfgen_1.30 extend             = 0",
+                    "fxtarfgen_1.30 src x              = -1",
+                    "fxtarfgen_1.30 src y              = -1",
+                    "fxtarfgen_1.30 psfcor             = 0",
+                    "CALDB path: /caldb",
+                    "fxtarfgen_1.30 spectrum file      = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_b_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtarfgen_1.30 exposure map file  = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_b_06800001128_ff_01_po_src_3cc.expo",
+                    "fxtarfgen_1.30 outfile            = /work/EP260119a/fxtevt/06800001128_r",
+                    "esult1am/fxt_b_06800001128_ff_01_po_src_3cc.arf",
+                    "fxtarfgen_1.30 extend             = 0",
+                    "fxtarfgen_1.30 src x              = -1",
+                    "fxtarfgen_1.30 src y              = -1",
+                    "fxtarfgen_1.30 psfcor             = 0"
+                  ],
+                  "creator": null,
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_src_3cc.arf"
+                },
+                "background_pha": {
+                  "calibration_history": [
+                    "CALDB gain file: /caldb/data/ep/fxt/bcf/gain/ep_fxt_b_ff_gain_20201101_v",
+                    "WMAP X axis is X",
+                    "WMAP Y axis is Y",
+                    "extractor v6.11",
+                    " FITS SPECTRUM extension written by WTPHA2 1.0.1",
+                    "extractor v6.11"
+                  ],
+                  "creator": "extractor v6.11",
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_bkg_3cc.pha"
+                },
+                "grouped_pha": {
+                  "calibration_history": [
+                    "CALDB gain file: /caldb/data/ep/fxt/bcf/gain/ep_fxt_b_ff_gain_20201101_v",
+                    "WMAP X axis is X",
+                    "WMAP Y axis is Y",
+                    "extractor v6.11",
+                    " FITS SPECTRUM extension written by UPDPHA 1.0.0",
+                    " FITS SPECTRUM extension written by WTPHA2 1.0.1",
+                    "extractor v6.11",
+                    " This extension has been written by WT_SPEC Ver 1.7.0",
+                    " The original fits file was fxt_b_06800001128_ff_01_po_src_3cc.pha"
+                  ],
+                  "creator": "grppha 3.1.0",
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/EP260119a_fxtb_groupmin3_06800001128.pha"
+                },
+                "rmf": {
+                  "calibration_history": [
+                    "CALDB rmf file: /caldb/data/ep/fxt/cpf/rmf/ep_fxt_b_ff_g12_20260101_v2.r",
+                    "mf",
+                    "fxtrmfgen_1.30 input spectrum file = /work/EP260119a/fxtevt/06800001128_",
+                    "result1am/fxt_b_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtrmfgen_1.30 output file = /work/EP260119a/fxtevt/06800001128_result1a",
+                    "m/fxt_b_06800001128_ff_01_po_src_3cc.rmf",
+                    "processed with fxt_caldb software v0.1",
+                    "processed with fxt_caldb software v0.1",
+                    "processed with fxt_caldb software v0.1",
+                    "CALDB rmf file: /caldb/data/ep/fxt/cpf/rmf/ep_fxt_b_ff_g12_20260101_v2.r",
+                    "mf",
+                    "fxtrmfgen_1.30 input spectrum file = /work/EP260119a/fxtevt/06800001128_",
+                    "result1am/fxt_b_06800001128_ff_01_po_src_3cc.pha",
+                    "fxtrmfgen_1.30 output file = /work/EP260119a/fxtevt/06800001128_result1a",
+                    "m/fxt_b_06800001128_ff_01_po_src_3cc.rmf"
+                  ],
+                  "creator": null,
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_src_3cc.rmf"
+                },
+                "source_pha": {
+                  "calibration_history": [
+                    "CALDB gain file: /caldb/data/ep/fxt/bcf/gain/ep_fxt_b_ff_gain_20201101_v",
+                    "WMAP X axis is X",
+                    "WMAP Y axis is Y",
+                    "extractor v6.11",
+                    " FITS SPECTRUM extension written by WTPHA2 1.0.1",
+                    "extractor v6.11"
+                  ],
+                  "creator": "extractor v6.11",
+                  "path": "/home/xinxiang/research/EP260119a/fxtevt/06800001128_result1am/fxt_b_06800001128_ff_01_po_src_3cc.pha"
+                }
+              }
+            }
+          ],
+          "module_counts": [
+            {
+              "alpha": 0.061213999511338164,
+              "alpha_rate": 0.06121399951133816,
+              "background_exposure_s": 6049.726492166519,
+              "count_band_keV": [
+                0.5,
+                10.0
+              ],
+              "exposure_s": 6049.726492166519,
+              "instrument": "FXT",
+              "module": "FXTA",
+              "n_off": 102.0,
+              "n_on": 135.0,
+              "net_counts": 128.7561720498435,
+              "net_rate": 0.02128297406776377,
+              "net_rate_error": 0.0019232912619144339,
+              "obsid": "06800001128",
+              "segment": "epoch",
+              "significance": 21.41103877939138,
+              "t0_utc": "2026-01-19T00:13:08.8249",
+              "t_center": 32048.99592706561,
+              "t_start": 27662.062254101038,
+              "t_stop": 36435.92960000038,
+              "time_reference": "seconds_since_t0"
+            },
+            {
+              "alpha": 0.061213999511338164,
+              "alpha_rate": 0.06121399951133816,
+              "background_exposure_s": 6049.693115472794,
+              "count_band_keV": [
+                0.5,
+                10.0
+              ],
+              "exposure_s": 6049.693115472794,
+              "instrument": "FXT",
+              "module": "FXTB",
+              "n_off": 109.0,
+              "n_on": 205.0,
+              "net_counts": 198.32767405326413,
+              "net_rate": 0.03278309664105408,
+              "net_rate_error": 0.0023690585666541813,
+              "obsid": "06800001128",
+              "segment": "epoch",
+              "significance": 27.876986470011623,
+              "t0_utc": "2026-01-19T00:13:08.8249",
+              "t_center": 32048.99592706561,
+              "t_start": 27662.062254101038,
+              "t_stop": 36435.92960000038,
+              "time_reference": "seconds_since_t0"
+            }
+          ],
+          "obsid": "06800001128",
+          "pileup_status": "deferred",
+          "response_reuse_reviewed": null,
+          "segment": "epoch",
+          "status": "completed",
+          "t_start": 27662.062254101038,
+          "t_stop": 36435.92960000038,
+          "time_reference": "seconds_since_t0",
+          "warnings": [
+            "Adopted spectral shape: requires_review"
+          ]
+        }
+      ],
+      "flux_rows": [
+        {
+          "confidence": 0.682689492137,
+          "error_kind": "single_parameter_profile",
+          "error_minus": null,
+          "error_plus": null,
+          "error_status": "uncomputed",
+          "exposure_s": 6049.726492166519,
+          "flux": 3.209293558423524e-13,
+          "flux_band_keV": [
+            0.5,
+            4.0
+          ],
+          "flux_frame": "observer",
+          "flux_kind": "unabsorbed",
+          "flux_unit": "erg cm^-2 s^-1",
+          "galactic_nh_1e22": 0.0145,
+          "instrument": "FXT",
+          "is_upper_limit": false,
+          "model": "TBabs*zTBabs*cflux*apec",
+          "model_key": "apec_nh0",
+          "obsid": "06800001128",
+          "pileup_status": "deferred",
+          "redshift": 0.0,
+          "segment": "epoch",
+          "shape_status": "requires_review",
+          "status": "spectral_fit",
+          "t0_utc": "2026-01-19T00:13:08.8249",
+          "t_center": 32048.99592706561,
+          "t_start": 27662.062254101038,
+          "t_stop": 36435.92960000038,
+          "time_reference": "seconds_since_t0"
+        }
+      ],
+      "products": {
+        "06800001128:epoch:FXTA:epoch_count_net_csv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTA_epoch_count_curve.csv",
+        "06800001128:epoch:FXTA:epoch_count_net_ecsv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTA_epoch_count_curve.ecsv",
+        "06800001128:epoch:FXTA:epoch_count_net_fits": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTA_epoch_count_curve.fits",
+        "06800001128:epoch:FXTA:epoch_count_plot_pdf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTA_epoch_count_curve.pdf",
+        "06800001128:epoch:FXTA:epoch_count_plot_png": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTA_epoch_count_curve.png",
+        "06800001128:epoch:FXTB:epoch_count_net_csv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTB_epoch_count_curve.csv",
+        "06800001128:epoch:FXTB:epoch_count_net_ecsv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTB_epoch_count_curve.ecsv",
+        "06800001128:epoch:FXTB:epoch_count_net_fits": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTB_epoch_count_curve.fits",
+        "06800001128:epoch:FXTB:epoch_count_plot_pdf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTB_epoch_count_curve.pdf",
+        "06800001128:epoch:FXTB:epoch_count_plot_png": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/FXTB_epoch_count_curve.png",
+        "06800001128:epoch:apec_nh0:spectrum_plot_0": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/06800001128/epoch/fit/models/apec_nh0/06800001128_FXTA_FXTA_FXTB_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin3.png",
+        "csv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_curve.csv",
+        "ecsv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_curve.ecsv",
+        "flux_plot_pdf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_curve.pdf",
+        "flux_plot_png": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_curve.png",
+        "flux_rows": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_rows.json",
+        "flux_table": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_rows.ecsv",
+        "manifest": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/flux_curve.json",
+        "report": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt/fxt_result.json"
+      },
+      "status": "completed",
+      "warnings": [
+        "06800001128/epoch: Adopted spectral shape: requires_review",
+        "06800001128/FXTA: no matching count LC; per-epoch counts retained",
+        "06800001128/FXTB: no matching count LC; per-epoch counts retained",
+        "Pile-up processing deferred for supplied L2/L3 products"
+      ],
+      "workspace": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/fxt"
+    },
+    "products": {
+      "flux_csv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/combined/flux_rows.csv",
+      "flux_ecsv": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/combined/flux_rows.ecsv",
+      "flux_rows": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/combined/flux_rows.json",
+      "plot_pdf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/combined/flux_curve.pdf",
+      "plot_png": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/combined/flux_curve.png",
+      "report": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta/ta_result.json"
+    },
+    "status": "completed",
+    "warnings": [
+      "06800001128/epoch: Adopted spectral shape: requires_review",
+      "06800001128/FXTA: no matching count LC; per-epoch counts retained",
+      "06800001128/FXTB: no matching count LC; per-epoch counts retained",
+      "Pile-up processing deferred for supplied L2/L3 products"
+    ],
+    "workspace": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/ta",
+    "wxt_results": []
+  },
+  "wxt_comparison": {
+    "absorption_comparisons": {},
+    "adopted_key": "powerlaw_nh0",
+    "adopted_reason": "Adopted the preferred power-law candidate powerlaw_nh0; models within Delta criterion < 2 were treated as indistinguishable and simplified.",
+    "candidates": {
+      "apec": {
+        "absorption_mode": "none",
+        "channel_count": 20,
+        "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+        "data_groups": [
+          {
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "spectrum_indices": [
+              1
+            ],
+            "spectrum_keys": [
+              "unknown:WXT:t100"
+            ]
+          }
+        ],
+        "derived_parameters": {},
+        "effective_statistic": "wstat",
+        "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+        "effective_statistic_verified": true,
+        "effective_statistics_per_spectrum": [
+          "wstat"
+        ],
+        "energy_range": {
+          "emax": 4.0,
+          "emin": 0.5
+        },
+        "energy_ranges": {
+          "unknown:WXT:t100": {
+            "emax": 4.0,
+            "emin": 0.5
+          }
+        },
+        "fit_products": {
+          "plots": [
+            "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_cflux_apec_redshiftFalse_groupmin1.png"
+          ],
+          "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec",
+          "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_fit.txt",
+          "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_fit.json",
+          "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_fit.xcm",
+          "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_fit.log"
+        },
+        "flux_abs": {
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 1.2536718604167728e-10,
+          "photons_cm2_s": 0.08339629323874617
+        },
+        "flux_band_keV": [
+          0.5,
+          4.0
+        ],
+        "flux_unabs": {
+          "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 1.253671860416776e-10,
+          "error_hi": null,
+          "error_lo": null,
+          "error_status": "uncomputed",
+          "frame": "observer"
+        },
+        "free_parameter_count": 2,
+        "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+        "information_criterion_kind": "profile_likelihood_score",
+        "metrics": {
+          "aic": 34.38473553639391,
+          "aicc": 35.090617889335086,
+          "akaike_weight": 0.0818923271808386,
+          "bic": 36.37620008350189,
+          "delta": 4.131536484390839,
+          "delta_aic": 4.131536484390839,
+          "delta_aicc": 4.1315364843908355,
+          "delta_bic": 4.1315364843908355,
+          "dof": 18,
+          "effective_bins": 20,
+          "free_parameters": 2,
+          "ranking_metric": "aic",
+          "statistic": 30.38473553639391
+        },
+        "model": "cflux*apec",
+        "model_family": "apec",
+        "model_key": "apec",
+        "noticed_channel_count": 20,
+        "parameters": {
+          "apec.Abundanc": {
+            "frozen": true,
+            "index": 5,
+            "link": "",
+            "max": 5.0,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "apec.Redshift": {
+            "frozen": true,
+            "index": 6,
+            "link": "",
+            "max": 10.0,
+            "min": -0.999,
+            "value": 0.0
+          },
+          "apec.kT": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 4,
+            "link": "",
+            "max": 64.0,
+            "min": 0.008,
+            "value": 0.8306154052839353
+          },
+          "apec.norm": {
+            "frozen": true,
+            "index": 7,
+            "link": "",
+            "max": 1e+24,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "cflux.Emax": {
+            "frozen": true,
+            "index": 2,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 4.0
+          },
+          "cflux.Emin": {
+            "frozen": true,
+            "index": 1,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 0.5
+          },
+          "cflux.lg10Flux": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 3,
+            "link": "",
+            "max": 10.0,
+            "min": -20.0,
+            "value": -9.90181612208508
+          }
+        },
+        "per_group": [
+          {
+            "cflux": {
+              "Emax": 4.0,
+              "Emin": 0.5,
+              "lg10Flux": -9.90181612208508
+            },
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "flux_abs": {
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 1.2536718604167728e-10,
+              "photons_cm2_s": 0.08339629323874617
+            },
+            "flux_unabs": {
+              "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 1.253671860416776e-10,
+              "error_hi": null,
+              "error_lo": null,
+              "error_status": "uncomputed",
+              "frame": "observer"
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "member_spectra": [
+              "unknown:WXT:t100"
+            ],
+            "model": "cflux*apec",
+            "parameters": {
+              "apec.Abundanc": {
+                "frozen": true,
+                "index": 5,
+                "link": "",
+                "max": 5.0,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "apec.Redshift": {
+                "frozen": true,
+                "index": 6,
+                "link": "",
+                "max": 10.0,
+                "min": -0.999,
+                "value": 0.0
+              },
+              "apec.kT": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 4,
+                "link": "",
+                "max": 64.0,
+                "min": 0.008,
+                "value": 0.8306154052839353
+              },
+              "apec.norm": {
+                "frozen": true,
+                "index": 7,
+                "link": "",
+                "max": 1e+24,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "cflux.Emax": {
+                "frozen": true,
+                "index": 2,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 4.0
+              },
+              "cflux.Emin": {
+                "frozen": true,
+                "index": 1,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 0.5
+              },
+              "cflux.lg10Flux": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 3,
+                "link": "",
+                "max": 10.0,
+                "min": -20.0,
+                "value": -9.90181612208508
+              }
+            },
+            "spectrum_indices": [
+              1
+            ]
+          }
+        ],
+        "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_cflux_apec_redshiftFalse_groupmin1.png",
+        "plot_fits": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_cflux_apec_redshiftFalse_groupmin1.png"
+        ],
+        "poisson_flags": [
+          {
+            "background_is_poisson": true,
+            "has_background": true,
+            "source_is_poisson": true
+          }
+        ],
+        "rate": {
+          "error": 0.03371059613259159,
+          "value": 0.14676022484539214
+        },
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec/unknown_WXT_t100_WXT_fit.txt",
+        "shape_status": {
+          "problems": [
+            "group 1: profile error unavailable for apec.kT"
+          ],
+          "states": [
+            "shape_parameters_not_constrained"
+          ],
+          "status": "requires_review"
+        },
+        "shared_absorption_only": false,
+        "statistics": {
+          "dof": 18,
+          "method": "cstat",
+          "null_hypothesis_probability": 0.2764455917,
+          "reduced": 1.688040863132995,
+          "value": 30.38473553639391
+        },
+        "warnings": [
+          "APEC candidate intentionally omits both Galactic and intrinsic absorption; its information criterion tests that distinct assumption."
+        ],
+        "xspec_settings": {
+          "abundance": "wilm",
+          "apec_root": "/home/xinxiang/research/jinwu/external_sources/heasoft-6.36/Xspec/src/spectral/modelData/apec_v3.1.3",
+          "calculate_errors": false,
+          "cross_section": "vern",
+          "error_command": null,
+          "error_delta_stat": 1.0,
+          "freeze_galactic_nh": true,
+          "frozen_parameters": {},
+          "galactic_nh_1e22": 0.0145,
+          "intrinsic_nh_mode": "free",
+          "profile_confidence": 0.682689492137,
+          "profile_error_kind": "single_parameter_profile",
+          "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+          "profile_errors_succeeded": false,
+          "profile_sigma": 1.0,
+          "redshift_absorbers": [
+            0.0
+          ],
+          "requested_statistic": "cstat"
+        }
+      },
+      "apec_nh0": {
+        "absorption_mode": "zero",
+        "channel_count": 20,
+        "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+        "data_groups": [
+          {
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "spectrum_indices": [
+              1
+            ],
+            "spectrum_keys": [
+              "unknown:WXT:t100"
+            ]
+          }
+        ],
+        "derived_parameters": {},
+        "effective_statistic": "wstat",
+        "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+        "effective_statistic_verified": true,
+        "effective_statistics_per_spectrum": [
+          "wstat"
+        ],
+        "energy_range": {
+          "emax": 4.0,
+          "emin": 0.5
+        },
+        "energy_ranges": {
+          "unknown:WXT:t100": {
+            "emax": 4.0,
+            "emin": 0.5
+          }
+        },
+        "fit_products": {
+          "plots": [
+            "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin1.png"
+          ],
+          "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0",
+          "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_fit.txt",
+          "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_fit.json",
+          "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_fit.xcm",
+          "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_fit.log"
+        },
+        "flux_abs": {
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 1.2614153096692588e-10,
+          "photons_cm2_s": 0.08355925958093843
+        },
+        "flux_band_keV": [
+          0.5,
+          4.0
+        ],
+        "flux_unabs": {
+          "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 1.3019581956305933e-10,
+          "error_hi": null,
+          "error_lo": null,
+          "error_status": "uncomputed",
+          "frame": "observer"
+        },
+        "free_parameter_count": 2,
+        "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+        "information_criterion_kind": "profile_likelihood_score",
+        "metrics": {
+          "aic": 34.22896456255874,
+          "aicc": 34.93484691549991,
+          "akaike_weight": 0.08852551257666065,
+          "bic": 36.22042910966672,
+          "delta": 3.9757655105556644,
+          "delta_aic": 3.9757655105556644,
+          "delta_aicc": 3.975765510555661,
+          "delta_bic": 3.975765510555661,
+          "dof": 18,
+          "effective_bins": 20,
+          "free_parameters": 2,
+          "ranking_metric": "aic",
+          "statistic": 30.228964562558737
+        },
+        "model": "TBabs*zTBabs*cflux*apec",
+        "model_family": "apec",
+        "model_key": "apec_nh0",
+        "noticed_channel_count": 20,
+        "parameters": {
+          "TBabs.nH": {
+            "frozen": true,
+            "index": 1,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 0.0145
+          },
+          "apec.Abundanc": {
+            "frozen": true,
+            "index": 8,
+            "link": "",
+            "max": 5.0,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "apec.Redshift": {
+            "frozen": true,
+            "index": 9,
+            "link": "",
+            "max": 10.0,
+            "min": -0.999,
+            "value": 0.0
+          },
+          "apec.kT": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 7,
+            "link": "",
+            "max": 64.0,
+            "min": 0.008,
+            "value": 0.8279266942815019
+          },
+          "apec.norm": {
+            "frozen": true,
+            "index": 10,
+            "link": "",
+            "max": 1e+24,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "cflux.Emax": {
+            "frozen": true,
+            "index": 5,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 4.0
+          },
+          "cflux.Emin": {
+            "frozen": true,
+            "index": 4,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 0.5
+          },
+          "cflux.lg10Flux": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 6,
+            "link": "",
+            "max": 10.0,
+            "min": -20.0,
+            "value": -9.885402960236663
+          },
+          "zTBabs.Redshift": {
+            "frozen": true,
+            "index": 3,
+            "link": "",
+            "max": 10.0,
+            "min": -0.999,
+            "value": 0.0
+          },
+          "zTBabs.nH": {
+            "frozen": true,
+            "index": 2,
+            "link": "",
+            "max": 100.0,
+            "min": 0.0,
+            "value": 0.0
+          }
+        },
+        "per_group": [
+          {
+            "cflux": {
+              "Emax": 4.0,
+              "Emin": 0.5,
+              "lg10Flux": -9.885402960236663
+            },
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "flux_abs": {
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 1.2614153096692588e-10,
+              "photons_cm2_s": 0.08355925958093843
+            },
+            "flux_unabs": {
+              "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 1.3019581956305933e-10,
+              "error_hi": null,
+              "error_lo": null,
+              "error_status": "uncomputed",
+              "frame": "observer"
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "member_spectra": [
+              "unknown:WXT:t100"
+            ],
+            "model": "TBabs*zTBabs*cflux*apec",
+            "parameters": {
+              "TBabs.nH": {
+                "frozen": true,
+                "index": 1,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 0.0145
+              },
+              "apec.Abundanc": {
+                "frozen": true,
+                "index": 8,
+                "link": "",
+                "max": 5.0,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "apec.Redshift": {
+                "frozen": true,
+                "index": 9,
+                "link": "",
+                "max": 10.0,
+                "min": -0.999,
+                "value": 0.0
+              },
+              "apec.kT": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 7,
+                "link": "",
+                "max": 64.0,
+                "min": 0.008,
+                "value": 0.8279266942815019
+              },
+              "apec.norm": {
+                "frozen": true,
+                "index": 10,
+                "link": "",
+                "max": 1e+24,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "cflux.Emax": {
+                "frozen": true,
+                "index": 5,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 4.0
+              },
+              "cflux.Emin": {
+                "frozen": true,
+                "index": 4,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 0.5
+              },
+              "cflux.lg10Flux": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 6,
+                "link": "",
+                "max": 10.0,
+                "min": -20.0,
+                "value": -9.885402960236663
+              },
+              "zTBabs.Redshift": {
+                "frozen": true,
+                "index": 3,
+                "link": "",
+                "max": 10.0,
+                "min": -0.999,
+                "value": 0.0
+              },
+              "zTBabs.nH": {
+                "frozen": true,
+                "index": 2,
+                "link": "",
+                "max": 100.0,
+                "min": 0.0,
+                "value": 0.0
+              }
+            },
+            "spectrum_indices": [
+              1
+            ]
+          }
+        ],
+        "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin1.png",
+        "plot_fits": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_apec_redshiftFalse_groupmin1.png"
+        ],
+        "poisson_flags": [
+          {
+            "background_is_poisson": true,
+            "has_background": true,
+            "source_is_poisson": true
+          }
+        ],
+        "rate": {
+          "error": 0.03371059613259159,
+          "value": 0.14676022484539214
+        },
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/apec_nh0/unknown_WXT_t100_WXT_fit.txt",
+        "shape_status": {
+          "problems": [
+            "group 1: profile error unavailable for apec.kT"
+          ],
+          "states": [
+            "shape_parameters_not_constrained"
+          ],
+          "status": "requires_review"
+        },
+        "shared_absorption_only": false,
+        "statistics": {
+          "dof": 18,
+          "method": "cstat",
+          "null_hypothesis_probability": 0.2713959084,
+          "reduced": 1.679386920142152,
+          "value": 30.228964562558737
+        },
+        "warnings": [],
+        "xspec_settings": {
+          "abundance": "wilm",
+          "apec_root": "/home/xinxiang/research/jinwu/external_sources/heasoft-6.36/Xspec/src/spectral/modelData/apec_v3.1.3",
+          "calculate_errors": false,
+          "cross_section": "vern",
+          "error_command": null,
+          "error_delta_stat": 1.0,
+          "freeze_galactic_nh": true,
+          "frozen_parameters": {},
+          "galactic_nh_1e22": 0.0145,
+          "intrinsic_nh_mode": "zero",
+          "profile_confidence": 0.682689492137,
+          "profile_error_kind": "single_parameter_profile",
+          "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+          "profile_errors_succeeded": false,
+          "profile_sigma": 1.0,
+          "redshift_absorbers": [
+            0.0
+          ],
+          "requested_statistic": "cstat"
+        }
+      },
+      "double_apec": {
+        "absorption_mode": "none",
+        "channel_count": 20,
+        "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+        "data_groups": [
+          {
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "spectrum_indices": [
+              1
+            ],
+            "spectrum_keys": [
+              "unknown:WXT:t100"
+            ]
+          }
+        ],
+        "derived_parameters": {},
+        "effective_statistic": "wstat",
+        "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+        "effective_statistic_verified": true,
+        "effective_statistics_per_spectrum": [
+          "wstat"
+        ],
+        "energy_range": {
+          "emax": 4.0,
+          "emin": 0.5
+        },
+        "energy_ranges": {
+          "unknown:WXT:t100": {
+            "emax": 4.0,
+            "emin": 0.5
+          }
+        },
+        "fit_products": {
+          "plots": [
+            "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_cflux_apec_apec_redshiftFalse_groupmin1.png"
+          ],
+          "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec",
+          "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_fit.txt",
+          "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_fit.json",
+          "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_fit.xcm",
+          "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_fit.log"
+        },
+        "flux_abs": {
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 2.4930005477198156e-10,
+          "photons_cm2_s": 0.12104820451015368
+        },
+        "flux_band_keV": [
+          0.5,
+          4.0
+        ],
+        "flux_unabs": {
+          "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 2.4930005477198176e-10,
+          "error_hi": null,
+          "error_lo": null,
+          "error_status": "uncomputed",
+          "frame": "observer"
+        },
+        "free_parameter_count": 4,
+        "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+        "information_criterion_kind": "profile_likelihood_score",
+        "metrics": {
+          "aic": 32.77285613852111,
+          "aicc": 35.43952280518777,
+          "akaike_weight": 0.18334048542215345,
+          "bic": 36.75578523273707,
+          "delta": 2.519657086518034,
+          "delta_aic": 2.519657086518034,
+          "delta_aicc": 4.480441400243521,
+          "delta_bic": 4.511121633626011,
+          "dof": 16,
+          "effective_bins": 20,
+          "free_parameters": 4,
+          "ranking_metric": "aic",
+          "statistic": 24.772856138521107
+        },
+        "model": "cflux(apec + apec)",
+        "model_family": "double_apec",
+        "model_key": "double_apec",
+        "noticed_channel_count": 20,
+        "parameters": {
+          "apec.Abundanc": {
+            "frozen": true,
+            "index": 5,
+            "link": "",
+            "max": 5.0,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "apec.Redshift": {
+            "frozen": true,
+            "index": 6,
+            "link": "",
+            "max": 10.0,
+            "min": -0.999,
+            "value": 0.0
+          },
+          "apec.kT": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 4,
+            "link": "",
+            "max": 64.0,
+            "min": 0.008,
+            "value": 0.6530346264894269
+          },
+          "apec.norm": {
+            "frozen": true,
+            "index": 7,
+            "link": "",
+            "max": 1e+24,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "apec_3.Abundanc": {
+            "frozen": true,
+            "index": 9,
+            "link": "",
+            "max": 5.0,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "apec_3.Redshift": {
+            "frozen": true,
+            "index": 10,
+            "link": "",
+            "max": 10.0,
+            "min": -0.999,
+            "value": 0.0
+          },
+          "apec_3.kT": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 8,
+            "link": "",
+            "max": 64.0,
+            "min": 0.008,
+            "value": 7.585449671629291
+          },
+          "apec_3.norm": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 11,
+            "link": "",
+            "max": 1e+24,
+            "min": 0.0,
+            "value": 8.7416124936893
+          },
+          "cflux.Emax": {
+            "frozen": true,
+            "index": 2,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 4.0
+          },
+          "cflux.Emin": {
+            "frozen": true,
+            "index": 1,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 0.5
+          },
+          "cflux.lg10Flux": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 3,
+            "link": "",
+            "max": 10.0,
+            "min": -20.0,
+            "value": -9.603277626080395
+          }
+        },
+        "per_group": [
+          {
+            "cflux": {
+              "Emax": 4.0,
+              "Emin": 0.5,
+              "lg10Flux": -9.603277626080395
+            },
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "flux_abs": {
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 2.4930005477198156e-10,
+              "photons_cm2_s": 0.12104820451015368
+            },
+            "flux_unabs": {
+              "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 2.4930005477198176e-10,
+              "error_hi": null,
+              "error_lo": null,
+              "error_status": "uncomputed",
+              "frame": "observer"
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "member_spectra": [
+              "unknown:WXT:t100"
+            ],
+            "model": "cflux(apec + apec)",
+            "parameters": {
+              "apec.Abundanc": {
+                "frozen": true,
+                "index": 5,
+                "link": "",
+                "max": 5.0,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "apec.Redshift": {
+                "frozen": true,
+                "index": 6,
+                "link": "",
+                "max": 10.0,
+                "min": -0.999,
+                "value": 0.0
+              },
+              "apec.kT": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 4,
+                "link": "",
+                "max": 64.0,
+                "min": 0.008,
+                "value": 0.6530346264894269
+              },
+              "apec.norm": {
+                "frozen": true,
+                "index": 7,
+                "link": "",
+                "max": 1e+24,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "apec_3.Abundanc": {
+                "frozen": true,
+                "index": 9,
+                "link": "",
+                "max": 5.0,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "apec_3.Redshift": {
+                "frozen": true,
+                "index": 10,
+                "link": "",
+                "max": 10.0,
+                "min": -0.999,
+                "value": 0.0
+              },
+              "apec_3.kT": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 8,
+                "link": "",
+                "max": 64.0,
+                "min": 0.008,
+                "value": 7.585449671629291
+              },
+              "apec_3.norm": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 11,
+                "link": "",
+                "max": 1e+24,
+                "min": 0.0,
+                "value": 8.7416124936893
+              },
+              "cflux.Emax": {
+                "frozen": true,
+                "index": 2,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 4.0
+              },
+              "cflux.Emin": {
+                "frozen": true,
+                "index": 1,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 0.5
+              },
+              "cflux.lg10Flux": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 3,
+                "link": "",
+                "max": 10.0,
+                "min": -20.0,
+                "value": -9.603277626080395
+              }
+            },
+            "spectrum_indices": [
+              1
+            ]
+          }
+        ],
+        "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_cflux_apec_apec_redshiftFalse_groupmin1.png",
+        "plot_fits": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_cflux_apec_apec_redshiftFalse_groupmin1.png"
+        ],
+        "poisson_flags": [
+          {
+            "background_is_poisson": true,
+            "has_background": true,
+            "source_is_poisson": true
+          }
+        ],
+        "rate": {
+          "error": 0.03371059613259159,
+          "value": 0.14676022484539214
+        },
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/double_apec/unknown_WXT_t100_WXT_fit.txt",
+        "shape_status": {
+          "problems": [
+            "group 1: profile error unavailable for apec.kT",
+            "group 1: profile error unavailable for apec_3.kT",
+            "group 1: profile error unavailable for apec_3.norm"
+          ],
+          "states": [
+            "shape_parameters_not_constrained",
+            "components_not_separately_constrained"
+          ],
+          "status": "requires_review",
+          "thermal_components": [
+            {
+              "components": [
+                {
+                  "component": "apec",
+                  "kT_keV": {
+                    "error_status": "uncomputed",
+                    "frozen": false,
+                    "index": 4,
+                    "link": "",
+                    "max": 64.0,
+                    "min": 0.008,
+                    "value": 0.6530346264894269
+                  },
+                  "relative_norm": {
+                    "frozen": true,
+                    "index": 7,
+                    "link": "",
+                    "max": 1e+24,
+                    "min": 0.0,
+                    "value": 1.0
+                  }
+                },
+                {
+                  "component": "apec_3",
+                  "kT_keV": {
+                    "error_status": "uncomputed",
+                    "frozen": false,
+                    "index": 8,
+                    "link": "",
+                    "max": 64.0,
+                    "min": 0.008,
+                    "value": 7.585449671629291
+                  },
+                  "relative_norm": {
+                    "error_status": "uncomputed",
+                    "frozen": false,
+                    "index": 11,
+                    "link": "",
+                    "max": 1e+24,
+                    "min": 0.0,
+                    "value": 8.7416124936893
+                  }
+                }
+              ],
+              "group_index": 1,
+              "temperature_order": "cool_to_hot"
+            }
+          ]
+        },
+        "shared_absorption_only": false,
+        "statistics": {
+          "dof": 16,
+          "method": "cstat",
+          "null_hypothesis_probability": 0.3054991731,
+          "reduced": 1.5483035086575692,
+          "value": 24.772856138521107
+        },
+        "warnings": [
+          "APEC candidate intentionally omits both Galactic and intrinsic absorption; its information criterion tests that distinct assumption."
+        ],
+        "xspec_settings": {
+          "abundance": "wilm",
+          "apec_root": "/home/xinxiang/research/jinwu/external_sources/heasoft-6.36/Xspec/src/spectral/modelData/apec_v3.1.3",
+          "calculate_errors": false,
+          "cross_section": "vern",
+          "error_command": null,
+          "error_delta_stat": 1.0,
+          "freeze_galactic_nh": true,
+          "frozen_parameters": {},
+          "galactic_nh_1e22": 0.0145,
+          "intrinsic_nh_mode": "free",
+          "profile_confidence": 0.682689492137,
+          "profile_error_kind": "single_parameter_profile",
+          "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+          "profile_errors_succeeded": false,
+          "profile_sigma": 1.0,
+          "redshift_absorbers": [
+            0.0
+          ],
+          "requested_statistic": "cstat"
+        }
+      },
+      "powerlaw_nh0": {
+        "absorption_mode": "zero",
+        "channel_count": 20,
+        "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+        "data_groups": [
+          {
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "spectrum_indices": [
+              1
+            ],
+            "spectrum_keys": [
+              "unknown:WXT:t100"
+            ]
+          }
+        ],
+        "derived_parameters": {},
+        "effective_statistic": "wstat",
+        "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+        "effective_statistic_verified": true,
+        "effective_statistics_per_spectrum": [
+          "wstat"
+        ],
+        "energy_range": {
+          "emax": 4.0,
+          "emin": 0.5
+        },
+        "energy_ranges": {
+          "unknown:WXT:t100": {
+            "emax": 4.0,
+            "emin": 0.5
+          }
+        },
+        "fit_products": {
+          "plots": [
+            "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_powerlaw_redshiftTrue_groupmin1.png"
+          ],
+          "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0",
+          "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_fit.txt",
+          "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_fit.json",
+          "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_fit.xcm",
+          "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_fit.log"
+        },
+        "flux_abs": {
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 2.94542518842791e-10,
+          "photons_cm2_s": 0.13010491387527712
+        },
+        "flux_band_keV": [
+          0.5,
+          4.0
+        ],
+        "flux_unabs": {
+          "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+          "energy_range_keV": [
+            0.5,
+            4.0
+          ],
+          "erg_cm2_s": 2.996497341101381e-10,
+          "error_hi": null,
+          "error_lo": null,
+          "error_status": "uncomputed",
+          "frame": "observer"
+        },
+        "free_parameter_count": 2,
+        "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+        "information_criterion_kind": "profile_likelihood_score",
+        "metrics": {
+          "aic": 30.253199052003072,
+          "aicc": 30.95908140494425,
+          "akaike_weight": 0.6462416748203473,
+          "bic": 32.24466359911106,
+          "delta": 0.0,
+          "delta_aic": 0.0,
+          "delta_aicc": 0.0,
+          "delta_bic": 0.0,
+          "dof": 18,
+          "effective_bins": 20,
+          "free_parameters": 2,
+          "ranking_metric": "aic",
+          "statistic": 26.253199052003072
+        },
+        "model": "TBabs*zTBabs*cflux*powerlaw",
+        "model_family": "powerlaw",
+        "model_key": "powerlaw_nh0",
+        "noticed_channel_count": 20,
+        "parameters": {
+          "TBabs.nH": {
+            "frozen": true,
+            "index": 1,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 0.0145
+          },
+          "cflux.Emax": {
+            "frozen": true,
+            "index": 5,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 4.0
+          },
+          "cflux.Emin": {
+            "frozen": true,
+            "index": 4,
+            "link": "",
+            "max": 1000000.0,
+            "min": 0.0,
+            "value": 0.5
+          },
+          "cflux.lg10Flux": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 6,
+            "link": "",
+            "max": 10.0,
+            "min": -20.0,
+            "value": -9.523386103332259
+          },
+          "powerlaw.PhoIndex": {
+            "error_status": "uncomputed",
+            "frozen": false,
+            "index": 7,
+            "link": "",
+            "max": 9.0,
+            "min": 0.0,
+            "value": 1.543498777150451
+          },
+          "powerlaw.norm": {
+            "frozen": true,
+            "index": 8,
+            "link": "",
+            "max": 1e+24,
+            "min": 0.0,
+            "value": 1.0
+          },
+          "zTBabs.Redshift": {
+            "frozen": true,
+            "index": 3,
+            "link": "",
+            "max": 10.0,
+            "min": -0.999,
+            "value": 5.461
+          },
+          "zTBabs.nH": {
+            "frozen": true,
+            "index": 2,
+            "link": "",
+            "max": 100.0,
+            "min": 0.0,
+            "value": 0.0
+          }
+        },
+        "per_group": [
+          {
+            "cflux": {
+              "Emax": 4.0,
+              "Emin": 0.5,
+              "lg10Flux": -9.523386103332259
+            },
+            "energy_range": {
+              "emax": 4.0,
+              "emin": 0.5
+            },
+            "flux_abs": {
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 2.94542518842791e-10,
+              "photons_cm2_s": 0.13010491387527712
+            },
+            "flux_unabs": {
+              "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+              "energy_range_keV": [
+                0.5,
+                4.0
+              ],
+              "erg_cm2_s": 2.996497341101381e-10,
+              "error_hi": null,
+              "error_lo": null,
+              "error_status": "uncomputed",
+              "frame": "observer"
+            },
+            "group_index": 1,
+            "instrument": "WXT",
+            "member_spectra": [
+              "unknown:WXT:t100"
+            ],
+            "model": "TBabs*zTBabs*cflux*powerlaw",
+            "parameters": {
+              "TBabs.nH": {
+                "frozen": true,
+                "index": 1,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 0.0145
+              },
+              "cflux.Emax": {
+                "frozen": true,
+                "index": 5,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 4.0
+              },
+              "cflux.Emin": {
+                "frozen": true,
+                "index": 4,
+                "link": "",
+                "max": 1000000.0,
+                "min": 0.0,
+                "value": 0.5
+              },
+              "cflux.lg10Flux": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 6,
+                "link": "",
+                "max": 10.0,
+                "min": -20.0,
+                "value": -9.523386103332259
+              },
+              "powerlaw.PhoIndex": {
+                "error_status": "uncomputed",
+                "frozen": false,
+                "index": 7,
+                "link": "",
+                "max": 9.0,
+                "min": 0.0,
+                "value": 1.543498777150451
+              },
+              "powerlaw.norm": {
+                "frozen": true,
+                "index": 8,
+                "link": "",
+                "max": 1e+24,
+                "min": 0.0,
+                "value": 1.0
+              },
+              "zTBabs.Redshift": {
+                "frozen": true,
+                "index": 3,
+                "link": "",
+                "max": 10.0,
+                "min": -0.999,
+                "value": 5.461
+              },
+              "zTBabs.nH": {
+                "frozen": true,
+                "index": 2,
+                "link": "",
+                "max": 100.0,
+                "min": 0.0,
+                "value": 0.0
+              }
+            },
+            "spectrum_indices": [
+              1
+            ]
+          }
+        ],
+        "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_powerlaw_redshiftTrue_groupmin1.png",
+        "plot_fits": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_ztbabs_cflux_powerlaw_redshiftTrue_groupmin1.png"
+        ],
+        "poisson_flags": [
+          {
+            "background_is_poisson": true,
+            "has_background": true,
+            "source_is_poisson": true
+          }
+        ],
+        "rate": {
+          "error": 0.03371059613259159,
+          "value": 0.14676022484539214
+        },
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/models/powerlaw_nh0/unknown_WXT_t100_WXT_fit.txt",
+        "shape_status": {
+          "problems": [
+            "group 1: profile error unavailable for powerlaw.PhoIndex"
+          ],
+          "states": [
+            "shape_parameters_not_constrained"
+          ],
+          "status": "requires_review"
+        },
+        "shared_absorption_only": false,
+        "statistics": {
+          "dof": 18,
+          "method": "cstat",
+          "null_hypothesis_probability": 0.3098468286,
+          "reduced": 1.458511058444615,
+          "value": 26.253199052003072
+        },
+        "warnings": [],
+        "xspec_settings": {
+          "abundance": "wilm",
+          "apec_root": "/home/xinxiang/research/jinwu/external_sources/heasoft-6.36/Xspec/src/spectral/modelData/apec_v3.1.3",
+          "calculate_errors": false,
+          "cross_section": "vern",
+          "error_command": null,
+          "error_delta_stat": 1.0,
+          "freeze_galactic_nh": true,
+          "frozen_parameters": {},
+          "galactic_nh_1e22": 0.0145,
+          "intrinsic_nh_mode": "zero",
+          "profile_confidence": 0.682689492137,
+          "profile_error_kind": "single_parameter_profile",
+          "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+          "profile_errors_succeeded": false,
+          "profile_sigma": 1.0,
+          "redshift_absorbers": [
+            5.461
+          ],
+          "requested_statistic": "cstat"
+        }
+      }
+    },
+    "comparison_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/model_comparison.json",
+    "comparison_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/review_fixes_20261017/run_scope_fix_final/wxt/model_comparison.txt",
+    "failures": {},
+    "metrics": {
+      "apec": {
+        "aic": 34.38473553639391,
+        "aicc": 35.090617889335086,
+        "akaike_weight": 0.0818923271808386,
+        "bic": 36.37620008350189,
+        "delta": 4.131536484390839,
+        "delta_aic": 4.131536484390839,
+        "delta_aicc": 4.1315364843908355,
+        "delta_bic": 4.1315364843908355,
+        "dof": 18,
+        "effective_bins": 20,
+        "free_parameters": 2,
+        "ranking_metric": "aic",
+        "statistic": 30.38473553639391
+      },
+      "apec_nh0": {
+        "aic": 34.22896456255874,
+        "aicc": 34.93484691549991,
+        "akaike_weight": 0.08852551257666065,
+        "bic": 36.22042910966672,
+        "delta": 3.9757655105556644,
+        "delta_aic": 3.9757655105556644,
+        "delta_aicc": 3.975765510555661,
+        "delta_bic": 3.975765510555661,
+        "dof": 18,
+        "effective_bins": 20,
+        "free_parameters": 2,
+        "ranking_metric": "aic",
+        "statistic": 30.228964562558737
+      },
+      "double_apec": {
+        "aic": 32.77285613852111,
+        "aicc": 35.43952280518777,
+        "akaike_weight": 0.18334048542215345,
+        "bic": 36.75578523273707,
+        "delta": 2.519657086518034,
+        "delta_aic": 2.519657086518034,
+        "delta_aicc": 4.480441400243521,
+        "delta_bic": 4.511121633626011,
+        "dof": 16,
+        "effective_bins": 20,
+        "free_parameters": 4,
+        "ranking_metric": "aic",
+        "statistic": 24.772856138521107
+      },
+      "powerlaw_nh0": {
+        "aic": 30.253199052003072,
+        "aicc": 30.95908140494425,
+        "akaike_weight": 0.6462416748203473,
+        "bic": 32.24466359911106,
+        "delta": 0.0,
+        "delta_aic": 0.0,
+        "delta_aicc": 0.0,
+        "delta_bic": 0.0,
+        "dof": 18,
+        "effective_bins": 20,
+        "free_parameters": 2,
+        "ranking_metric": "aic",
+        "statistic": 26.253199052003072
+      }
+    },
+    "ranking": [
+      "powerlaw_nh0",
+      "double_apec",
+      "apec_nh0",
+      "apec"
+    ],
+    "selection_metric": "aic",
+    "warnings": [
+      "Adopted power-law baseline powerlaw_nh0 has constrained-parameter diagnostics requiring review: group 1: profile error unavailable for powerlaw.PhoIndex."
+    ]
+  }
+}

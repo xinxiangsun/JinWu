@@ -696,7 +696,10 @@ def extract_products_with_xselect(
     stdout = ''
     stderr = ''
     returncode: int | None = None
-    with tempfile.TemporaryDirectory(prefix='.jinwu_xselect_', dir=outdir) as workdir_text:
+    # XSELECT builds fdump commands in a 255-character Fortran buffer. A
+    # workspace below a long output path truncates those commands, after which
+    # fdump can consume XSELECT's remaining stdin as interactive answers.
+    with tempfile.TemporaryDirectory(prefix='jinwu_xselect_') as workdir_text:
         workdir = Path(workdir_text)
         try:
             proc = subprocess.run(
@@ -706,6 +709,8 @@ def extract_products_with_xselect(
                 env=run_env,
                 capture_output=True,
                 text=True,
+                # XSELECT diagnostics may contain non-UTF-8 degree symbols.
+                errors="replace",
                 check=False,
                 timeout=timeout,
             )

@@ -361,13 +361,14 @@ def _draw_series(ax, series: SeriesData, offset: float, color: str | None,
 # --------------------------------------------------------------------------- #
 def overlay(items, *, ax=None, labels=None, xmode="raw", ykind="auto", colors=None,
             yscale=None, xlabel=None, ylabel=None, title=None, show_legend=True,
-            **plot_kwargs):
+            figsize=None, **plot_kwargs):
     """把多个数据对象叠加绘制到同一个 axes。
 
-    返回 ``(fig, ax)``。ax 为 None 时新建 figure。
+    返回 ``(fig, ax)``。ax 为 None 时新建 figure；此时 figsize 缺省采用
+    paper_style 的画布尺寸，否则为 (10, 4)。显式 ax/figsize 优先。
     """
     import matplotlib.pyplot as plt
-    from .plotstyle import apply_style, SERIES_COLORS
+    from .plotstyle import apply_style, paper_figsize, SERIES_COLORS
 
     apply_style()
 
@@ -376,7 +377,9 @@ def overlay(items, *, ax=None, labels=None, xmode="raw", ykind="auto", colors=No
         raise ValueError("overlay: items 为空")
 
     if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 4))
+        if figsize is None:
+            figsize = paper_figsize((10, 4))
+        fig, ax = plt.subplots(figsize=figsize)
     else:
         fig = ax.figure
 
@@ -410,9 +413,12 @@ def multi_panel(items, *, labels=None, panels=None, sharex=True, xmode="raw",
     """每个数据对象独占一个面板，纵向排列并共享 x 轴。
 
     返回 ``(fig, list[Axes])``。不调用 plt.show()；``out`` 非空时保存图片。
+    figsize 缺省采用 paper_style 的画布尺寸，否则为 (10, 3*n)；显式值优先。
     """
     import matplotlib.pyplot as plt
-    from .plotstyle import apply_style, save_figure, SERIES_COLORS, format_log_axis
+    from .plotstyle import (
+        apply_style, format_log_axis, paper_figsize, save_figure, SERIES_COLORS,
+    )
 
     apply_style()
 
@@ -436,7 +442,7 @@ def multi_panel(items, *, labels=None, panels=None, sharex=True, xmode="raw",
     if height_ratios is None:
         height_ratios = [p.height_ratio for p in panels]
     if figsize is None:
-        figsize = (10, 3 * n)
+        figsize = paper_figsize((10, 3 * n))
 
     fig = plt.figure(figsize=figsize, constrained_layout=True)
     grid = fig.add_gridspec(n, 1, height_ratios=height_ratios, hspace=0.08)

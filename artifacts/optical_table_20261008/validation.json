@@ -1,0 +1,12 @@
+{
+  "time": "2026-10-08T22:21:11+08:00",
+  "validation": "13/13 input rows, signs, numerical precision, errors, labels and supplied limit significance preserved exactly",
+  "python": "3.12.14 | packaged by conda-forge | (main, Aug 21 2026, 22:48:28) [GCC 14.4.0]",
+  "matplotlib": "3.10.9",
+  "environment": "hea",
+  "counts": {
+    "rows": 13,
+    "detections": 9,
+    "limits": 4
+  }
+}

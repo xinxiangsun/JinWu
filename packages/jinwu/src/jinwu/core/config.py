@@ -126,6 +126,8 @@ class BayesianBlockSpectrumConfig:
     enabled: bool = True
     minimum_net_counts: float = 1.0
     minimum_significance: float = 3.0
+    minimum_source_counts: int | None = None
+    strict_thresholds: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +172,7 @@ class FitConfig:
     error_delta_stat: float = 1.0
     model_class: str = "auto"
     absorption_mode: str = "auto"
+    apec_root: str | None = None  # Explicit AtomDB prefix; None retains the XSPEC installation default.
     candidate_keys: tuple[str, ...] | None = None
     selection_metric: str = "aicc"
     comparison_intervals: tuple[str, ...] = ("pipeline", "t100", "t90")
@@ -902,6 +905,13 @@ class FXT(InstrumentConfig):
             "stat_method": "wstat",
             "response_type": "rmf",
             "spectrum": SpectrumConfig(group_min_counts=3, fit_energy_range_keV=(0.3, 10.0)),
+            "fitting": FitConfig(
+                model_name="tbabs*ztbabs*cflux*powerlaw",
+                statistic="cstat",
+                candidate_keys=("powerlaw_nh0", "powerlaw_free_nh"),
+                selection_metric="aic",
+            ),
+            "flux_curve": FluxCurveConfig(energy_range_keV=(0.5, 4.0)),
             "upper_limit": UpperLimitConfig(
                 strategy="spatial_onoff",
                 background_likelihood="poisson_onoff",
@@ -969,8 +979,10 @@ class WXT(InstrumentConfig):
             "background_scaling": BackgroundScalingConfig(),
             "duration": DurationConfig(),
             "bayesian_block_spectra": BayesianBlockSpectrumConfig(
-                minimum_net_counts=10.0,
+                minimum_net_counts=20.0,
+                minimum_source_counts=None,
                 minimum_significance=3.0,
+                strict_thresholds=True,
             ),
             "spectrum": SpectrumConfig(
                 group_min_counts=1,
@@ -983,7 +995,14 @@ class WXT(InstrumentConfig):
                 cross_section="vern",
                 model_class="auto",
                 absorption_mode="auto",
-                selection_metric="aicc",
+                candidate_keys=(
+                    "powerlaw_nh0", "powerlaw_free_nh",
+                    "bbpl_nh0", "bbpl_free_nh",
+                    "grbm_nh0", "grbm_free_nh",
+                    "bknpower_nh0", "bknpower_free_nh",
+                    "apec", "double_apec",
+                ),
+                selection_metric="aic",
                 comparison_intervals=("pipeline", "t100", "t90"),
             ),
             "plotting": PlotConfig(),

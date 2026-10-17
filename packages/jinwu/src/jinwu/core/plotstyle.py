@@ -18,15 +18,21 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from math import isfinite
 from pathlib import Path
 from typing import Sequence
+import warnings
 
 import matplotlib as mpl
+from matplotlib.transforms import Bbox
 
 __all__ = [
     "PALETTE",
     "SERIES_COLORS",
     "apply_style",
+    "paper_style",
+    "paper_figsize",
     "save_figure",
     "format_log_axis",
 ]
@@ -77,6 +83,8 @@ _CJK_FONT_CANDIDATES: tuple[str, ...] = (
 )
 
 _STYLE_APPLIED = False
+_PAPER_STYLE_DEPTH = 0
+_BBOX_DEFAULT = Ellipsis  # Stable when a caller retains save_figure across reloads.
 
 
 def _available_cjk_fonts() -> list[str]:
@@ -94,6 +102,46 @@ def _available_cjk_fonts() -> list[str]:
         return []
 
 
+def _style_params() -> dict:
+    """共用基础样式 / Build rcParams shared by diagnostic and paper styles."""
+    # DejaVu 在前、CJK 在后：matplotlib ≥3.6 按字形逐级回退，
+    # 拉丁字母/数学符号（含 U+2212 负号）用 DejaVu，中文字符落到 CJK 字体。
+    sans_serif = ["DejaVu Sans", *_available_cjk_fonts()]
+    return {
+        "figure.dpi": 110,
+        "savefig.dpi": 300,
+        "savefig.bbox": "tight",
+        "font.size": 10,
+        "font.family": "sans-serif",
+        "font.sans-serif": sans_serif,
+        # mathtext 始终用 DejaVu：CJK 字体缺 U+2212（负号）等数学字形，
+        # 混排时会导致 10^-9 这类指数出现豆腐块。
+        "mathtext.fontset": "dejavusans",
+        "mathtext.default": "regular",
+        "axes.titlesize": 11,
+        "axes.titlepad": 8,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.fontsize": 9,
+        "legend.frameon": False,
+        "axes.grid": True,
+        "grid.alpha": 0.25,
+        "grid.linestyle": "--",
+        "grid.linewidth": 0.6,
+        "axes.axisbelow": True,
+        "axes.linewidth": 0.8,
+        "lines.linewidth": 1.4,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+        "xtick.minor.visible": True,
+        "ytick.minor.visible": True,
+        "axes.unicode_minus": False,
+    }
+
+
 def apply_style() -> None:
     """应用统一绘图样式 / Apply shared Matplotlib rcParams once per process.
 
@@ -105,45 +153,106 @@ def apply_style() -> None:
     global _STYLE_APPLIED
     if _STYLE_APPLIED:
         return
-    # DejaVu 在前、CJK 在后：matplotlib ≥3.6 按字形逐级回退，
-    # 拉丁字母/数学符号（含 U+2212 负号）用 DejaVu，中文字符落到 CJK 字体。
-    sans_serif = ["DejaVu Sans", *_available_cjk_fonts()]
-    mpl.rcParams.update(
-        {
-            "figure.dpi": 110,
-            "savefig.dpi": 300,
-            "savefig.bbox": "tight",
-            "font.size": 10,
-            "font.family": "sans-serif",
-            "font.sans-serif": sans_serif,
-            # mathtext 始终用 DejaVu：CJK 字体缺 U+2212（负号）等数学字形，
-            # 混排时会导致 10^-9 这类指数出现豆腐块。
-            "mathtext.fontset": "dejavusans",
-            "mathtext.default": "regular",
-            "axes.titlesize": 11,
-            "axes.titlepad": 8,
-            "axes.labelsize": 10,
-            "xtick.labelsize": 9,
-            "ytick.labelsize": 9,
-            "legend.fontsize": 9,
-            "legend.frameon": False,
-            "axes.grid": True,
-            "grid.alpha": 0.25,
-            "grid.linestyle": "--",
-            "grid.linewidth": 0.6,
-            "axes.axisbelow": True,
-            "axes.linewidth": 0.8,
-            "lines.linewidth": 1.4,
-            "xtick.direction": "in",
-            "ytick.direction": "in",
-            "xtick.top": True,
-            "ytick.right": True,
-            "xtick.minor.visible": True,
-            "ytick.minor.visible": True,
-            "axes.unicode_minus": False,
-        }
-    )
+    mpl.rcParams.update(_style_params())
     _STYLE_APPLIED = True
+
+
+@contextmanager
+def paper_style(
+    *, width: float, height: float, font_size: float = 10,
+    font_family: str = "Times New Roman",
+):
+    """论文图局部样式 / Temporarily style figures at their final physical size.
+
+    Parameters
+    ----------
+    width, height : float
+        最终画布宽高，单位英寸；从目标稿件取得，不预设单/双栏宽度。
+        Final canvas dimensions in inches, taken from the target manuscript.
+    font_size : float
+        轴标题字号（pt）；刻度为其 0.9 倍，图例为 0.85 倍，点线同步缩放。
+        Axis-label size in points; ticks, legend, markers and strokes scale with it.
+    font_family : str
+        正文字体；缺失时警告并报告替代字体，数学字符使用 STIX。
+        Text font; warn with the resolved fallback if absent. Math uses STIX.
+
+    Yields
+    ------
+    None
+        在上下文内创建并保存图；退出时恢复 rcParams 和旧样式状态。
+        Create and save inside the context; restore rcParams and style state on exit.
+
+    Notes
+    -----
+    仅设置新建对象的默认值，不修改既有图或覆盖调用方显式字号/figsize。
+    Defaults affect new artists only; explicit sizes in plotting functions win.
+    Inside this context ``save_figure`` preserves the canvas size by default;
+    pass ``bbox_inches="tight"`` explicitly to crop.
+    If the manuscript later scales the image by q, all physical sizes scale by q;
+    increasing DPI does not enlarge text. This context is process-global, not thread-local.
+    """
+    from matplotlib import font_manager
+
+    if not all(isfinite(value) and value > 0 for value in (width, height, font_size)):
+        raise ValueError("width, height and font_size must be finite and positive")
+    try:
+        font_path = font_manager.findfont(
+            font_manager.FontProperties(family=font_family), fallback_to_default=False,
+        )
+    except ValueError:
+        font_path = font_manager.findfont(
+            font_manager.FontProperties(family=["Liberation Serif", "DejaVu Serif"]),
+        )
+        warnings.warn(
+            f"Font {font_family!r} unavailable; using "
+            f"{font_manager.FontProperties(fname=font_path).get_name()!r}.",
+            UserWarning, stacklevel=2,
+        )
+    resolved_font = font_manager.FontProperties(fname=font_path).get_name()
+    scale = font_size / 10
+    params = _style_params()
+    params.update({
+        "figure.figsize": (width, height), "figure.constrained_layout.use": True,
+        "font.family": [resolved_font, *_available_cjk_fonts()],
+        "font.size": font_size, "mathtext.fontset": "stix",
+        "axes.labelsize": font_size, "axes.titlesize": font_size,
+        "xtick.labelsize": 0.9 * font_size, "ytick.labelsize": 0.9 * font_size,
+        "legend.fontsize": 0.85 * font_size, "legend.title_fontsize": 0.85 * font_size,
+        "axes.grid": False, "axes.linewidth": 0.65 * scale,
+        "lines.linewidth": scale, "lines.markersize": 4 * scale,
+        "lines.markeredgewidth": 0.5 * scale, "errorbar.capsize": 2 * scale,
+        "axes.labelpad": 3 * scale,
+        "savefig.bbox": None, "pdf.fonttype": 42, "ps.fonttype": 42,
+    })
+    for axis in ("xtick", "ytick"):
+        for level, length, stroke in (("major", 3.5, 0.65), ("minor", 2, 0.45)):
+            params[f"{axis}.{level}.size"] = length * scale
+            params[f"{axis}.{level}.width"] = stroke * scale
+            params[f"{axis}.{level}.pad"] = 3 * scale
+
+    global _STYLE_APPLIED, _PAPER_STYLE_DEPTH
+    previous = _STYLE_APPLIED
+    with mpl.rc_context(params):
+        _STYLE_APPLIED = True  # 包内绘图函数的 apply_style() 不覆盖论文设置。
+        _PAPER_STYLE_DEPTH += 1
+        try:
+            yield
+        finally:
+            _PAPER_STYLE_DEPTH -= 1
+            _STYLE_APPLIED = previous
+
+
+def paper_figsize(default: tuple[float, float]) -> tuple[float, float]:
+    """取当前论文画布尺寸，否则返回 default / Active paper size, else default.
+
+    供绘图接口在未收到显式 figsize 时解析内部默认尺寸；显式 figsize 或已创建
+    的 axes 仍优先。不修改 rcParams 或 figure。
+    Resolve an interface's internal default size without overriding an explicit
+    figsize or axes; does not modify rcParams or any figure.
+    """
+    if _PAPER_STYLE_DEPTH:
+        return tuple(mpl.rcParams["figure.figsize"])
+    return default
 
 
 def save_figure(
@@ -151,6 +260,8 @@ def save_figure(
     base: str | Path,
     formats: str | Sequence[str] = ("png",),
     dpi: int = 300,
+    *,
+    bbox_inches: str | Bbox | None | object = _BBOX_DEFAULT,
 ) -> dict[str, Path]:
     """把 figure 保存为一种或多种格式，返回 ``{格式: 路径}``。
 
@@ -158,22 +269,29 @@ def save_figure(
     替代原先 savefig(dpi=150)/savefig(density=300) 等各自为政的调用。
 
     Save fig in one or more formats and return {normalized_format: Path}.
-    base's final suffix is replaced; create parent directories, apply dpi and
-    tight bounding boxes, and allow Matplotlib to overwrite existing files.
+    base's final suffix is replaced; create parent directories and allow
+    Matplotlib to overwrite existing files. Outside :func:`paper_style` the
+    default is a tight bounding box; inside it the default preserves the
+    physical canvas size. An explicit ``bbox_inches`` always wins.
     This does not close the figure or apply_style(). Invalid formats/I/O errors
     propagate. dpi primarily controls raster output; vector formats keep vectors.
     base 的末尾扩展名会被替换；创建父目录、允许覆盖既有图，不关闭 figure。
     dpi 主要控制栅格化输出；格式或 I/O 错误向上传递。
+    默认在 paper_style 外裁边、在其内保留画布物理尺寸；显式 bbox_inches 优先。
+    保留画布时需在保存前安排边距，避免裁切标签。
     """
     if isinstance(formats, str):
         formats = (formats,)
+    if bbox_inches is _BBOX_DEFAULT:
+        bbox_inches = None if _PAPER_STYLE_DEPTH else "tight"
     base = Path(base)
     base.parent.mkdir(parents=True, exist_ok=True)
     outputs: dict[str, Path] = {}
     for fmt in formats:
         fmt = fmt.lstrip(".").lower()
         path = base.with_suffix(f".{fmt}")
-        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        with mpl.rc_context({"savefig.bbox": None}):
+            fig.savefig(path, dpi=dpi, bbox_inches=bbox_inches)
         outputs[fmt] = path
     return outputs
 

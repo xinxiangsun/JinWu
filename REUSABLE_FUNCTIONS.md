@@ -76,7 +76,7 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `profile_source_amplitude` | `jinwu.core.upperlimit` | 与 response-aware 上限同契约的非负幅度 profile 显著性 | 2026-08-27 |
 | `FastNormFit` | `jinwu.core.upperlimit` | Poisson 似然比（TS）归一化快速拟合（解析任意阶导数 + Newton/Halley；`upper_limit()` 给泊松精确区上限），移植自 HEASoft burstcube | 2026-08-30 |
 | `bayesian_blocks_exposure` | `jinwu.core.ops` | 曝光加权分箱贝叶斯块（支持 0 计数箱，返回变点箱索引），移植自 HEASoft burstcube | 2026-08-30 |
-| `iterative_bayesian_blocks` / `txx_iterbkg` | `jinwu.core.timescale` | 迭代背景自洽贝叶斯块（Giacomo 技巧 + prominence 定界 + 循环检测）与其 Txx 封装 | 2026-08-30 |
+| `iterative_bayesian_blocks` / `txx_iterbkg` | `jinwu.core.timescale` | 迭代背景自洽贝叶斯块与 Txx；零背景时显式记录实际曝光分块，保留有符号扣背景；未能夹定峰或未收敛时只输出诊断状态 | 2026-10-17 |
 | `txx`（拆分） | `jinwu.core.timescale` | 时标计算从 `ops.py` 拆入独立模块；`jinwu.core.ops.txx` 及 `_txx54_*` 助手保持兼容重导出 | 2026-08-30 |
 | `PhaWriter`/`RmfWriter`/`ArfWriter`（关键字对齐） | `jinwu.core.io` | 写出对齐 HEASoft 6.37 heasp 约定：PHA 补 `TLMIN1/TLMAX1/DETCHANS`；RMF 补 `DETCHANS/NUMGRP/NUMELT` 与实际 `F_CHAN` 列对应的 `TLMINn` + header 透传；ARF 补 `HDUVERS` | 2026-08-30 |
 | 读端结构化解析 + 通道校验 | `jinwu.core.io` / `jinwu.core.data` | `PhaData.tlmin/tlmax/det_chans`、`RmfData.tlmin/det_chans`、`ArfData.hduvers` 读入即解析（缺失时回退推断）；`RmfData.validate()` 新增 `INCONSISTENT_CHANNELS` 校验（F_CHAN+N_CHAN vs TLMIN+DETCHANS，同 6.37 heasp） | 2026-08-30 |
@@ -152,4 +152,10 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `BackgroundCountsPosterior._observation` / `_exposure` / `_validate` | `packages/jinwu/src/jinwu/background/backprior.py` | 在采样、期望值和更新边界校验背景计数、秒曝光和后验参数 | 是 |
 | `_grppha_output_error` | `packages/jinwu/src/jinwu/ftools/grppha_hsp.py` | 共用于两种 HEASoft 后端，检查任务状态、FATAL 信息与分组 PHA 结构 | 是 |
 | `_parse_ds9_region_shape` / `parse_ds9_region_line` | `packages/jinwu/src/jinwu/ftools/region.py` | 解析 DS9 区域、保留排除符号及坐标系统；赤道六十进制坐标和显式角秒/角分尺寸 | 是 |
+| `plot_optical_table` | `artifacts/optical_table_20261008/plot_optical.py` | CSV 星等与上限绘图：触发后对数主图、触发前插图、直接标注；不做消光校正或星等系统转换 | 否（表格绘图入口） |
 | `_place_lightcurve_fit_labels` | `packages/jinwu/src/jinwu/core/plot.py` | `LightcurveFitter.plot_fit` 的智能斜率/折断标签排版；集中像素障碍、碰撞搜索和模型标签职责，使拟合入口直接保留主曲线与残差 | 是 |
+| `paper_style` / `paper_figsize` / `save_figure(bbox_inches=...)` | `packages/jinwu/src/jinwu/core/plotstyle.py` | 最终英寸尺寸的临时论文样式、协调字号点线与刻度、字体缺失提示、供绘图入口解析论文画布，以及在上下文内默认保留画布尺寸的 PNG/PDF 导出 | 是 |
+| `FXTInput` / `FXTPipeline` / `FXTResult` | `packages/jinwu-ep/src/jinwu/ep/fxt/pipeline.py` | FXT L2/L3 逐观测 FXTA/B 联合 PL 拟合、显式短时段重抽、模块计数与条件谱形上限，保留 pile-up 审查状态 | 是 |
+| `TAInput` / `TAPipeline` / `TAResult` / `combine_ta_flux_rows` / `save_ta_flux_curve` | `packages/jinwu-ep/src/jinwu/ep/ta.py` | 同源 WXT/FXT 分析、WXT 跨观测共享吸收、统一 EP 时间和观测者系 0.5–4 keV 去吸收通量表与图 | 是 |
+| `screen_cosmic_ray_frames` | `packages/jinwu-ep/src/jinwu/ep/wxt/cosmic_rays.py` | CMOSFRAM 唯一匹配、逐帧诊断，以及人工确认后整帧排除并同步 GTI/有效曝光 | 是 |
+| `_cflux_source_components` | `packages/jinwu/src/jinwu/core/fit.py` | 共用于模型初始化与通量导出，校验吸收在外且cflux包住完整加性源谱，并定位包括自定义模型在内的norm分量 | 是 |

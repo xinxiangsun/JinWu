@@ -1,0 +1,14 @@
+time_mid_minus_t0_hr,telescope,filter,magnitude,mag_error,measurement,limit_sigma
+-45.08,WFST,g,23.15,,upper_limit,3
+-44.15,WFST,r,22.40,,upper_limit,3
+1.66,SVOM/VT,VT_B,23.5,,upper_limit,
+1.66,SVOM/VT,VT_R,23.5,,upper_limit,
+2.89,WFST,r,20.42,0.05,detection,
+3.68,WFST,u,19.76,0.05,detection,
+5.56,LT,r,20.22,0.03,detection,
+5.85,LT,i,20.78,0.05,detection,
+6.11,LT,z,20.59,0.07,detection,
+6.75,NOT,r,19.83,0.03,detection,
+21.35,LOT,r,19.096,0.039,detection,
+27.8,Liverpool,sdss-g,18.53,0.07,detection,
+27.9,Liverpool,sdss-r,18.73,0.07,detection,

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
+from importlib.resources import files as resource_files
 import json
 import logging
 import math
@@ -91,15 +92,19 @@ class WXTPointingInput(PipelineInput):
     detector: str | None = None
     source_region: Path | str | None = None
     background_region: Path | str | None = None
+    response_compatible: bool = False
     auto_approve_regions: bool = False
     trigger_time_utc: str | None = None
     redshift: float = 0.0
+    confirmed_cosmic_ray_frames: tuple[int, ...] = ()
+    cosmic_ray_frame_count_threshold: int = 5
+    time_range_met: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class WXTObservationFiles:
-    cleaned_event: Path
-    exposure_map: Path
+    cleaned_event: Path | None
+    exposure_map: Path | None
     rmf: Path
     arf: Path
     obsid: str
@@ -114,6 +119,7 @@ class WXTObservationFiles:
     source_catalog: Path | None = None
     pipeline_source_pha: Path | None = None
     pipeline_background_pha: Path | None = None
+    unfiltered_event: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +186,9 @@ class TimeResolvedSegment:
     alpha: float
     net_counts: float
     significance: float
+    fit_eligible: bool = True
+    original_intervals: tuple[tuple[float, float], ...] = ()
+    original_counts: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(slots=True)
@@ -195,6 +204,9 @@ class WXTPointingResult:
     report: Path | None = None
     summary: Path | None = None
     plot_groups: dict[str, tuple[Path, ...]] = field(default_factory=dict)
+    flux_rows: list[dict[str, Any]] = field(default_factory=list)
+    cosmic_ray_qc: dict[str, Any] = field(default_factory=dict)
+    spectrum_bins: list[dict[str, Any]] = field(default_factory=list)
 
     def summary_text(self) -> str:
         """Return the copy-ready Chinese announcement, when available."""
@@ -378,10 +390,8 @@ def discover_wxt_files(input_data: WXTPointingInput) -> WXTObservationFiles:
     if arf is None or rmf is None:  # protected by required=True
         raise RuntimeError("WXT response discovery failed")
 
-    cleaned_event = _single_file(manifest, "cleaned_event", required=True)
-    exposure = _single_file(manifest, "exposure", required=True)
-    if cleaned_event is None or exposure is None:
-        raise RuntimeError("WXT event/exposure discovery failed")
+    cleaned_event = _single_file(manifest, "cleaned_event", required=False)
+    exposure = _single_file(manifest, "exposure", required=False)
     if not manifest.obsid or not manifest.detector:
         raise ValueError("WXT manifest lacks obsid or detector identity")
 
@@ -407,6 +417,8 @@ def discover_wxt_files(input_data: WXTPointingInput) -> WXTObservationFiles:
         pipeline_background_pha=(
             bundle.background_pha.path.resolve() if bundle and bundle.background_pha else None
         ),
+        unfiltered_event=next((item.path.resolve() for item in manifest.files
+                              if item.path.name.lower().endswith("po_uf.evt")), None),
         obsid=manifest.obsid,
         detector=manifest.detector,
         source_id=source_id,
@@ -822,6 +834,54 @@ def _event_xy_wcs(event_path: Path) -> WCS:
     return wcs
 
 
+def _source_response_check(files: WXTObservationFiles, source: Path, *, confirmed: bool) -> dict:
+    """Require the native 67-pixel aperture or an explicitly confirmed ARF."""
+    if confirmed:
+        return {"compatible": True, "basis": "user_confirmed_region_response", "arf": str(files.arf)}
+    try:
+        from regions import Regions, CirclePixelRegion
+
+        wcs = _event_xy_wcs(files.cleaned_event)
+
+        def circle(path):
+            text = path.read_text(encoding="utf-8")
+            text = re.sub(r"(?im)^\s*physical\s*$", "image", text)
+            if not re.search(r"(?im)^\s*(image|fk5|icrs)\s*$", text):
+                text = "image\n" + text
+            parsed = Regions.parse(text, format="ds9")
+            region = _pixel_region(parsed[0], wcs) if len(parsed) == 1 else None
+            if not isinstance(region, CirclePixelRegion) or not region.meta.get("include", True):
+                raise ValueError("Source aperture must be a single inclusion circle")
+            return np.array([region.center.x, region.center.y]), float(region.radius)
+
+        center, radius = circle(source)
+        if files.source_region is not None:
+            native_center, native_radius = circle(files.source_region)
+            basis = "native_source_region"
+        elif files.pipeline_source_pha is not None:
+            with fits.open(files.pipeline_source_pha, memmap=False) as hdul:
+                region = hdul["REG00101"].data
+                if len(region) != 1 or str(region[0]["SHAPE"]).strip().upper() != "CIRCLE":
+                    raise ValueError("Native PHA region is not a single circle")
+                row = region[0]
+                native_center = np.array([float(row["X"][0])-1, float(row["Y"][0])-1])
+                native_radius = float(row["R"][0])
+            basis = "native_PHA_REG00101"
+        else:
+            raise ValueError("No native source aperture establishes the ARF position")
+        # A 540-arcsec circle is 66.15 physical pixels in this L2 WCS. The
+        # two-percent tolerance permits that documented standard approximation;
+        # one pixel limits centroid rounding without accepting another source.
+        compatible = (abs(native_radius-67) <= 1.34 and abs(radius-67) <= 1.34
+                      and float(np.linalg.norm(center-native_center)) <= 1.0)
+        return {"compatible": bool(compatible), "basis": basis, "arf": str(files.arf),
+                "radius_pixels": radius, "native_radius_pixels": native_radius,
+                "center_offset_pixels": float(np.linalg.norm(center-native_center)),
+                "radius_tolerance_pixels": 1.34, "center_tolerance_pixels": 1.0}
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        return {"compatible": False, "basis": "unverified", "reason": str(exc), "arf": str(files.arf)}
+
+
 def _sector_polygon_physical(
     center: SkyCoord,
     start_deg: float,
@@ -1161,84 +1221,73 @@ def _count_interval(times: np.ndarray, start: float, stop: float, *, final: bool
 
 
 def merge_bayesian_blocks_for_spectra(
-    edges: Sequence[float],
-    source_times: Sequence[float],
-    background_times: Sequence[float],
-    *,
-    alpha: float,
-    t_start: float,
-    t_stop: float,
-    minimum_net_counts: float,
-    minimum_significance: float,
+    edges: Sequence[float], source_times: Sequence[float], background_times: Sequence[float],
+    *, alpha: float, t_start: float, t_stop: float, minimum_net_counts: float,
+    minimum_significance: float, minimum_source_counts: int | None = None,
+    strict_thresholds: bool = False,
+    valid_intervals: Sequence[tuple[float, float]] | None = None,
 ) -> list[TimeResolvedSegment]:
-    """Merge adjacent duration blocks until each segment is fit-worthy."""
-    # 方法：把贝叶斯块（Scargle 2013 变点）得到的时间块自左向右累并，直到累计
-    #       段同时满足净计数 net = n_on - alpha*n_off >= minimum_net_counts 与
-    #       有符号 Li & Ma 显著性 >= minimum_significance 才落段；尾部不足的
-    #       并入最后一段。显著性用 Li & Ma Eq.(17)：
-    #       S = sqrt(2*[n_on*ln((1+a)/a*n_on/(n_on+n_off)) + n_off*ln((1+a)*n_off/(n_on+n_off))])，
-    #       符号取 n_on - alpha*n_off。
-    # 参考：Scargle, Norris, Jackson & Chiang, 2013, ApJ 764, 167
-    #       (doi:10.1088/0004-637X/764/2/167, arXiv:1207.5578)（贝叶斯块）；
-    #       Li & Ma, 1983, ApJ 272, 317 (doi:10.1086/161095) Eq.(17)；
-    #       T90 双侧 (1-q)/2 与 1-(1-q)/2 分位口径见 Koshut et al., 1996, ApJ 463, 570
-    #       (doi:10.1086/177272)；本仓库 core/ops.py bayesian_blocks_exposure
-    #       （移植自 HEASoft 6.37 burstcube/lib/bayesian_blocks.py）。
-    clipped = np.asarray(edges, dtype=float)
-    clipped = clipped[np.isfinite(clipped)]
-    clipped = np.clip(clipped, t_start, t_stop)
-    clipped = np.unique(np.concatenate(([t_start], clipped, [t_stop])))
-    if clipped.size < 2:
-        return []
+    """Merge adjacent blocks without crossing GTIs; retain inadequate intervals.
+
+    With ``minimum_source_counts`` supplied, the count gate uses raw source
+    photons. Strict gates use ``>`` for both counts and signed Li & Ma Eq. 17
+    significance. A weak remainder joins its preceding segment and the result
+    is checked again, merging backwards if needed. Original intervals/counts
+    remain attached; a whole live interval still failing is ``fit_eligible=False``.
+    The legacy net-count/inclusive contract is retained when the new options
+    are omitted. Reference: Li & Ma (1983), ApJ 272, 317, Eq. 17.
+    """
+    if not np.isfinite([alpha, t_start, t_stop]).all() or alpha <= 0 or t_stop <= t_start:
+        raise ValueError("Positive alpha and finite increasing time bounds are required")
     src = np.sort(np.asarray(source_times, dtype=float))
     bkg = np.sort(np.asarray(background_times, dtype=float))
-    segments: list[TimeResolvedSegment] = []
-    pending_start = float(clipped[0])
-    pending_on = 0.0
-    pending_off = 0.0
+    boundaries = np.asarray(edges, dtype=float)
+    boundaries = boundaries[np.isfinite(boundaries)]
+    intervals = valid_intervals if valid_intervals is not None else [(t_start, t_stop)]
+    result = []
+    for live_start, live_stop in intervals:
+        lo, hi = max(t_start, float(live_start)), min(t_stop, float(live_stop))
+        if hi <= lo:
+            continue
+        clipped = np.unique(np.r_[lo, boundaries[(boundaries > lo) & (boundaries < hi)], hi])
+        groups = []
+        pending = []
 
-    for index, (left, right) in enumerate(zip(clipped[:-1], clipped[1:])):
-        final = index == clipped.size - 2
-        pending_on += _count_interval(src, float(left), float(right), final=final)
-        pending_off += _count_interval(bkg, float(left), float(right), final=final)
-        net = pending_on - alpha * pending_off
-        significance = li_ma_snr(pending_on, pending_off, alpha, signed=True)
-        if net >= minimum_net_counts and significance >= minimum_significance:
-            segments.append(
-                TimeResolvedSegment(
-                    index=len(segments),
-                    start=pending_start,
-                    stop=float(right),
-                    n_on=pending_on,
-                    n_off=pending_off,
-                    alpha=alpha,
-                    net_counts=net,
-                    significance=significance,
-                )
-            )
-            pending_start = float(right)
-            pending_on = 0.0
-            pending_off = 0.0
+        def make_segment(parts):
+            n_on = float(sum(item[2] for item in parts))
+            n_off = float(sum(item[3] for item in parts))
+            net = n_on - alpha*n_off
+            snr = li_ma_snr(n_on, n_off, alpha, signed=True)
+            count = n_on if minimum_source_counts is not None else net
+            threshold = minimum_source_counts if minimum_source_counts is not None else minimum_net_counts
+            eligible = (count > threshold and snr > minimum_significance) if strict_thresholds else (
+                count >= threshold and snr >= minimum_significance)
+            return TimeResolvedSegment(index=0, start=parts[0][0], stop=parts[-1][1],
+                n_on=n_on, n_off=n_off, alpha=alpha, net_counts=net, significance=snr,
+                fit_eligible=bool(eligible), original_intervals=tuple((x[0],x[1]) for x in parts),
+                original_counts=tuple((x[2],x[3]) for x in parts))
 
-    if pending_on > 0 or pending_off > 0:
-        if not segments:
-            return []
-        previous = segments.pop()
-        n_on = previous.n_on + pending_on
-        n_off = previous.n_off + pending_off
-        segments.append(
-            TimeResolvedSegment(
-                index=previous.index,
-                start=previous.start,
-                stop=t_stop,
-                n_on=n_on,
-                n_off=n_off,
-                alpha=alpha,
-                net_counts=n_on - alpha * n_off,
-                significance=li_ma_snr(n_on, n_off, alpha, signed=True),
-            )
-        )
-    return segments
+        for index, (left, right) in enumerate(zip(clipped[:-1], clipped[1:])):
+            final = index == len(clipped)-2
+            pending.append((float(left), float(right),
+                _count_interval(src, left, right, final=final),
+                _count_interval(bkg, left, right, final=final)))
+            if make_segment(pending).fit_eligible:
+                groups.append(pending)
+                pending = []
+        if pending:
+            if groups:
+                pending = groups.pop() + pending
+                while groups and not make_segment(pending).fit_eligible:
+                    pending = groups.pop() + pending
+            groups.append(pending)
+        for parts in groups:
+            segment = make_segment(parts)
+            if minimum_source_counts is None and not strict_thresholds and not segment.fit_eligible:
+                continue
+            segment = replace(segment, index=len(result))
+            result.append(segment)
+    return result
 
 
 
@@ -1323,7 +1372,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         PipelineStage("regions", ("discover", "galactic_absorption")),
         PipelineStage("provisional_events", ("discover", "regions")),
         PipelineStage("exposure_arm_qc", ("discover", "regions", "provisional_events")),
-        PipelineStage("final_events", ("discover", "regions", "exposure_arm_qc")),
+        PipelineStage("cosmic_ray_qc", ("discover", "provisional_events", "exposure_arm_qc")),
+        PipelineStage("final_events", ("discover", "regions", "exposure_arm_qc", "cosmic_ray_qc")),
         PipelineStage("duration", ("final_events", "exposure_arm_qc")),
         PipelineStage("lightcurves", ("discover", "regions", "final_events", "exposure_arm_qc", "duration")),
         PipelineStage("t100_spectra", ("discover", "regions", "duration", "exposure_arm_qc")),
@@ -1334,7 +1384,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         PipelineStage("fluxcurve", ("lightcurves", "duration", "fit", "bayesian_block_spectra")),
         PipelineStage("report", tuple(stage for stage in (
             "discover", "galactic_absorption", "regions", "provisional_events",
-            "exposure_arm_qc", "final_events", "lightcurves", "duration",
+            "exposure_arm_qc", "cosmic_ray_qc", "final_events", "lightcurves", "duration",
             "pipeline_spectrum", "t100_spectra", "t90_spectra", "ogip_finalize",
             "bayesian_block_spectra", "fit",
             "fluxcurve",
@@ -1382,6 +1432,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             "regions": ("regions",),
             "provisional_events": ("extraction",),
             "exposure_arm_qc": ("background_scaling", "regions"),
+            "cosmic_ray_qc": ("plotting",),
             "final_events": ("extraction",),
             "duration": ("duration", "mission", "plotting"),
             "lightcurves": ("extraction", "plotting"),
@@ -1475,6 +1526,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             "provisional_events": (core["xselect.py"],),
             "final_events": (core["xselect.py"],),
             "exposure_arm_qc": (),
+            "cosmic_ray_qc": (Path(__file__).with_name("cosmic_rays.py"),),
             "lightcurves": (core["products.py"], core["time.py"], core["xselect.py"]),
             "duration": (
                 core["products.py"],
@@ -1550,6 +1602,12 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 Time(self.input.trigger_time_utc, scale="utc")
             except Exception as exc:
                 raise ValueError("trigger_time_utc must be a valid UTC time") from exc
+        if self.input.cosmic_ray_frame_count_threshold < 0:
+            raise ValueError("cosmic_ray_frame_count_threshold must be non-negative")
+        if self.input.time_range_met is not None:
+            lo, hi = self.input.time_range_met
+            if not np.isfinite([lo, hi]).all() or hi <= lo:
+                raise ValueError("time_range_met requires finite increasing EP MET bounds")
 
     def _files(self, context: Mapping[str, StageResult]) -> WXTObservationFiles:
         data = context["discover"].data
@@ -1571,13 +1629,21 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             "cleaned_event", "exposure_map", "exposure_correction", "image", "arm_region",
             "rmf", "arf", "gti", "source_region", "background_region", "source_catalog",
             "pipeline_source_pha", "pipeline_background_pha",
+            "unfiltered_event",
         }
         payload = {
             key: (Path(value) if key in path_fields and value is not None else value)
             for key, value in data.items()
             if key in WXTObservationFiles.__dataclass_fields__
         }
-        return WXTObservationFiles(**payload)
+        files = WXTObservationFiles(**payload)
+        cosmic = context.get("cosmic_ray_qc")
+        if cosmic and cosmic.outputs.get("filtered_event"):
+            files = replace(files, cleaned_event=Path(cosmic.outputs["filtered_event"]),
+                            exposure_map=Path(cosmic.outputs["filtered_exposure_map"]),
+                            exposure_correction=(Path(cosmic.outputs["filtered_exposure_correction"])
+                                if cosmic.outputs.get("filtered_exposure_correction") else None))
+        return files
 
     def _prefix(self, files: WXTObservationFiles) -> str:
         detector = files.detector.replace("CMOS", "CMOS")
@@ -1602,6 +1668,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             raise ValueError(f"Unknown extraction band: {band_name}")
         pha_range = band.pi_range if band is not None and filter_energy_band else None
         with self.stage_environment(stage) as env:
+            env.setdefault("XSELECT_MDB", str(resource_files("jinwu.data").joinpath("xselect.mdb")))
             return self.extractor(
                 files.cleaned_event,
                 outdir,
@@ -1609,7 +1676,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 prefix=self._prefix(files),
                 label=label,
                 role=role,
-                time_range=time_range,
+                time_range=time_range if time_range is not None else self.input.time_range_met,
                 time_format=self.config.extraction.time_format,
                 pha_range=pha_range,
                 region=regions,
@@ -1629,8 +1696,46 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             )
 
     def execute_stage(self, stage: PipelineStage, context: Mapping[str, StageResult]) -> StageResult:
+        if stage.name not in {"discover", "galactic_absorption", "pipeline_spectrum", "fit", "fluxcurve", "report"}:
+            files = self._files(context)
+            if files.cleaned_event is None or files.exposure_map is None:
+                return StageResult(data={"status": "missing_inputs", "reason":
+                    "L3-only input: event and exposure map are required for timing/re-extraction",
+                    "segments": [], "bands": {}})
         handler = getattr(self, f"_stage_{stage.name}")
         return handler(context)
+
+    def _stage_cosmic_ray_qc(self, context) -> StageResult:
+        from .cosmic_rays import screen_cosmic_ray_frames
+
+        files = self._files(context)
+        result = screen_cosmic_ray_frames(
+            files.cleaned_event, Path(context["provisional_events"].outputs["source_event"]),
+            files.unfiltered_event, self.workspace / "cosmic_ray_qc",
+            threshold=self.input.cosmic_ray_frame_count_threshold,
+            confirmed_frames=self.input.confirmed_cosmic_ray_frames,
+            make_plots=self.config.plotting.enabled,
+        )
+        outputs = dict(result.pop("outputs", {}))
+        if result.get("live_exposure_fraction") is not None:
+            for name in ("exposure_map", "exposure_correction"):
+                original = getattr(files, name)
+                if original is None:
+                    continue
+                with fits.open(original, memmap=False) as hdul:
+                    copied = fits.HDUList([hdu.copy() for hdu in hdul])
+                for hdu in copied:
+                    if hdu.data is not None and isinstance(hdu.data, np.ndarray) and hdu.data.dtype.names is None:
+                        hdu.data = np.asarray(hdu.data, dtype=float) * result["live_exposure_fraction"]
+                path = self.workspace / "cosmic_ray_qc" / original.name
+                copied.writeto(path, overwrite=True)
+                outputs[f"filtered_{name}"] = str(path)
+        path = _json_dump(self.workspace / "cosmic_ray_qc" / "cosmic_ray_qc.json", result)
+        outputs["manifest"] = str(path)
+        return StageResult(status=(PipelineStatus.NEEDS_REVIEW if result.get("requires_review")
+                                  else PipelineStatus.COMPLETED), outputs=outputs, data=result,
+                           message=("Confirmed frames cannot be safely excluded: inspect CMOSFRAM/time metadata"
+                                    if result.get("requires_review") else None))
 
     def _stage_discover(self, context) -> StageResult:
         files = discover_wxt_files(self.input)
@@ -1672,10 +1777,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         source = files.pipeline_source_pha
         background = files.pipeline_background_pha
         if source is None or background is None:
-            raise ValueError(
-                "Input WXT directory has no complete pipeline spectrum bundle "
-                "(source PHA, background PHA, RMF, ARF) for the selected source"
-            )
+            return StageResult(data={"status": "missing_inputs", "reason":
+                "No complete native source/background PHA bundle; use event re-extraction when available"})
         source_exp, source_backscal = _pha_values(source)
         background_exp, background_backscal = _pha_values(background)
         alpha_counts = (source_exp / background_exp) * (source_backscal / background_backscal)
@@ -1690,6 +1793,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 self.config.spectrum.fit_energy_range_keV or self.config.energy_range_keV
             ),
         )
+        with fits.open(source, memmap=False) as hdul:
+            gti = hdul["GTI"].data if "GTI" in hdul else None
+            start = float(np.min(gti["START"])) if gti is not None and len(gti) else None
+            stop = float(np.max(gti["STOP"])) if gti is not None and len(gti) else None
         return StageResult(
             outputs={
                 "source_pha": str(source),
@@ -1703,6 +1810,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "background_exposure": background_exp,
                 "alpha_counts": alpha_counts,
                 "response_checks": response_checks,
+                "start_met": start,
+                "stop_met": stop,
             },
         )
 
@@ -1786,6 +1895,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             self._copy_or_generate_regions(files)
         )
         arm_shapes: tuple[str, ...] = ()
+        response_check = _source_response_check(files, source, confirmed=self.input.response_compatible)
         effective_background = background
         arm_mask_status = "unavailable"
         if files.arm_region is not None:
@@ -1809,6 +1919,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "arm": str(files.arm_region) if files.arm_region else None,
                 "arm_mask_status": arm_mask_status,
                 "source_origin": source_origin,
+                "source_response_check": response_check,
                 "background_origin": background_origin,
                 **background_metadata,
                 "source_sha256": _file_hash(source),
@@ -1831,6 +1942,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             },
             data={
                 "source_origin": source_origin,
+                "source_response_check": response_check,
                 "background_origin": background_origin,
                 **background_metadata,
             },
@@ -1931,6 +2043,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             background_fallback_warning=fallback_warning,
         )
         data = asdict(scaling)
+        data["source_response_check"] = context["regions"].data.get("source_response_check", {})
         # Compatibility aliases for consumers of the earlier single-map QC schema.
         data.update(
             {
@@ -1967,14 +2080,18 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             and not self.input.auto_approve_regions
             and not has_approval
         )
-        if self.input.auto_approve_regions and not has_approval:
+        response_unverified = not data["source_response_check"].get("compatible", False)
+        needs_review = needs_review or response_unverified
+        if self.input.auto_approve_regions and not has_approval and not response_unverified:
             self.approve_regions(note="auto-approved by WXTPointingInput")
         if needs_review:
             return StageResult(
                 status=PipelineStatus.NEEDS_REVIEW,
                 outputs={"qc": str(qc), "region_manifest": context["regions"].outputs["manifest"]},
                 data=data,
-                message="Review source/background/ARM exposure diagnostics and call approve_regions()",
+                message=("Source aperture/ARF compatibility needs review; supply its compatible response and "
+                         "set response_compatible=True" if response_unverified else
+                         "Review source/background/ARM exposure diagnostics and call approve_regions()"),
             )
         outputs = {"qc": str(qc)}
         if self._has_current_region_approval():
@@ -1985,8 +2102,9 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         files = self._files(context)
         source_region, _, background_regions = self._region_paths(context)
         alpha = float(context["exposure_arm_qc"].data["alpha"])
-        source_sum = float(context["exposure_arm_qc"].data["source"]["exposure_sum"])
-        background_sum = float(context["exposure_arm_qc"].data["background"]["exposure_sum"])
+        exposure_fraction = context.get("cosmic_ray_qc", StageResult()).data.get("live_exposure_fraction", 1.0)
+        source_sum = float(context["exposure_arm_qc"].data["source"]["exposure_sum"]) * exposure_fraction
+        background_sum = float(context["exposure_arm_qc"].data["background"]["exposure_sum"]) * exposure_fraction
         outdir = self.workspace / "events"
         src = self._extract(
             files, outdir=outdir, label="search_full", role="src",
@@ -2321,37 +2439,64 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         source_event = Path(context["final_events"].outputs["source_event"])
         background_event = Path(context["final_events"].outputs["background_event"])
         alpha = float(context["exposure_arm_qc"].data["alpha"])
+        with fits.open(source_event, memmap=False) as hdul:
+            gti = hdul["GTI"].data
+            live_intervals = [(float(a), float(b)) for a, b in zip(gti["START"], gti["STOP"])]
+        span = self.input.time_range_met or (
+            float(duration["t100_tstart"]), float(duration["t100_tstop"]))
         segments = merge_bayesian_blocks_for_spectra(
             duration["bb_edges_time"],
             _event_times(source_event),
             _event_times(background_event),
             alpha=alpha,
-            t_start=float(duration["t90_tstart"]),
-            t_stop=float(duration["t90_tstop"]),
+            t_start=span[0],
+            t_stop=span[1],
             minimum_net_counts=cfg.minimum_net_counts,
             minimum_significance=cfg.minimum_significance,
+            minimum_source_counts=getattr(cfg, "minimum_source_counts", None),
+            strict_thresholds=getattr(cfg, "strict_thresholds", True),
+            valid_intervals=live_intervals,
         )
         files = self._files(context)
         source_region, _, background_regions = self._region_paths(context)
         outputs: dict[str, str] = {"segments": str(segments_path)}
         segment_payload = []
         for segment in segments:
+            if not segment.fit_eligible:
+                segment_payload.append({**asdict(segment), "bin_gate_applied": True})
+                continue
             label = f"bb{segment.index:03d}_full"
             outdir = self.workspace / "spectra" / "bayesian_blocks" / f"bb{segment.index:03d}"
-            src = self._extract(
-                files, outdir=outdir, label=label, role="src", products=("spectrum",),
-                regions=[source_region], time_range=(segment.start, segment.stop),
-                stage=f"bb{segment.index:03d}_src", filter_energy_band=False,
-            )
-            bkg = self._extract(
-                files, outdir=outdir, label=label, role="bkg", products=("spectrum",),
-                regions=background_regions, time_range=(segment.start, segment.stop),
-                stage=f"bb{segment.index:03d}_bkg", filter_energy_band=False,
-            )
-            if src.spectrum is None or bkg.spectrum is None:
-                raise RuntimeError(f"XSELECT did not return PHA for {label}")
+            # The numerical bins are half-open except at the final boundary;
+            # XSELECT ranges are inclusive, so omit a shared right-edge photon.
+            shared_stop = any(other.start == segment.stop for other in segments)
+            extraction_stop = float(np.nextafter(segment.stop, -np.inf)) if shared_stop else segment.stop
+            reused = next((name for name in ("t100_spectra", "t90_spectra")
+                           if name in context and context[name].data.get("start") == segment.start
+                           and context[name].data.get("stop") == extraction_stop), None)
+            if reused:
+                outdir.mkdir(parents=True, exist_ok=True)
+                source_pha, background_pha = outdir / f"{label}_src.pha", outdir / f"{label}_bkg.pha"
+                shutil.copy2(context[reused].outputs["source_pha"], source_pha)
+                shutil.copy2(context[reused].outputs["background_pha"], background_pha)
+            else:
+                src = self._extract(
+                    files, outdir=outdir, label=label, role="src", products=("spectrum",),
+                    regions=[source_region], time_range=(segment.start, extraction_stop),
+                    stage=f"bb{segment.index:03d}_src", filter_energy_band=False,
+                )
+                bkg = self._extract(
+                    files, outdir=outdir, label=label, role="bkg", products=("spectrum",),
+                    regions=background_regions, time_range=(segment.start, extraction_stop),
+                    stage=f"bb{segment.index:03d}_bkg", filter_energy_band=False,
+                )
+                if src.spectrum is None or bkg.spectrum is None:
+                    raise RuntimeError(f"XSELECT did not return PHA for {label}")
+                source_pha, background_pha = src.spectrum, bkg.spectrum
+                outputs.update(collect_xselect_artifacts(src).outputs(f"bb{segment.index:03d}_source"))
+                outputs.update(collect_xselect_artifacts(bkg).outputs(f"bb{segment.index:03d}_background"))
             source, background, rmf, arf = _finalize_pha_pair(
-                src.spectrum, bkg.spectrum, alpha=alpha, rmf=files.rmf, arf=files.arf,
+                source_pha, background_pha, alpha=alpha, rmf=files.rmf, arf=files.arf,
                 alpha_rtol=self.config.background_scaling.alpha_rtol,
                 exposure_rtol=self.config.background_scaling.exposure_rtol,
             )
@@ -2360,26 +2505,28 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             outputs[f"{key}_background_pha"] = str(background)
             outputs[f"{key}_rmf"] = str(rmf)
             outputs[f"{key}_arf"] = str(arf)
-            outputs.update(collect_xselect_artifacts(src).outputs(f"{key}_source"))
-            outputs.update(collect_xselect_artifacts(bkg).outputs(f"{key}_background"))
             item = asdict(segment)
-            item.update({"source_pha": str(source), "background_pha": str(background), "rmf": str(rmf), "arf": str(arf)})
+            item.update({"label": key, "bin_gate_applied": True, "source_pha": str(source), "background_pha": str(background),
+                         "rmf": str(rmf), "arf": str(arf), "exposure_s": _pha_values(source)[0]})
+            pi_range = self.config.extraction.bands["full"].pi_range
+            observed = (_pha_total_counts(source, pi_range), _pha_total_counts(background, pi_range))
+            if observed != (segment.n_on, segment.n_off):
+                raise RuntimeError(f"Merged bin {label} PHA/event count mismatch: {observed} vs {(segment.n_on, segment.n_off)}")
+            item["extraction_stop"] = extraction_stop
+            item["extraction_basis"] = f"reused_{reused}" if reused else "XSELECT"
             segment_payload.append(item)
         _json_dump(segments_path, segment_payload)
-        return StageResult(outputs=outputs, data={"segments": segment_payload})
+        return StageResult(outputs=outputs, data={"segments": segment_payload,
+            "count_gate": ("source_counts" if cfg.minimum_source_counts is not None else "net_counts"),
+            "minimum_source_counts": cfg.minimum_source_counts,
+            "minimum_net_counts": cfg.minimum_net_counts,
+            "strict_thresholds": cfg.strict_thresholds,
+            "minimum_significance": cfg.minimum_significance,
+            "time_basis": "user_interval" if self.input.time_range_met else "t100",
+            "valid_intervals": live_intervals,
+            "status": "ready" if any(s.fit_eligible for s in segments) else "insufficient_counts"})
 
-    def _fit_one(
-        self,
-        label: str,
-        source: Path,
-        background: Path,
-        rmf: Path,
-        arf: Path,
-        *,
-        galactic_nh_1e22: float,
-        candidate_keys: Sequence[str] | None = None,
-    ):
-        from ...core.fit import fit_xray_models
+    def _prepare_one(self, label: str, source: Path, background: Path, rmf: Path, arf: Path):
         from ...core.spectrum_prep import prepare_spectra
 
         source_file = DataFile(
@@ -2429,6 +2576,23 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             raise RuntimeError(f"Unable to prepare {label} spectrum: {detail}")
         prepared = prepared_catalog.spectra[0]
 
+        return prepared
+
+    def _fit_one(
+        self,
+        label: str,
+        source: Path,
+        background: Path,
+        rmf: Path,
+        arf: Path,
+        *,
+        galactic_nh_1e22: float,
+        candidate_keys: Sequence[str] | None = None,
+    ):
+        from ...core.fit import fit_xray_models
+        prepared = self._prepare_one(label, source, background, rmf, arf)
+        fit_dir = self.workspace / "fit" / label
+
         method = self.config.fitting.method
         effective_candidate_keys = (
             candidate_keys
@@ -2476,8 +2640,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             stat_method=self.config.fitting.statistic,
             abundance=self.config.fitting.abundance,
             cross_section=self.config.fitting.cross_section,
+            apec_root=self.config.fitting.apec_root,
             galactic_nh_1e22=galactic_nh_1e22,
             redshift=self.input.redshift,
+            flux_band_keV=self.config.flux_curve.energy_range_keV or (0.5, 4.0),
             calculate_errors=self.config.fitting.calculate_errors,
             error_delta_stat=self.config.fitting.error_delta_stat,
             srcname=self.input.target_id,
@@ -2528,6 +2694,32 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
 
         return comparison
 
+    def _fit_bins_joint(self, segments, *, galactic_nh_1e22: float):
+        """Fit all eligible bins once with one extra NH and independent shapes."""
+        from ...core.fit import fit_xray_models
+
+        prepared = [self._prepare_one(f"bb{int(item['index']):03d}",
+            Path(item["source_pha"]), Path(item["background_pha"]), Path(item["rmf"]), Path(item["arf"]))
+            for item in segments]
+        if self.config.fitting.method != "mle":
+            raise NotImplementedError("WXT shared-NH bin comparison currently requires method='mle'")
+        return fit_xray_models(prepared, outdir=self.workspace / "fit" / "wxt_bins_joint",
+            model_class=self.config.fitting.model_class,
+            absorption_mode=self.config.fitting.absorption_mode,
+            candidate_keys=self.config.fitting.candidate_keys,
+            selection_metric=self.config.fitting.selection_metric,
+            galactic_nh_1e22=galactic_nh_1e22, redshift=self.input.redshift,
+            flux_band_keV=self.config.flux_curve.energy_range_keV or (0.5, 4.0),
+            shared_absorption_only=True, stat_method=self.config.fitting.statistic,
+            abundance=self.config.fitting.abundance, cross_section=self.config.fitting.cross_section,
+            apec_root=self.config.fitting.apec_root,
+            calculate_errors=self.config.fitting.calculate_errors,
+            error_delta_stat=self.config.fitting.error_delta_stat,
+            srcname=self.input.target_id, instname="WXT_bins_joint",
+            plot_formats=self.config.plotting.formats if self.config.plotting.enabled else (),
+            plot_density=self.config.plotting.dpi,
+            plot_required=self.config.plotting.enabled and self.config.plotting.required)
+
     def _stage_fit(self, context) -> StageResult:
         summary_path = self.workspace / "fit" / "fit_summary.json"
         if not self.config.fitting.enabled:
@@ -2566,6 +2758,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         }
 
         def run_comparison(label: str) -> None:
+            available = context["pipeline_spectrum"].outputs if label == "pipeline" else ogip
+            required = "source_pha" if label in {"pipeline", "t90"} else "t100_source_pha"
+            if required not in available:
+                return
             source, background, rmf, arf = interval_sources[label]()
             try:
                 comparisons[label] = self._fit_one(
@@ -2585,30 +2781,31 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         def adopted_fit(value: Any) -> dict[str, Any]:
             return value.adopted_fit if hasattr(value, "adopted_fit") else value
 
-        # bb 段沿用采纳模型的 key；按 t90 → t100 → pipeline 回退取第一个
-        # 成功拟合的时段，全部失败时交给 fit_xray_models 的默认候选集。
-        adopted_key = None
-        for label in ("t90", "t100", "pipeline"):
-            candidate = comparisons.get(label)
-            if candidate is None or (isinstance(candidate, dict) and "fit_error" in candidate):
-                continue
-            adopted_key = adopted_fit(candidate).get("model_key")
-            if adopted_key:
-                break
-        for item in context["bayesian_block_spectra"].data.get("segments", []):
-            key = f"bb{int(item['index']):03d}"
+        segments = [item for item in context["bayesian_block_spectra"].data.get("segments", [])
+                    if item.get("fit_eligible", True) and item.get("source_pha")]
+        if segments:
             try:
-                comparisons[key] = self._fit_one(
-                    key, Path(item["source_pha"]), Path(item["background_pha"]),
-                    Path(item["rmf"]), Path(item["arf"]),
-                    galactic_nh_1e22=galactic_nh,
-                    candidate_keys=(adopted_key,) if adopted_key else None,
-                )
+                joint = self._fit_bins_joint(segments, galactic_nh_1e22=galactic_nh)
+                comparisons["wxt_bins_joint"] = joint
+                selected = adopted_fit(joint)
+                groups = selected.get("per_group", [])
+                indices = [group.get("spectrum_indices", []) for group in groups]
+                if (len(groups) != len(segments) or any(len(index) != 1 for index in indices)
+                        or sorted(index[0] for index in indices) != list(range(1, len(segments)+1))):
+                    raise RuntimeError("Joint fit did not return one independent group per WXT bin")
+                for group in groups:
+                    item = segments[int(group["spectrum_indices"][0])-1]
+                    key = f"bb{int(item['index']):03d}"
+                    fit = dict(selected)
+                    fit.update(parameters=group["parameters"], flux_unabs=group.get("flux_unabs"),
+                               flux_abs=group.get("flux_abs"), joint_fit="wxt_bins_joint",
+                               statistics_scope="all_WXT_bins_joint", group_index=group["group_index"])
+                    comparisons[key] = fit
             except Exception as exc:
                 detail = f"{type(exc).__name__}: {exc}"
-                logger.warning("Fit failed for segment %s: %s", key, detail)
-                comparisons[key] = {"fit_error": detail}
-                failure_logs.setdefault(key, {})["interval"] = detail
+                logger.warning("Shared-NH WXT bin fit failed: %s", detail)
+                comparisons["wxt_bins_joint"] = {"fit_error": detail}
+                failure_logs["wxt_bins_joint"] = {"interval": detail}
 
         # 把失败时段的磁盘日志登记进 failure_logs（若 _fit_one 已写出）。
         for label in list(failure_logs):
@@ -2629,6 +2826,13 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "model": value.get("model"),
                 "parameters": value.get("parameters"),
                 "flux_abs": value.get("flux_abs"),
+                "flux_unabs": value.get("flux_unabs"),
+                "per_group": value.get("per_group"),
+                "data_groups": value.get("data_groups"),
+                "shared_absorption_only": value.get("shared_absorption_only"),
+                "joint_fit": value.get("joint_fit"),
+                "statistics_scope": value.get("statistics_scope"),
+                "group_index": value.get("group_index"),
                 "rate": value.get("rate"),
                 "fit_products": value.get("fit_products"),
                 "report_txt": value.get("report_txt"),
@@ -2640,6 +2844,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 "model_family": value.get("model_family"),
                 "absorption_mode": value.get("absorption_mode"),
                 "metrics": value.get("metrics"),
+                "shape_status": value.get("shape_status"),
                 "derived_parameters": value.get("derived_parameters"),
                 "requested_statistic": self.config.fitting.statistic,
                 "effective_statistic": value.get("effective_statistic", "wstat"),
@@ -2716,6 +2921,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 if failure_log.is_file():
                     outputs[f"{label}_{candidate_key}_xspec_log"] = str(failure_log)
         return StageResult(
+            status=PipelineStatus.COMPLETED if fit_results else PipelineStatus.FAILED,
+            message=None if fit_results else "No requested spectral fit succeeded; inspect failure_logs",
             outputs=outputs,
             data={
                 "fits": compact,
@@ -2727,7 +2934,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def _stage_fluxcurve(self, context) -> StageResult:
         output_base = self.workspace / "fluxcurve" / f"{self.input.target_id}_wxt_fluxcurve"
         fits_by_label = context["fit"].data.get("fits", {})
-        if not self.config.flux_curve.enabled or "t90" not in fits_by_label:
+        if not self.config.flux_curve.enabled or not fits_by_label:
             status = "disabled" if not self.config.flux_curve.enabled else "fit_unavailable"
             manifest = _json_dump(output_base.with_suffix(".json"), {"status": status})
             return StageResult(outputs={"manifest": str(manifest)}, data={"status": status})
@@ -2737,18 +2944,32 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             or self.config.spectrum.fit_energy_range_keV
             or self.config.energy_range_keV
         )
+        segments = context["bayesian_block_spectra"].data.get("segments", [])
+        duration = context["duration"].data
+        fallback = None
+        if not any(f"bb{int(item['index']):03d}" in fits_by_label for item in segments):
+            native = context["pipeline_spectrum"].data
+            if "t90" not in fits_by_label and "pipeline" in fits_by_label and native.get("start_met") is not None:
+                fallback = {"index": 0, "start": native["start_met"], "stop": native["stop_met"],
+                            "significance": 0.0}
         curve = build_flux_curve(
             fits_by_label,
-            context["bayesian_block_spectra"].data.get("segments", []),
-            context["duration"].data,
+            segments,
+            duration,
             energy_range_keV=energy_range,
             include_t90_aggregate=self.config.flux_curve.include_t90_aggregate,
         )
+        if fallback is not None:
+            native_curve = build_flux_curve({"bb000": fits_by_label["pipeline"]}, [fallback], {},
+                energy_range_keV=energy_range, include_t90_aggregate=False)
+            curve = FluxCurveResult(science_points=(), aggregate_points=tuple(
+                replace(point, label="pipeline", kind="observation_integrated")
+                for point in native_curve.science_points), status="observation_integrated")
         quicklook = ()
-        if self.config.flux_curve.build_quicklook:
+        if self.config.flux_curve.build_quicklook and "t90" in fits_by_label:
             full_path = context["lightcurves"].data["bands"]["full"]["net_ecsv"]
             net_curve = load_net_lightcurve(full_path)
-            aggregate = curve.aggregate_points[0] if curve.aggregate_points else None
+            aggregate = next((point for point in curve.aggregate_points if point.label == "t90"), None)
             if aggregate is not None:
                 quicklook = build_quicklook_flux_curve(
                     net_curve,
@@ -2981,16 +3202,15 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def build_result(self, context: Mapping[str, StageResult]) -> WXTPointingResult:
         files = self._files(context) if "discover" in context else None
         alpha = None
-        if "exposure_arm_qc" in context:
+        if "exposure_arm_qc" in context and "alpha" in context["exposure_arm_qc"].data:
             alpha = float(context["exposure_arm_qc"].data["alpha"])
         duration = context.get("duration").data if "duration" in context else None
         ogip = context.get("ogip_finalize")
         segments = []
         if "bayesian_block_spectra" in context:
             segments = [
-                TimeResolvedSegment(**{key: item[key] for key in (
-                    "index", "start", "stop", "n_on", "n_off", "alpha", "net_counts", "significance"
-                )})
+                TimeResolvedSegment(**{key: item[key] for key in TimeResolvedSegment.__dataclass_fields__
+                                       if key in item})
                 for item in context["bayesian_block_spectra"].data.get("segments", [])
             ]
         plot_groups: dict[str, tuple[Path, ...]] = {}
@@ -3041,14 +3261,51 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 (context["fluxcurve"].outputs.get("plot_png"), context["fluxcurve"].outputs.get("plot_svg")),
             )
         report_outputs = context["report"].outputs if "report" in context else {}
+        curve_data = context.get("fluxcurve", StageResult()).data
+        flux_points = curve_data.get("science_points") or curve_data.get("aggregate_points") or []
+        t0 = (duration or {}).get("t0", {})
+        spectrum_bins = [dict(item) for item in context.get("bayesian_block_spectra", StageResult()).data.get("segments", [])]
+        for point in flux_points:
+            label = point["label"]
+            if not label.startswith("bb"):
+                product = context.get("pipeline_spectrum" if label == "pipeline" else "ogip_finalize", StageResult())
+                prefix = "t100_" if label == "t100" else ""
+                if product.outputs.get(f"{prefix}source_pha"):
+                    spectrum_bins.append({"label": label, "start": point["start"], "stop": point["stop"],
+                        "fit_eligible": True, "bin_gate_applied": False, "bin_kind": point.get("kind"),
+                        **{key: product.outputs[f"{prefix}{key}"] for key in ("source_pha", "background_pha", "rmf", "arf")}})
+        bins_by_label = {item.get("label", f"bb{int(item.get('index', 0)):03d}"): item for item in spectrum_bins}
+        for item in spectrum_bins:
+            if item.get("source_pha") and item.get("exposure_s") is None:
+                item["exposure_s"] = _pha_values(Path(item["source_pha"]))[0]
+        fits_by_label = context.get("fit", StageResult()).data.get("fits", {})
+        flux_rows = [{"time_reference": "ep", "t0_utc": t0.get("utc"),
+            "t_start": point["start"], "t_stop": point["stop"], "t_center": point["time"],
+            "flux": point["flux"], "error_minus": point.get("error_low"),
+            "error_plus": point.get("error_high"),
+            "flux_band_keV": [point["energy_min_keV"], point["energy_max_keV"]],
+            "flux_frame": "observer", "flux_kind": "unabsorbed",
+            "model_key": point.get("model_key"), "status": "spectral_fit",
+            "confidence": fits_by_label.get(point["label"], {}).get("xspec_settings", {}).get("profile_confidence"),
+            "error_kind": fits_by_label.get(point["label"], {}).get("xspec_settings", {}).get("profile_error_kind"),
+            "error_status": fits_by_label.get(point["label"], {}).get("flux_unabs", {}).get("error_status"),
+            "shape_status": (fits_by_label.get(point["label"], {}).get("shape_status") or {}).get("status"),
+            "statistics_scope": fits_by_label.get(point["label"], {}).get("statistics_scope", "single_interval"),
+            "cosmic_ray_status": context.get("cosmic_ray_qc", StageResult()).data.get("status", "not_testable"),
+            "bin_kind": point.get("kind"), "instrument": "WXT",
+            "obsid": files.obsid if files else None, "label": point["label"],
+            "segment": point["label"], "detector": files.detector if files else None,
+            "is_upper_limit": False, "flux_unit": "erg cm^-2 s^-1",
+            "exposure_s": bins_by_label.get(point["label"], {}).get("exposure_s")}
+            for point in flux_points]
         return WXTPointingResult(
             workspace=self.workspace,
             status=self.status().status.value,
             files=files,
             alpha=alpha,
             duration=duration,
-            t90_source_pha=Path(ogip.outputs["source_pha"]) if ogip else None,
-            t90_background_pha=Path(ogip.outputs["background_pha"]) if ogip else None,
+            t90_source_pha=Path(ogip.outputs["source_pha"]) if ogip and ogip.outputs.get("source_pha") else None,
+            t90_background_pha=Path(ogip.outputs["background_pha"]) if ogip and ogip.outputs.get("background_pha") else None,
             segments=segments,
             report=Path(report_outputs["report"]) if report_outputs.get("report") else None,
             summary=(
@@ -3056,4 +3313,7 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
                 if report_outputs.get("summary_txt") else None
             ),
             plot_groups=plot_groups,
+            flux_rows=flux_rows,
+            cosmic_ray_qc=context.get("cosmic_ray_qc", StageResult()).data,
+            spectrum_bins=spectrum_bins,
         )

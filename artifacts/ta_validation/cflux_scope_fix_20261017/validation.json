@@ -1,0 +1,989 @@
+{
+  "custom_fits": {
+    "blackbody": {
+      "channel_count": 20,
+      "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+      "conversion": {
+        "counts": 20.02544790796029,
+        "erg_per_count": 1.553124271476368e-09,
+        "exposure_s": 136.45010375976562,
+        "total_counts": 20.02544790796029
+      },
+      "data_groups": [
+        {
+          "energy_range": {
+            "emax": 4.0,
+            "emin": 0.5
+          },
+          "group_index": 1,
+          "instrument": "WXT",
+          "spectrum_indices": [
+            1
+          ],
+          "spectrum_keys": [
+            "unknown:WXT:t100"
+          ]
+        }
+      ],
+      "effective_statistic": "wstat",
+      "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+      "effective_statistic_verified": true,
+      "effective_statistics_per_spectrum": [
+        "wstat"
+      ],
+      "energy_range": {
+        "emax": 4.0,
+        "emin": 0.5
+      },
+      "energy_ranges": {
+        "unknown:WXT:t100": {
+          "emax": 4.0,
+          "emin": 0.5
+        }
+      },
+      "error_parameters": [],
+      "fit_products": {
+        "plots": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_bbodyrad_redshiftFalse_groupmin1.png"
+        ],
+        "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody",
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_fit.txt",
+        "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_fit.json",
+        "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_fit.xcm",
+        "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_fit.log"
+      },
+      "flux_abs": {
+        "energy_range_keV": [
+          0.5,
+          4.0
+        ],
+        "erg_cm2_s": 2.2330503994359898e-10,
+        "photons_cm2_s": 0.11531206946529601
+      },
+      "flux_band_keV": [
+        0.5,
+        4.0
+      ],
+      "flux_unabs": {
+        "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+        "energy_range_keV": [
+          0.5,
+          4.0
+        ],
+        "erg_cm2_s": 2.2793686729470762e-10,
+        "error_hi": null,
+        "error_lo": null,
+        "error_status": "uncomputed",
+        "frame": "observer"
+      },
+      "free_parameter_count": 2,
+      "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+      "group_min": 1,
+      "group_mins": {
+        "unknown:WXT:t100": 1
+      },
+      "information_criterion_kind": "profile_likelihood_score",
+      "input_files": [
+        {
+          "arf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48s1.arf",
+          "background_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_bkg_spec.pha",
+          "detector": "WXT",
+          "group_min": 1,
+          "grouped_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/prepared/unknown_obsid/WXT/t100/grouped_g1.pha",
+          "instrument": "WXT",
+          "module": null,
+          "obsid": "unknown",
+          "rmf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48.rmf",
+          "source_id": "t100",
+          "source_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_src_spec.pha"
+        }
+      ],
+      "model": "TBabs*cflux*bbodyrad",
+      "noticed_channel_count": 20,
+      "parameters": {
+        "TBabs.nH": {
+          "frozen": true,
+          "index": 1,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 0.0145
+        },
+        "bbodyrad.kT": {
+          "error_status": "uncomputed",
+          "frozen": false,
+          "index": 5,
+          "link": "",
+          "max": 200.0,
+          "min": 0.0001,
+          "value": 0.36486687251484007
+        },
+        "bbodyrad.norm": {
+          "frozen": true,
+          "index": 6,
+          "link": "",
+          "max": 1e+24,
+          "min": 0.0,
+          "value": 1.0
+        },
+        "cflux.Emax": {
+          "frozen": true,
+          "index": 3,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 4.0
+        },
+        "cflux.Emin": {
+          "frozen": true,
+          "index": 2,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 0.5
+        },
+        "cflux.lg10Flux": {
+          "error_status": "uncomputed",
+          "frozen": false,
+          "index": 4,
+          "link": "",
+          "max": 10.0,
+          "min": -20.0,
+          "value": -9.642185424851542
+        }
+      },
+      "per_group": [
+        {
+          "cflux": {
+            "Emax": 4.0,
+            "Emin": 0.5,
+            "lg10Flux": -9.642185424851542
+          },
+          "energy_range": {
+            "emax": 4.0,
+            "emin": 0.5
+          },
+          "flux_abs": {
+            "energy_range_keV": [
+              0.5,
+              4.0
+            ],
+            "erg_cm2_s": 2.2330503994359898e-10,
+            "photons_cm2_s": 0.11531206946529601
+          },
+          "flux_unabs": {
+            "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+            "energy_range_keV": [
+              0.5,
+              4.0
+            ],
+            "erg_cm2_s": 2.2793686729470762e-10,
+            "error_hi": null,
+            "error_lo": null,
+            "error_status": "uncomputed",
+            "frame": "observer"
+          },
+          "group_index": 1,
+          "instrument": "WXT",
+          "member_spectra": [
+            "unknown:WXT:t100"
+          ],
+          "model": "TBabs*cflux*bbodyrad",
+          "parameters": {
+            "TBabs.nH": {
+              "frozen": true,
+              "index": 1,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 0.0145
+            },
+            "bbodyrad.kT": {
+              "error_status": "uncomputed",
+              "frozen": false,
+              "index": 5,
+              "link": "",
+              "max": 200.0,
+              "min": 0.0001,
+              "value": 0.36486687251484007
+            },
+            "bbodyrad.norm": {
+              "frozen": true,
+              "index": 6,
+              "link": "",
+              "max": 1e+24,
+              "min": 0.0,
+              "value": 1.0
+            },
+            "cflux.Emax": {
+              "frozen": true,
+              "index": 3,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 4.0
+            },
+            "cflux.Emin": {
+              "frozen": true,
+              "index": 2,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 0.5
+            },
+            "cflux.lg10Flux": {
+              "error_status": "uncomputed",
+              "frozen": false,
+              "index": 4,
+              "link": "",
+              "max": 10.0,
+              "min": -20.0,
+              "value": -9.642185424851542
+            }
+          },
+          "spectrum_indices": [
+            1
+          ]
+        }
+      ],
+      "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_bbodyrad_redshiftFalse_groupmin1.png",
+      "plot_fits": [
+        "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_bbodyrad_redshiftFalse_groupmin1.png"
+      ],
+      "poisson_flags": [
+        {
+          "background_is_poisson": true,
+          "has_background": true,
+          "source_is_poisson": true
+        }
+      ],
+      "rate": {
+        "error": 0.03371059613259159,
+        "value": 0.14676022484539214
+      },
+      "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/blackbody/unknown_WXT_t100_WXT_fit.txt",
+      "shared_absorption_only": false,
+      "statistics": {
+        "dof": 18,
+        "method": "cstat",
+        "null_hypothesis_probability": 0.334572055,
+        "reduced": 1.3047665722082291,
+        "value": 23.485798299748126
+      },
+      "text": "Model: TBabs*cflux*bbodyrad\nTBabs.nH: 0.0145 (fixed)\ncflux.Emin: 0.5000 (fixed)\ncflux.Emax: 4.0000 (fixed)\ncflux.lg10Flux: -9.6422 (profile error not computed)\nbbodyrad.kT: 0.3649 (profile error not computed)\nbbodyrad.norm: 1.0000 (fixed)\nAbsorbed Flux (0.5-4.0 keV): 2.2331e-10 erg/cm²/s\nAbsorbed Photon Flux (0.5-4.0 keV): 1.1531e-01 photons/cm²/s\nRate: 0.1468 ± 0.0337 cts/s\nExposure: 136.5 s\nConversion factor: 1.5531e-09 erg/cm²/s per cts/s\nTotal counts: 20.03 counts\nStat/dof: cstat=23.49/18=1.30\nNull hypothesis probability: 0.3346",
+      "warnings": [],
+      "xspec_settings": {
+        "abundance": "wilm",
+        "apec_root": "XSPEC default AtomDB version",
+        "calculate_errors": false,
+        "cross_section": "vern",
+        "error_command": null,
+        "error_delta_stat": 1.0,
+        "freeze_galactic_nh": true,
+        "frozen_parameters": {},
+        "galactic_nh_1e22": 0.0145,
+        "intrinsic_nh_mode": "free",
+        "profile_confidence": 0.682689492137,
+        "profile_error_kind": "single_parameter_profile",
+        "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+        "profile_errors_succeeded": false,
+        "profile_sigma": 1.0,
+        "redshift_absorbers": [
+          0.0
+        ],
+        "requested_statistic": "cstat"
+      }
+    },
+    "continuum_line": {
+      "channel_count": 20,
+      "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+      "conversion": {
+        "counts": 20.02544790796029,
+        "erg_per_count": 2.1529342490290546e-09,
+        "exposure_s": 136.45010375976562,
+        "total_counts": 20.02544790796029
+      },
+      "data_groups": [
+        {
+          "energy_range": {
+            "emax": 4.0,
+            "emin": 0.5
+          },
+          "group_index": 1,
+          "instrument": "WXT",
+          "spectrum_indices": [
+            1
+          ],
+          "spectrum_keys": [
+            "unknown:WXT:t100"
+          ]
+        }
+      ],
+      "effective_statistic": "wstat",
+      "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+      "effective_statistic_verified": true,
+      "effective_statistics_per_spectrum": [
+        "wstat"
+      ],
+      "energy_range": {
+        "emax": 4.0,
+        "emin": 0.5
+      },
+      "energy_ranges": {
+        "unknown:WXT:t100": {
+          "emax": 4.0,
+          "emin": 0.5
+        }
+      },
+      "error_parameters": [],
+      "fit_products": {
+        "plots": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_powerlaw_gauss_redshiftFalse_groupmin1.png"
+        ],
+        "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line",
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_fit.txt",
+        "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_fit.json",
+        "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_fit.xcm",
+        "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_fit.log"
+      },
+      "flux_abs": {
+        "energy_range_keV": [
+          0.5,
+          4.0
+        ],
+        "erg_cm2_s": 3.107591142845138e-10,
+        "photons_cm2_s": 0.13500166258721144
+      },
+      "flux_band_keV": [
+        0.5,
+        4.0
+      ],
+      "flux_unabs": {
+        "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+        "energy_range_keV": [
+          0.5,
+          4.0
+        ],
+        "erg_cm2_s": 3.159651144648495e-10,
+        "error_hi": null,
+        "error_lo": null,
+        "error_status": "uncomputed",
+        "frame": "observer"
+      },
+      "free_parameter_count": 3,
+      "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+      "group_min": 1,
+      "group_mins": {
+        "unknown:WXT:t100": 1
+      },
+      "information_criterion_kind": "profile_likelihood_score",
+      "input_files": [
+        {
+          "arf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48s1.arf",
+          "background_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_bkg_spec.pha",
+          "detector": "WXT",
+          "group_min": 1,
+          "grouped_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/prepared/unknown_obsid/WXT/t100/grouped_g1.pha",
+          "instrument": "WXT",
+          "module": null,
+          "obsid": "unknown",
+          "rmf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48.rmf",
+          "source_id": "t100",
+          "source_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_src_spec.pha"
+        }
+      ],
+      "model": "TBabs*cflux(powerlaw + gaussian)",
+      "noticed_channel_count": 20,
+      "parameters": {
+        "TBabs.nH": {
+          "frozen": true,
+          "index": 1,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 0.0145
+        },
+        "cflux.Emax": {
+          "frozen": true,
+          "index": 3,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 4.0
+        },
+        "cflux.Emin": {
+          "frozen": true,
+          "index": 2,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 0.5
+        },
+        "cflux.lg10Flux": {
+          "error_status": "uncomputed",
+          "frozen": false,
+          "index": 4,
+          "link": "",
+          "max": 10.0,
+          "min": -20.0,
+          "value": -9.500360864950482
+        },
+        "gaussian.LineE": {
+          "frozen": true,
+          "index": 7,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 1.0
+        },
+        "gaussian.Sigma": {
+          "frozen": true,
+          "index": 8,
+          "link": "",
+          "max": 20.0,
+          "min": 0.0,
+          "value": 0.1
+        },
+        "gaussian.norm": {
+          "error_status": "uncomputed",
+          "frozen": false,
+          "index": 9,
+          "link": "",
+          "max": 1e+24,
+          "min": 0.0,
+          "value": 1.1459953107469104e-05
+        },
+        "powerlaw.PhoIndex": {
+          "error_status": "uncomputed",
+          "frozen": false,
+          "index": 5,
+          "link": "",
+          "max": 9.0,
+          "min": 0.0,
+          "value": 1.495963504687701
+        },
+        "powerlaw.norm": {
+          "frozen": true,
+          "index": 6,
+          "link": "",
+          "max": 1e+24,
+          "min": 0.0,
+          "value": 1.0
+        }
+      },
+      "per_group": [
+        {
+          "cflux": {
+            "Emax": 4.0,
+            "Emin": 0.5,
+            "lg10Flux": -9.500360864950482
+          },
+          "energy_range": {
+            "emax": 4.0,
+            "emin": 0.5
+          },
+          "flux_abs": {
+            "energy_range_keV": [
+              0.5,
+              4.0
+            ],
+            "erg_cm2_s": 3.107591142845138e-10,
+            "photons_cm2_s": 0.13500166258721144
+          },
+          "flux_unabs": {
+            "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+            "energy_range_keV": [
+              0.5,
+              4.0
+            ],
+            "erg_cm2_s": 3.159651144648495e-10,
+            "error_hi": null,
+            "error_lo": null,
+            "error_status": "uncomputed",
+            "frame": "observer"
+          },
+          "group_index": 1,
+          "instrument": "WXT",
+          "member_spectra": [
+            "unknown:WXT:t100"
+          ],
+          "model": "TBabs*cflux(powerlaw + gaussian)",
+          "parameters": {
+            "TBabs.nH": {
+              "frozen": true,
+              "index": 1,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 0.0145
+            },
+            "cflux.Emax": {
+              "frozen": true,
+              "index": 3,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 4.0
+            },
+            "cflux.Emin": {
+              "frozen": true,
+              "index": 2,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 0.5
+            },
+            "cflux.lg10Flux": {
+              "error_status": "uncomputed",
+              "frozen": false,
+              "index": 4,
+              "link": "",
+              "max": 10.0,
+              "min": -20.0,
+              "value": -9.500360864950482
+            },
+            "gaussian.LineE": {
+              "frozen": true,
+              "index": 7,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 1.0
+            },
+            "gaussian.Sigma": {
+              "frozen": true,
+              "index": 8,
+              "link": "",
+              "max": 20.0,
+              "min": 0.0,
+              "value": 0.1
+            },
+            "gaussian.norm": {
+              "error_status": "uncomputed",
+              "frozen": false,
+              "index": 9,
+              "link": "",
+              "max": 1e+24,
+              "min": 0.0,
+              "value": 1.1459953107469104e-05
+            },
+            "powerlaw.PhoIndex": {
+              "error_status": "uncomputed",
+              "frozen": false,
+              "index": 5,
+              "link": "",
+              "max": 9.0,
+              "min": 0.0,
+              "value": 1.495963504687701
+            },
+            "powerlaw.norm": {
+              "frozen": true,
+              "index": 6,
+              "link": "",
+              "max": 1e+24,
+              "min": 0.0,
+              "value": 1.0
+            }
+          },
+          "spectrum_indices": [
+            1
+          ]
+        }
+      ],
+      "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_powerlaw_gauss_redshiftFalse_groupmin1.png",
+      "plot_fits": [
+        "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_powerlaw_gauss_redshiftFalse_groupmin1.png"
+      ],
+      "poisson_flags": [
+        {
+          "background_is_poisson": true,
+          "has_background": true,
+          "source_is_poisson": true
+        }
+      ],
+      "rate": {
+        "error": 0.03371059613259159,
+        "value": 0.14676022484539214
+      },
+      "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/continuum_line/unknown_WXT_t100_WXT_fit.txt",
+      "shared_absorption_only": false,
+      "statistics": {
+        "dof": 17,
+        "method": "cstat",
+        "null_hypothesis_probability": 0.2012858735,
+        "reduced": 1.543853762532034,
+        "value": 26.24551396304458
+      },
+      "text": "Model: TBabs*cflux(powerlaw + gaussian)\nTBabs.nH: 0.0145 (fixed)\ncflux.Emin: 0.5000 (fixed)\ncflux.Emax: 4.0000 (fixed)\ncflux.lg10Flux: -9.5004 (profile error not computed)\npowerlaw.PhoIndex: 1.4960 (profile error not computed)\npowerlaw.norm: 1.0000 (fixed)\ngaussian.LineE: 1.0000 (fixed)\ngaussian.Sigma: 0.1000 (fixed)\ngaussian.norm: 0.0000 (profile error not computed)\nAbsorbed Flux (0.5-4.0 keV): 3.1076e-10 erg/cm²/s\nAbsorbed Photon Flux (0.5-4.0 keV): 1.3500e-01 photons/cm²/s\nRate: 0.1468 ± 0.0337 cts/s\nExposure: 136.5 s\nConversion factor: 2.1529e-09 erg/cm²/s per cts/s\nTotal counts: 20.03 counts\nStat/dof: cstat=26.25/17=1.54\nNull hypothesis probability: 0.2013",
+      "warnings": [],
+      "xspec_settings": {
+        "abundance": "wilm",
+        "apec_root": "XSPEC default AtomDB version",
+        "calculate_errors": false,
+        "cross_section": "vern",
+        "error_command": null,
+        "error_delta_stat": 1.0,
+        "freeze_galactic_nh": true,
+        "frozen_parameters": {
+          "gaussian.LineE": 1.0,
+          "gaussian.Sigma": 0.1
+        },
+        "galactic_nh_1e22": 0.0145,
+        "intrinsic_nh_mode": "free",
+        "profile_confidence": 0.682689492137,
+        "profile_error_kind": "single_parameter_profile",
+        "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+        "profile_errors_succeeded": false,
+        "profile_sigma": 1.0,
+        "redshift_absorbers": [
+          0.0
+        ],
+        "requested_statistic": "cstat"
+      }
+    },
+    "line": {
+      "channel_count": 20,
+      "channel_count_definition": "XSPEC noticed grouped fit bins (dof + independent free parameters)",
+      "conversion": {
+        "counts": 20.02544790796029,
+        "erg_per_count": 5.445263215383903e-10,
+        "exposure_s": 136.45010375976562,
+        "total_counts": 20.02544790796029
+      },
+      "data_groups": [
+        {
+          "energy_range": {
+            "emax": 4.0,
+            "emin": 0.5
+          },
+          "group_index": 1,
+          "instrument": "WXT",
+          "spectrum_indices": [
+            1
+          ],
+          "spectrum_keys": [
+            "unknown:WXT:t100"
+          ]
+        }
+      ],
+      "effective_statistic": "wstat",
+      "effective_statistic_definition": "sum of per-spectrum statistics; cstat without background, wstat with Poisson background",
+      "effective_statistic_verified": true,
+      "effective_statistics_per_spectrum": [
+        "wstat"
+      ],
+      "energy_range": {
+        "emax": 4.0,
+        "emin": 0.5
+      },
+      "energy_ranges": {
+        "unknown:WXT:t100": {
+          "emax": 4.0,
+          "emin": 0.5
+        }
+      },
+      "error_parameters": [],
+      "fit_products": {
+        "plots": [
+          "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_gauss_redshiftFalse_groupmin1.png"
+        ],
+        "replay_cwd": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line",
+        "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_fit.txt",
+        "result_json": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_fit.json",
+        "xcm": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_fit.xcm",
+        "xspec_log": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_fit.log"
+      },
+      "flux_abs": {
+        "energy_range_keV": [
+          0.5,
+          4.0
+        ],
+        "erg_cm2_s": 7.791365461386995e-11,
+        "photons_cm2_s": 0.048597967054146186
+      },
+      "flux_band_keV": [
+        0.5,
+        4.0
+      ],
+      "flux_unabs": {
+        "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+        "energy_range_keV": [
+          0.5,
+          4.0
+        ],
+        "erg_cm2_s": 7.991480538320847e-11,
+        "error_hi": null,
+        "error_lo": null,
+        "error_status": "uncomputed",
+        "frame": "observer"
+      },
+      "free_parameter_count": 1,
+      "free_parameter_count_definition": "thawed unlinked source/calibration parameters; profiled background rates excluded",
+      "group_min": 1,
+      "group_mins": {
+        "unknown:WXT:t100": 1
+      },
+      "information_criterion_kind": "profile_likelihood_score",
+      "input_files": [
+        {
+          "arf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48s1.arf",
+          "background_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_bkg_spec.pha",
+          "detector": "WXT",
+          "group_min": 1,
+          "grouped_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/prepared/unknown_obsid/WXT/t100/grouped_g1.pha",
+          "instrument": "WXT",
+          "module": null,
+          "obsid": "unknown",
+          "rmf": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48.rmf",
+          "source_id": "t100",
+          "source_pha": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_src_spec.pha"
+        }
+      ],
+      "model": "TBabs*cflux*gaussian",
+      "noticed_channel_count": 20,
+      "parameters": {
+        "TBabs.nH": {
+          "frozen": true,
+          "index": 1,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 0.0145
+        },
+        "cflux.Emax": {
+          "frozen": true,
+          "index": 3,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 4.0
+        },
+        "cflux.Emin": {
+          "frozen": true,
+          "index": 2,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 0.5
+        },
+        "cflux.lg10Flux": {
+          "error_status": "uncomputed",
+          "frozen": false,
+          "index": 4,
+          "link": "",
+          "max": 10.0,
+          "min": -20.0,
+          "value": -10.097372753845244
+        },
+        "gaussian.LineE": {
+          "frozen": true,
+          "index": 5,
+          "link": "",
+          "max": 1000000.0,
+          "min": 0.0,
+          "value": 1.0
+        },
+        "gaussian.Sigma": {
+          "frozen": true,
+          "index": 6,
+          "link": "",
+          "max": 20.0,
+          "min": 0.0,
+          "value": 0.1
+        },
+        "gaussian.norm": {
+          "frozen": true,
+          "index": 7,
+          "link": "",
+          "max": 1e+24,
+          "min": 0.0,
+          "value": 1.0
+        }
+      },
+      "per_group": [
+        {
+          "cflux": {
+            "Emax": 4.0,
+            "Emin": 0.5,
+            "lg10Flux": -10.097372753845244
+          },
+          "energy_range": {
+            "emax": 4.0,
+            "emin": 0.5
+          },
+          "flux_abs": {
+            "energy_range_keV": [
+              0.5,
+              4.0
+            ],
+            "erg_cm2_s": 7.791365461386995e-11,
+            "photons_cm2_s": 0.048597967054146186
+          },
+          "flux_unabs": {
+            "definition": "flux of the additive spectrum enclosed by cflux; absorption outside cflux removed",
+            "energy_range_keV": [
+              0.5,
+              4.0
+            ],
+            "erg_cm2_s": 7.991480538320847e-11,
+            "error_hi": null,
+            "error_lo": null,
+            "error_status": "uncomputed",
+            "frame": "observer"
+          },
+          "group_index": 1,
+          "instrument": "WXT",
+          "member_spectra": [
+            "unknown:WXT:t100"
+          ],
+          "model": "TBabs*cflux*gaussian",
+          "parameters": {
+            "TBabs.nH": {
+              "frozen": true,
+              "index": 1,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 0.0145
+            },
+            "cflux.Emax": {
+              "frozen": true,
+              "index": 3,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 4.0
+            },
+            "cflux.Emin": {
+              "frozen": true,
+              "index": 2,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 0.5
+            },
+            "cflux.lg10Flux": {
+              "error_status": "uncomputed",
+              "frozen": false,
+              "index": 4,
+              "link": "",
+              "max": 10.0,
+              "min": -20.0,
+              "value": -10.097372753845244
+            },
+            "gaussian.LineE": {
+              "frozen": true,
+              "index": 5,
+              "link": "",
+              "max": 1000000.0,
+              "min": 0.0,
+              "value": 1.0
+            },
+            "gaussian.Sigma": {
+              "frozen": true,
+              "index": 6,
+              "link": "",
+              "max": 20.0,
+              "min": 0.0,
+              "value": 0.1
+            },
+            "gaussian.norm": {
+              "frozen": true,
+              "index": 7,
+              "link": "",
+              "max": 1e+24,
+              "min": 0.0,
+              "value": 1.0
+            }
+          },
+          "spectrum_indices": [
+            1
+          ]
+        }
+      ],
+      "plot_fit": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_gauss_redshiftFalse_groupmin1.png",
+      "plot_fits": [
+        "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_ldata_eeufspec_delchi_tbabs_cflux_gauss_redshiftFalse_groupmin1.png"
+      ],
+      "poisson_flags": [
+        {
+          "background_is_poisson": true,
+          "has_background": true,
+          "source_is_poisson": true
+        }
+      ],
+      "rate": {
+        "error": 0.03371059613259159,
+        "value": 0.14676022484539214
+      },
+      "report_txt": "/home/xinxiang/research/jinwu/artifacts/ta_validation/cflux_scope_fix_20261017/line/unknown_WXT_t100_WXT_fit.txt",
+      "shared_absorption_only": false,
+      "statistics": {
+        "dof": 19,
+        "method": "cstat",
+        "null_hypothesis_probability": 0.1141367636,
+        "reduced": 2.33162496389674,
+        "value": 44.300874314038055
+      },
+      "text": "Model: TBabs*cflux*gaussian\nTBabs.nH: 0.0145 (fixed)\ncflux.Emin: 0.5000 (fixed)\ncflux.Emax: 4.0000 (fixed)\ncflux.lg10Flux: -10.0974 (profile error not computed)\ngaussian.LineE: 1.0000 (fixed)\ngaussian.Sigma: 0.1000 (fixed)\ngaussian.norm: 1.0000 (fixed)\nAbsorbed Flux (0.5-4.0 keV): 7.7914e-11 erg/cm²/s\nAbsorbed Photon Flux (0.5-4.0 keV): 4.8598e-02 photons/cm²/s\nRate: 0.1468 ± 0.0337 cts/s\nExposure: 136.5 s\nConversion factor: 5.4453e-10 erg/cm²/s per cts/s\nTotal counts: 20.03 counts\nStat/dof: cstat=44.30/19=2.33\nNull hypothesis probability: 0.1141",
+      "warnings": [],
+      "xspec_settings": {
+        "abundance": "wilm",
+        "apec_root": "XSPEC default AtomDB version",
+        "calculate_errors": false,
+        "cross_section": "vern",
+        "error_command": null,
+        "error_delta_stat": 1.0,
+        "freeze_galactic_nh": true,
+        "frozen_parameters": {
+          "gaussian.LineE": 1.0,
+          "gaussian.Sigma": 0.1
+        },
+        "galactic_nh_1e22": 0.0145,
+        "intrinsic_nh_mode": "free",
+        "profile_confidence": 0.682689492137,
+        "profile_error_kind": "single_parameter_profile",
+        "profile_error_label": "single-parameter profile 1 sigma (68.3%)",
+        "profile_errors_succeeded": false,
+        "profile_sigma": 1.0,
+        "redshift_absorbers": [
+          0.0
+        ],
+        "requested_statistic": "cstat"
+      }
+    }
+  },
+  "environment": {
+    "CALDB": null,
+    "CALDBCONFIG": null,
+    "HEADAS": "/home/xinxiang/miniconda3/envs/hea/heasoft",
+    "heasoft_version": "26Sep2025_V6.36",
+    "jinwu_version": "0.2.3",
+    "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+    "python_executable": "/home/xinxiang/miniconda3/envs/hea/bin/python",
+    "python_version": "3.12.15",
+    "xspec_version": [
+      "2.1.5",
+      "12.15.1"
+    ]
+  },
+  "input_reference": "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/model_comparison.json",
+  "input_sha256": {
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/fit/t100/prepared/unknown_obsid/WXT/t100/grouped_g1.pha": "4bd130d326bb055bb7aaf7d28e78ada491c4c407b874f883cae3a90cc545469e",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_bkg_spec.pha": "91ff5e12acac46db6ac719c6c29fb2f7fa5b4d44e45532b26d291168574f854d",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514_wxtCMOS48_EP260119a_t100_full_src_spec.pha": "1219acf680730c4056953244d06f7854032c9044be972a7b4fe8967a7863c5d1",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48.rmf": "f4eb7285a9518bf10a670ff374b0ff1b5571cf7f6f9fcedacf3c841927b7fa87",
+    "/home/xinxiang/research/jinwu/artifacts/ta_validation/ta_ep260119a_20261017/wxt/obs000/spectra/t100/ep11900560514wxt48s1.arf": "125ab724f4d6fb7bdfa8f2bcb1f5ed8a6e5fb1384842993b34e4eca41da02e87"
+  },
+  "limitations": [
+    "Trial source models validate fitting and export, not source classification.",
+    "Profile errors disabled; no shape-constraint or line-detection claim."
+  ],
+  "original_inputs_unchanged": true,
+  "rejected_expressions": {
+    "cflux*powerlaw+gauss": "Enclose the complete source sum in cflux*(source + source)",
+    "cflux*tbabs*powerlaw": "Use absorption*cflux*(source [+ source ...]); internal absorption and cflux applied to only part of the source are not supported",
+    "tbabs*(powerlaw+cflux*gauss)": "Use absorption*cflux*(source [+ source ...]); internal absorption and cflux applied to only part of the source are not supported"
+  },
+  "source_sha256": "28b8782896dd1e2fbe4e26175ca34c3f88e277e7fa017c097aaf64e61181e76c"
+}

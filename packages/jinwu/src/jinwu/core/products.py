@@ -436,6 +436,7 @@ def plot_net_lightcurve(
     timezero_obj: Any | None = None,
     formats: Sequence[str] = ("png", "svg"),
     dpi: int = 300,
+    figsize: tuple[float, float] | None = None,
 ) -> tuple[Path, ...]:
     """Plot source, scaled background, and net count-rate curves.
 
@@ -444,14 +445,16 @@ def plot_net_lightcurve(
     ``timezero_obj`` may be the matching :class:`astropy.time.Time` object and
     is used only to render a UTC axis label.  The numerical light-curve
     products always retain their native mission-time values.
+    ``figsize`` defaults to the active :func:`paper_style` canvas, else (10, 7).
     """
 
     import matplotlib.pyplot as plt
 
-    from .plotstyle import PALETTE, apply_style, save_figure
+    from .plotstyle import PALETTE, apply_style, paper_figsize, save_figure
 
     apply_style()
-    fig, (top, bottom) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    figsize = paper_figsize((10, 7)) if figsize is None else tuple(figsize)
+    fig, (top, bottom) = plt.subplots(2, 1, figsize=figsize, sharex=True)
     mission_time = curve.time + curve.timezero
     if timezero is None:
         plot_time = mission_time
@@ -639,8 +642,12 @@ def save_flux_curve(
     formats: Sequence[str] = ("png", "svg"),
     dpi: int = 300,
     title: str = "Flux curve",
+    figsize: tuple[float, float] | None = None,
 ) -> dict[str, Path]:
-    """Save machine-readable points and science/quicklook plots."""
+    """Save machine-readable points and science/quicklook plots.
+
+    ``figsize`` defaults to the active :func:`paper_style` canvas, else (10, 8).
+    """
 
     import matplotlib.pyplot as plt
 
@@ -685,10 +692,13 @@ def save_flux_curve(
     if not formats:
         return outputs
 
-    from .plotstyle import PALETTE, apply_style, save_figure
+    from .plotstyle import PALETTE, apply_style, paper_figsize, save_figure
 
     apply_style()
-    fig, (science_ax, quicklook_ax) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    figsize = paper_figsize((10, 8)) if figsize is None else tuple(figsize)
+    fig, (science_ax, quicklook_ax) = plt.subplots(
+        2, 1, figsize=figsize, sharex=True,
+    )
     science = result.science_points or result.aggregate_points
     if science:
         x = np.asarray([point.time for point in science])

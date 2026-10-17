@@ -333,9 +333,11 @@ def test_astropy_fit_reports_evaluation_limit_as_failure():
 @pytest.mark.parametrize('delta', [1., 3., 2.706])
 def test_xspec_error_delta_is_always_a_real_literal(delta):
     from jinwu.core.fit import _prepared_error_parameters
-    model = SimpleNamespace(componentNames=[], powerlaw=SimpleNamespace(
-        PhoIndex=SimpleNamespace(index=1), norm=SimpleNamespace(index=2)))
-    command = _prepared_error_parameters(model, 'powerlaw', 'zero', delta_stat=delta)
+    model = SimpleNamespace(componentNames=['powerlaw'], powerlaw=SimpleNamespace(
+        parameterNames=['PhoIndex', 'norm'],
+        PhoIndex=SimpleNamespace(index=1, frozen=False, link=''),
+        norm=SimpleNamespace(index=2, frozen=False, link='')))
+    command = _prepared_error_parameters(model, 'powerlaw', intrinsic_nh_mode='zero', delta_stat=delta)
     token = command.split()[0]
     assert '.' in token
     assert float(token) == delta

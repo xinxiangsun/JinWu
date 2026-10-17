@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .plotstyle import PALETTE, apply_style, format_log_axis, save_figure
+from .plotstyle import PALETTE, apply_style, format_log_axis, paper_figsize, save_figure
 
 """在运行期尝试导入实际数据类；若失败，则使用哑类以便 isinstance 不抛错。"""
 try:  # runtime import; avoids typing.Any isinstance crash
@@ -67,10 +67,12 @@ __all__ = [
 # 内部小工具
 # ----------------------------
 
-def _ensure_axes(ax: Optional[Axes], figsize=(7.5, 4.5)) -> Axes:
+def _ensure_axes(ax: Optional[Axes], figsize=None) -> Axes:
     if ax is not None:
         return ax
-    fig, ax = plt.subplots(figsize=figsize)
+    if figsize is None:
+        figsize = (7.5, 4.5)
+    fig, ax = plt.subplots(figsize=paper_figsize(figsize))
     return ax
 
 
@@ -996,7 +998,8 @@ def plot_lightcurve(
                    and (multiband is True or multiband == "auto"))
     if split_bands:
         nb = val_arr.shape[1]
-        fig, axes = plt.subplots(nb, 1, sharex=True, figsize=(8.0, 1.9 * nb), constrained_layout=True)
+        figsize = paper_figsize((8.0, 1.9 * nb))
+        fig, axes = plt.subplots(nb, 1, sharex=True, figsize=figsize, constrained_layout=True)
         axes_to_return: Union[List[Axes], Axes] = list(axes)
     else:
         axes_to_return = _ensure_axes(ax)
@@ -1470,11 +1473,11 @@ def plot_event_txx(
     if forpaper:
         # Keep the default physical plotting range and products unchanged; this
         # is only a publication-oriented layout of the same diagnostic data.
-        paper_figsize = (11.0, 7.0) if figsize == (10.5, 8.2) else figsize
+        plot_figsize = (11.0, 7.0) if figsize == (10.5, 8.2) else figsize
         fig, (ax_mid, ax_blocks) = plt.subplots(
             2,
             1,
-            figsize=paper_figsize,
+            figsize=plot_figsize,
             sharex=True,
             constrained_layout=True,
             gridspec_kw={"height_ratios": [3.0, 0.9]},
@@ -1788,6 +1791,7 @@ def plotfit(
     output_format: str = "png",
     dpi: int = 300,
     density: Optional[int] = None,
+    figsize: Optional[Tuple[float, float]] = None,
     **kwargs
 ) -> Tuple[Optional[Path], Optional[Figure]]:
     """
@@ -1807,6 +1811,7 @@ def plotfit(
         output_format: 输出格式，'png'、'jpg'等
         dpi: 输出分辨率（默认300）
         density: dpi 的旧别名，仅为兼容保留；与 dpi 同给时以 dpi 为准。
+        figsize: 新图尺寸；缺省采用 paper_style 画布，否则按面板数自动计算。
         **kwargs: 其他绘图参数（title/xlabel/ylabel/label）
 
     返回:
@@ -1886,7 +1891,9 @@ def plotfit(
     n_panels = len(panels)
     height_ratios = {1: (3,), 2: (3, 2), 3: (3, 3, 2)}
     ratios = height_ratios.get(n_panels, tuple([3] * (n_panels - 1) + [2]))
-    fig = plt.figure(figsize=(11, 2.9 * n_panels + 0.9))
+    if figsize is None:
+        figsize = paper_figsize((11, 2.9 * n_panels + 0.9))
+    fig = plt.figure(figsize=figsize)
     grid = fig.add_gridspec(n_panels, 1, height_ratios=ratios, hspace=0.1)
     axes = []
     for index in range(n_panels):
@@ -1982,7 +1989,17 @@ def plotfit(
         if redshift:
             title += f" (z={redshift})"
         try:
-            title += f"   {xspec.Fit.statMethod}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof:g}"
+            statistic_label = xspec.Fit.statMethod
+            if statistic_label.lower() == "cstat":
+                backgrounds = []
+                for spectrum_index in range(1, xspec.AllData.nSpectra + 1):
+                    try:
+                        backgrounds.append(bool(xspec.AllData(spectrum_index).background.isPoisson))
+                    except Exception:
+                        backgrounds.append(False)
+                if any(backgrounds):
+                    statistic_label = "W-stat" if all(backgrounds) else "C/W-stat"
+            title += f"   {statistic_label}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof:g}"
         except Exception:
             title += f"   group min {group_min}"
 

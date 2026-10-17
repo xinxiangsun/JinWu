@@ -1,0 +1,153 @@
+{
+  "source": "User-supplied 13-row table in Codex chat, 2026-10-08",
+  "csv_sha256": "670a23ffd0076e85c5ea2c2714e67b7f46f0e2a6e95f05d875cd6d39d1672374",
+  "magnitude_system": "not specified; no AB/Vega conversion",
+  "galactic_extinction_correction_applied": false,
+  "magnitude_offsets_applied": false,
+  "time_frame": "observer; midpoint minus supplied T0, hours",
+  "axis": "post-trigger logarithmic main axis; pre-trigger linear inset",
+  "time_windows_hr": [
+    [
+      -46.1,
+      -43.1
+    ],
+    [
+      1.28,
+      42
+    ]
+  ],
+  "vt_limits": "coincident complementary half-diamonds; significance unspecified",
+  "telescope_display": "direct labels; Liverpool abbreviated LT in plot, original names retained",
+  "error_confidence": "not specified in supplied table",
+  "rows": [
+    {
+      "time_mid_minus_t0_hr": -45.08,
+      "telescope": "WFST",
+      "filter": "g",
+      "magnitude": 23.15,
+      "mag_error": null,
+      "measurement": "upper_limit",
+      "limit_sigma": 3.0
+    },
+    {
+      "time_mid_minus_t0_hr": -44.15,
+      "telescope": "WFST",
+      "filter": "r",
+      "magnitude": 22.4,
+      "mag_error": null,
+      "measurement": "upper_limit",
+      "limit_sigma": 3.0
+    },
+    {
+      "time_mid_minus_t0_hr": 1.66,
+      "telescope": "SVOM/VT",
+      "filter": "VT_B",
+      "magnitude": 23.5,
+      "mag_error": null,
+      "measurement": "upper_limit",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 1.66,
+      "telescope": "SVOM/VT",
+      "filter": "VT_R",
+      "magnitude": 23.5,
+      "mag_error": null,
+      "measurement": "upper_limit",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 2.89,
+      "telescope": "WFST",
+      "filter": "r",
+      "magnitude": 20.42,
+      "mag_error": 0.05,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 3.68,
+      "telescope": "WFST",
+      "filter": "u",
+      "magnitude": 19.76,
+      "mag_error": 0.05,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 5.56,
+      "telescope": "LT",
+      "filter": "r",
+      "magnitude": 20.22,
+      "mag_error": 0.03,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 5.85,
+      "telescope": "LT",
+      "filter": "i",
+      "magnitude": 20.78,
+      "mag_error": 0.05,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 6.11,
+      "telescope": "LT",
+      "filter": "z",
+      "magnitude": 20.59,
+      "mag_error": 0.07,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 6.75,
+      "telescope": "NOT",
+      "filter": "r",
+      "magnitude": 19.83,
+      "mag_error": 0.03,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 21.35,
+      "telescope": "LOT",
+      "filter": "r",
+      "magnitude": 19.096,
+      "mag_error": 0.039,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 27.8,
+      "telescope": "Liverpool",
+      "filter": "sdss-g",
+      "magnitude": 18.53,
+      "mag_error": 0.07,
+      "measurement": "detection",
+      "limit_sigma": null
+    },
+    {
+      "time_mid_minus_t0_hr": 27.9,
+      "telescope": "Liverpool",
+      "filter": "sdss-r",
+      "magnitude": 18.73,
+      "mag_error": 0.07,
+      "measurement": "detection",
+      "limit_sigma": null
+    }
+  ],
+  "counts": {
+    "rows": 13,
+    "detections": 9,
+    "limits": 4
+  },
+  "font": "Times New Roman",
+  "outputs": {
+    "png": "/home/xinxiang/research/jinwu/artifacts/optical_table_20261008/optical_lightcurve_v2.png",
+    "pdf": "/home/xinxiang/research/jinwu/artifacts/optical_table_20261008/optical_lightcurve_v2.pdf",
+    "svg": "/home/xinxiang/research/jinwu/artifacts/optical_table_20261008/optical_lightcurve_v2.svg",
+    "preview": "/home/xinxiang/research/jinwu/artifacts/optical_table_20261008/optical_lightcurve_v2_preview.png"
+  }
+}
