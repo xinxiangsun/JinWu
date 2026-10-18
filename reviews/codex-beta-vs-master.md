@@ -2241,3 +2241,11 @@ SNR 移植核心及其冻结来源未变；R150 大亏损优化器无法收敛�
 
 - 修改/文档/元数据及最终自查署名：Codex `/root`；harness=Codex desktop；运行环境精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T22:06:06+08:00；范围=本轮收尾、开放项、0.2.4、CI/Sphinx及构建安装执行；科学源码保持已验快照，新元数据由本代理自查，不称独立第二 reviewer。
 - 只读发行动作核查署名：Codex `/root/wxt_cache_design`；harness=Codex desktop / collaboration；精确模型/推理档位=未披露/未披露；原记录时间=2026-10-18T18:04:44+08:00；范围=版本/构建/工作流清单及打包脚本准备；原件=`reviews/evidence/release-pipeline-coverage-20261018/packaging-readonly.md`。最终打包脚本由 `/root` 接手执行，结果不冒称为该子代理的独立验收。
+
+
+**最终打包及本地合并核验（2026-10-18T22:15:36+08:00）**：五个 Python 包已构建 0.2.4 wheel+sdist 共10件；METADATA/PKG-INFO、namespace及打包源码逐字节核对、twine check通过。无system-site-packages的全新venv实际安装这五个wheel及依赖，pip check无依赖冲突，四仪器entry points、core/GW运行版本0.2.4及导入路径均来自该venv。三个既有publish.yml门禁文件 **25 passed**。构建前后生产源码哈希不变；真实科学数据并未在这个新环境重新分析。完整环境清单、产物SHA和命令见`packaging-validation.json`、`wheel-environment.json`、`wheel-gate.log`及`dist/`。初次汇总因第三方导入警告混入JSON日志而失败；原失败JSON/日志保留，改为独立结果文件后重跑入口检查，25项测试本身未失败或删减。
+
+修复与版本更新提交 `335123006f3bd43c971b373db48e29152ba1b1fb`，已从`codex/pipeline-coverage` fast-forward合入本地`master`；本节最终记录单独提交后推送`origin/master`，不创建tag或触发PyPI发行。远端推送及CI实际结果以同任务Obsidian最新状态为准，未预先声称远端成功。严格Sphinx的5条既有警告仍保持开放。
+
+- 最终构建/安装/元数据与合并自查署名：Codex `/root`；harness=Codex desktop；精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T22:15:36+08:00；范围=上述真实打包、干净venv、25项门禁、最终哈希及本地合并核验；结果如上，无Rust构建或PyPI上传。
+- 独立收尾只读核对署名：Codex `/root/gbm_fix_review`；harness=Codex collaboration；精确模型/推理档位=未披露/未披露；本次归档时间=2026-10-18T22:15:36+08:00，历史实际核对时间不详；范围=版本同步前6文件变更范围与GBM/WXT已验SHA，指出deviance/残差门禁文案混淆和版本元数据遗漏；该只读核对没有新生产阻断发现。后续文案/元数据由`/root`修正并自查，不称为该代理完成了全部20文件的新独立复审。
