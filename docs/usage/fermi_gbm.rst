@@ -44,15 +44,30 @@ Stages
 * **download** — fetch TTE/CSPEC only for the selected detectors, with
   HTTP-range resume; the download range automatically covers the largest
   background window.  Local-first: nothing is fetched unless
-  ``--download`` is given.
+  ``--download`` is given.  File presence alone is insufficient: merged TTE
+  GTIs must cover the required source and background windows.  Missing coverage
+  triggers a download when enabled, then another check; remaining gaps stop
+  the run with ``needs_review`` and are listed in ``data_manifest.json``.
+  Coverage also respects the existing GDT event-merge policy: a file that
+  only fills an earlier file's internal gap cannot be accepted if that merge
+  would discard its photons. Supply a complete replacement product in this case.
 * **windows** — source window (from the covered segment or explicit
   ``--window``) plus tight polynomial background windows before and
   after the burst (10 s guard, 300–1800 s per side, truncated by data
-  coverage).
+  coverage).  GTIs are checked again for the chosen windows, without requiring
+  data in unused guard intervals.  Resume fingerprints include the selected
+  TTE/CSPEC files, so changed or removed inputs cannot reuse a completed gate.
 * **lightcurve** — binned lightcurves per detector in the analysis band
-  (NPZ + PNG); product failures degrade to warnings.
+  (NPZ + PNG); bins start at the selected source window and the final bin
+  stops at its end. NPZ includes exact ``time_edges`` and dead-time-corrected
+  ``exposure``; coincident photons are retained. Product failures degrade to warnings.
 * **spectra** — per-detector OGIP PHA/BAK from TTE, with an AICc-based
-  automatic choice among polynomial background orders 0–2.
+  automatic choice among polynomial background orders 0–2. Events are binned
+  before selecting the energy band, preserving same-time event multiplicity
+  in both source spectra and background training data. Exposure includes
+  dead time from all native channels, using the existing TTE/GDT settings.
+  Source exposure uses the requested interval; background bins retain the
+  time origin set by the first in-band event in the fitting span.
 * **response** — see `Response backends`_.
 * **fit** — per detector group (nai/bgo) × photon-index grid (2.0 main
   value + 1.5/2.5 sensitivity) fixed-shape power-law profile upper limits
@@ -157,15 +172,26 @@ Scientific gating
 No stage publishes a flux or an upper limit without a validated
 PHA/BAK/RSP triple; a missing gate is recorded as ``needs_review`` with
 the next-step requirement written into the report, instead of fabricating
-a non-detection.  The background model is checked with Poisson deviance
-on source-free time blocks (residual mean, trend, and 68/95% prediction
-coverage); if any check fails the report keeps the conditional profile
-values but marks ``analysis_status`` as ``needs_review``.  The BAK
-``EXPOSURE`` must match the source PHA's actual GTI exposure (up to
-floating-point rounding); short windows only change the GTI overlap
-record and never rescale the full source spectrum.  ``sqrt(null_statistic)``
+a non-detection. Candidate background models use Poisson deviance for
+held-out scoring. A separate gate checks residual mean, time trend and
+68/95% coverage in the fitted source-free windows. That gate currently uses
+``(N-mu)/sqrt(max(N,1))`` with normal-reference thresholds; its low-count
+calibration is unresolved (see :doc:`../known_issues`). If a check fails,
+the report keeps the conditional profile values but marks
+``analysis_status`` as ``needs_review``. The BAK
+``EXPOSURE`` is checked for compatibility with the source PHA exposure.
+Source exposure comes from the requested interval and raw-event dead time;
+BAK exposure retains GDT's binned live-time estimate, so their difference
+need not be only floating-point rounding. Record and inspect that difference;
+source counts are never rescaled to force agreement. ``sqrt(null_statistic)``
 is reported as a fixed-position model-significance diagnostic, and the
 conditional upper limit is only quoted below the significance threshold.
+
+Spectral extraction preserves same-time event rows in source and background bins.
+Source exposure uses the requested interval and all-channel dead time; background
+bins retain their existing event-based origin and final-bin policy. This correction
+does not validate the polynomial background, response calibration or flux limit:
+failed residual checks still require review.
 
 See also
 ~~~~~~~~~~~~

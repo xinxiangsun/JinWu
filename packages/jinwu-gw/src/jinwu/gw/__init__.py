@@ -1,5 +1,7 @@
 """Gravitational-wave localization and high-energy coverage tools."""
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .models import (
     CoverageResult,
     GWEvent,
@@ -57,4 +59,7 @@ __all__ = [
     "run_gw_pipeline",
 ]
 
-__version__ = "0.2.1"
+try:
+    __version__ = version("jinwu-gw")
+except PackageNotFoundError:
+    __version__ = "0.0.0"

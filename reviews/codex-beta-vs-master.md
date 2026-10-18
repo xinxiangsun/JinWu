@@ -1,5 +1,7 @@
 # codex/beta vs master 变更审查报告
 
+> **2026-10-18 本轮收尾**：GBM R87/同时间谱计数与曝光、WXT OGIP 缓存修复及 0.2.4 源码版本更新见 §21.24–§21.27。背景残差标定与时间趋势等仍开放；历史快照中的“未修复”“未提交”应按各节时间理解，不能代替最新交接。
+
 > **2026-09-27 实施状态**：第 1–18 节保留各轮审查的历史快照，不能作为当前未修复清单或最终验收结论。合并与发布记录见第 19–20 节；后续修复、科学方法复核和未验证范围以文末第 21 节为准。早期“所有问题均为约定/文档层面”的判断已被 R49–R58 等后续实测推翻。
 
 - 审查基线：`269587a`（codex/beta）vs `master`；9 个提交，152 文件，+26511/−8681；工作区另含 staged +4793 / unstaged +1074 / untracked 69 项（含 `jinwu-gw` 新包、`subthreshold`、`absorption`、`examples/`、`scripts/`）。
@@ -2123,3 +2125,119 @@ SNR 移植核心及其冻结来源未变；R150 大亏损优化器无法收敛�
 
 - **历史审查复核署名**：Codex 主代理 `/root`；harness＝Codex desktop；运行环境实际模型标识＝未披露；推理档位＝未披露；记录时间＝2026-10-08T15:43:24+08:00；范围＝以上其他审查记录及当前缺陷落点；结果＝表中重新确认与处置，保留旧作者署名，未虚称全仓无缺陷。
 - **修改及验收署名**：Codex 主代理 `/root`；harness＝Codex desktop；实际模型/推理档位＝未披露；记录时间＝2026-10-08T15:43:24+08:00；范围＝上述非 T90 修复、跟踪回归、文档、0.2.3 元数据与本地科学证据；结果＝上述验收。由同一代理修复与自查，无新独立 reviewer 或子代理参与。
+
+
+### 21.24 2026-10-18 GBM R87 修复与 WXT 缓存只读核查
+
+当前分支 `codex/pipeline-coverage`，基线 `6a5de4cff0df35dce483517b0a11c2ecdd20e7fe`。用户授权先修 GBM，WXT 先说明原因。本轮只修改 GBM 及相关文档，不修改 WXT 生产代码或既有观测产物。
+
+- **R87 的覆盖门禁已修复**：复用 `gti_intervals_for_paths`，检查实际源窗及显式/自动背景窗，保留 2 微秒绝对边界容差。缺文件、GTI 缺口、自动背景不能双侧夹定时，允许下载则补取并复检，仍不足返回 `needs_review`；逐探测器缺口写入 `data_manifest.json`。不要求未使用的 guard/可见性排除时段有数据。
+- 独立复审发现并修复两项恢复边界：新增输入文件也必须使缓存失效；源窗已有数据但背景不足也必须触发补下载。外部依赖同时包含旧 manifest 路径和当前扫描文件，涵盖修改、删除及新增。
+- 独立复审确认 GDT `merge(force_unique=False)` 会截掉后文件中早于已有最大事件时间的光子。门禁现在按此实际拼接规则计算有效覆盖；原始 GTI 并集完整但补洞光子会被丢弃时保守阻断，要求完整替换产品。正常按时序补齐的文件可通过。本轮不另造事件拼接/谱算法。
+- 真实运行额外发现并修复 native CSPEC `.pha/.pha.gz` 漏扫及旧光变 API 不兼容。光变改用 GDT 显式边界分箱→能道积分，保留同 TIME 多光子、全能道死时间和末个部分 bin；NPZ 保存实际 `time_edges/exposure`。谱提取和背景拟合函数的可执行 AST 与基线完全一致。
+
+**验证与证据**：`reviews/evidence/gbm-gti-20261018/validate.py`、`validation.json`、`real-validation.log`、`regression.log`、`independent-review.md`。
+
+- hea / Python 3.12.15、astro-gdt 2.2.3、astro-gdt-fermi 2.2.2、Astropy 8.0.1；7 个真实输入文件 SHA256 不变。源自 HEASARC 2024-07-16 daily，现有 `batsurvey_lmjagn` 缓存，目标 AT20G J182338-345412；源窗及两侧背景、配置、入口和路径全部记入 JSON。
+- 完整受影响准备路径 POSHIST→可见性→选探测器→下载/GTI→窗口→光变→PHA/BAK 跑通，b1/na/nb 三探测器谱和背景逐列、曝光与固定基线精确相等；旧路径仅补 `.pha` 文件发现以允许对照，未改变其科学计算。新光变对原始事件直接直方图、全能道死时间和实际末箱曝光，rtol/atol=1e-12 校验通过，图件已检查。
+- 使用真实小时 TTE 请求超出已有覆盖的窗口，旧下载阶段 `completed`，新阶段 `needs_review`。自动联网补下载和多文件恢复用受控合成 FITS/fetch 测试验证，本轮未重新下载公开数据。
+- 85 项定向/相邻回归通过、1 项无关的旧 profile-fit 测试未选取；22 条警告来自验证夹具 FITS 长注释。独立 reviewer 的 1 项 P1、2 项 P2 均已关闭。按 CI marker 运行 21 个已跟踪测试文件：430 passed、1 deselected、9 warnings；日志 `offline-ci.log`。仅在测试子进程移除本机 LHEASOFT/LHEAPERL/PERL5LIB，以匹配 CI 环境；没有修改环境配置。
+
+**新确认的独立遗留缺陷，未混入 R87 修复**：旧 GDT 谱切片按 TIME 去重。该真实样本 raw/PHA 分别为 b1=482361/482359、na=363219/363217、nb=411985/411981；差额 2/2/4 与独立按时间去重的计算完全一致。旧 PHA/BAK 与基线相等只证明本轮未改变谱算法，不能称为原始光子守恒或完整科学验收。新光变的同时间光子修复不代表谱路径也已修复。响应重建、通量/上限、FAR 和 triggered TTE 全流程不在本轮验收范围。
+
+**WXT 只读结论**：`_stage_ogip_finalize` 调 `_finalize_pha_pair` 原地补写上游 PHA 的 BACKSCAL 和 BACKFILE/RESPFILE/ANCRFILE，抽谱阶段 manifest 仍持有写头前 SHA256。现存 EP260119a `test_cleanup_20261017/ta/wxt/obs000` 的 T100/T90 源/背景四份 PHA 均不匹配抽谱缓存，且全部匹配最终阶段哈希；见 `wxt-cache-check.json`。因此恢复运行会重做本可复用的抽谱及受影响后续阶段。此证据本身不证明计数或拟合结果错误；本轮未改 WXT。建议后续让 finalization 在自己的输出副本上写头，保持上游产物稳定。
+
+- 修改/真实验收署名：Codex 主代理 `/root`；harness=Codex desktop；运行环境精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T02:40:25+08:00；范围=GBM 覆盖、缓存、文件扫描与光变兼容修复、实际数据/回归及 WXT 只读诊断；结果和证据如上。未提交、合并、推送或发布。
+- 独立 review 署名：Codex `/root/gbm_fix_review`；harness=Codex collaboration；精确模型/推理档位=未披露/未披露；最终复核时间=2026-10-18T02:39:30+08:00；范围=本轮 GBM 差异及独立 GTI/拼接/恢复反例；结果=1 P1、2 P2 修复复核通过，保留旧谱去重边界；原件=`reviews/evidence/gbm-gti-20261018/independent-review.md`。
+
+
+### 21.25 2026-10-18T02:54:08+08:00 WXT PHA 关键字写入归属与缓存修复
+
+用户明确要求保留 WXT 关键字修改，并寻找其他解决方式。本轮在 `codex/pipeline-coverage` 上修改现有 WXT 实现；先前 GBM 改动保留，未提交或推送。
+
+- 将既有 `_finalize_pha_pair` 调用提前到 T100/T90 抽谱阶段返回之前：补写背景 BACKSCAL、源谱 BACKFILE/RESPFILE/ANCRFILE，并复制响应到同目录，再记录阶段输出哈希。PHA 路径不变，抽谱输出增加 RMF/ARF；没有新增生产函数或框架。
+- `ogip_finalize` 保留原事件/PHA 计数及响应校验、结果字段，改为只读消费完整产物。BB 仍复制到自己的目录后写头，L3-only 的原始谱注册保持只读。
+- T100/T90 的配置依赖增加 `background_scaling`，覆盖 alpha_rtol/exposure_rtol。仍检查完整文件哈希，修改计数、关键字或响应继续使缓存失效。实现源码参与运行指纹，因此升级前旧缓存会保守重建一次；不手工刷新旧 manifest、不忽略科学头关键字。
+
+**验证**：入口 `reviews/evidence/wxt-cache-20261018/validate_real_wxt.py`；软件检查 `checks.json`；真实产物与诊断 `runs/20261017T184825862988Z/validation.json`；独立审查 `independent-review.md`。
+
+- hea/Python 3.12、HEASoft 6.36 / XSPEC 12.15.1；本地 EP260119a / obs11900560514 / CMOS48 的 L2 官方事件、曝光、区域及响应，12 个发现输入 SHA256 前后相等。固定时标诊断 nmc=64、seed=42，拟合能段配置0.5–4 keV，独立输出目录保留原件与既有结果；本轮未运行拟合。
+- 从头执行到 `bayesian_block_spectra`，首次14次真实 XSELECT 生成产物；14份 manifest 的输出哈希全部一致。直接 resume 执行阶段数和 XSELECT 调用数均为0，manifest 字节及mtime不变。短目录 `stop` 提前停T100再续跑，只抽取此前未完成的T90源/背景两份谱，先前11份manifest保持不变。
+- 以固定旧 HEAD `6a5de4cff0df35dce483517b0a11c2ecdd20e7fe` 模块、相同真实上游上下文，在独立 `old` 目录实际抽谱→finalize→BB。新旧 T100/T90/BB 的 CHANNEL、COUNTS、EXPOSURE、BACKSCAL、源谱链接逐项精确相同，响应逐字节相等。预期元数据差异：新/旧背景全部HISTORY条数为T100/T90 3/4、BB 4/5，少一次重复缩放记录；未改变时标、分段或拟合算法。
+- 定向WXT+通用缓存53项通过（含关键字/计数/响应篡改、容差配置变化）；按CI标记的跟踪测试430通过、1 deselected。原测试中手工重写manifest的绕行代码已移除；测试和证据继续按原Git忽略政策保存。
+
+**验收边界及外部异常**：产物和缓存检查通过，不等同于原生工具无异常。full和stop各14次XSELECT均在写出产物并完成exit交互后异常退出：各8次SIGABRT(-6)、6次SIGSEGV(-11)；old的4次均为-6，部分日志明确 `free(): invalid pointer`。既有包装器允许产物校验通过的退出清理崩溃，本轮未改此行为。长目录 `early_stop` 两次在光变生成后退出阶段90秒超时，失败JSON/日志已留存；改用短目录后上述验证通过。长路径是相关线索，未据此声称已定位底层根因。全量Sphinx严格构建有5条未改文件的警告（timescale docstring 1、Swift autodoc/pandas mock导入4）；新WXT页面已渲染，无本页诊断，不宣称全量构建通过。未验收新拟合、通量、slew响应或完整仪器科学结论。
+
+- 修改及自查署名：Codex `/root`；harness=Codex desktop；精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T02:54:08+08:00；范围=WXT最小修复、回归/CI、文档、证据复核及留档；结果如上，不称为第二位独立reviewer。
+- 方案核对与真实验证署名：Codex `/root/wxt_cache_design`；harness=Codex desktop / collaboration；精确模型/推理档位=未披露/未披露；真实验证完成时间=2026-10-18T02:52:54+08:00；范围=阶段归属与依赖核对、真实XSELECT/恢复/旧新逐项对照及退出异常留证；结果和输入哈希见上述JSON。
+- 独立review署名：Codex `/root/gbm_fix_review`；harness=Codex collaboration；精确模型/推理档位=未披露/未披露；审查/补核时间=2026-10-18T02:48:29+08:00 / 2026-10-18T02:49:11+08:00；范围=WXT差异、BB复用、L3-only与本地回归；结果=无可操作发现；独立47项及新增容差定向7项通过，非独立重跑全部CI或真实数据。
+
+
+### 21.26 2026-10-18T17:23:35+08:00 GBM 谱提取保留同 TIME 事件与曝光一致性修复
+
+用户明确授权修复§21.24记录的谱计数遗留。沿用`codex/pipeline-coverage`，保留GBM R87及WXT既有修改。本轮冻结修复前工作区模块`baseline_pipeline.py`（SHA256=`a31f1fefc234e5d842496e12c4bc7c8bc7af004a124ebce1531f2446cec4a05c`，含R87修复），并与新模块`156a7332706f21d916f1d89925407dcaa2a1786fdc848721d0dbcde603e9feea`在相同真实输入/窗口/参数下实际比较；没有用旧HEAD代替该基线。
+
+- 旧源谱调用`PhotonList.to_pha`→`EventList.merge`默认按TIME保留首行；背景的事件级能量/时间切片也触发相同去重。新源谱复用GDT`to_phaii(bin_by_edges, [start,stop])`再由**已分箱**`Phaii.to_pha`选择能段；背景先全能道分箱再在PHAII选择能段，两者保留单文件同TIME同/异PHA的原始多重性。未修改安装的GDT、没有新生产函数或全局patch。
+- 曝光修正与计数修复明确分列：源曝光使用请求源窗宽度，按TTE/GDT既有normal/overflow死时间参数扣除**全能道**事件死时间，替代旧“先筛能量再算死时间、以事件首末定窗”；背景同样按全能道计算死时间。它们不是保持旧EXPOSURE逐字节不变的迁移，差异见下表。
+- 背景网格仍按拟合跨度内带内事件首末定义；使用EBOUNDS严格相交`E_MAX>lo、E_MIN<hi`和无去重`channel_slice/time_slice`确定该原点，避开稀疏通道的旧GDT energy_slice索引问题。真实三det网格边界逐位相等；背景阶数选择/残差与BAK积分函数AST和基线一致。单连续源窗限制前移，签名/返回结构不变；未重写多文件拼接、GTI门禁或源模型。
+
+**真实验证**：HEASARC 2024-07-16 daily本地`batsurvey_lmjagn`缓存，目标AT20G J182338-345412，b1/na/nb。hea/Python3.12.15、astro-gdt2.2.3/fermi2.2.2、Astropy8.0.1、NumPy2.4.6；NaI=8–900 keV，BGO=200–40000 keV，具体绝对Fermi-MET源/背景窗与全部配置在JSON。POSHIST→探测器选择→下载/GTI门禁→窗口→光变→PHA/BAK于独立目录完成，7个原始文件哈希不变。
+
+| 探测器 | 旧源计数 | 新源计数 | 恢复事件行 | 旧曝光(s) | 新曝光(s) |
+|---|---:|---:|---:|---:|---:|
+| b1 | 482359 | 482361 | 2 | 405.483047168 | 405.092012172 |
+| na | 363217 | 363219 | 2 | 405.794102398 | 405.590301772 |
+| nb | 411981 | 411985 | 4 | 405.665214100 | 405.389681572 |
+
+- 新PHA全部128道与独立原始FITS直方图精确一致，零计数/QUALITY及请求源GTI核对通过。源曝光与原始全能道及overflow直接计算rtol=0、atol=1e-9 s内一致；不是把同TIME事件先合并再补计数。
+- 三det的背景分箱矩阵各恢复4条带内事件，逐时间箱/能道计数、全能道死时间曝光及原网格均独立核对。BAK COUNTS/STAT_ERR/曝光随输入修正而变化，差异及候选分数完整保存，没有声称BAK与旧版相等。
+- BAK仍按既有GDT`get_exposure(scale=True)`将相交箱总曝光按请求时长/箱总时长缩放；首轮验证误将其当作逐边界箱overlap加权，失败证据保留。更正oracle为实际合同后仍按1e-9 s严格校验，并另存逐箱overlap诊断，**未改变BAK积分算法或放宽容差**。
+- 自然resume执行0阶段，manifest/PHA/BAK/光变NPZ哈希及mtime不变。6个新增GDT/FITS边界组合通过（同TIME同/异PHA、带外/无源事件、overflow、精确能道边界）；相邻4文件59项通过；按CI标记跟踪测试430通过、1 deselected。FITS合成长注释与既有依赖警告见日志；测试/证据继续按原Git忽略政策保存。
+
+**科学边界**：三个背景残差门禁仍为false，qualified_orders仍空，阶数仍b1=1、na=2、nb=1（AICc fallback）。本轮证明事件行守恒和既定曝光/产物/恢复行为，**没有证明本底模型适用、通量/上限/显著性正确**；未运行响应和XSPEC拟合。保留既有单连续源窗及完整GTI前提，不扩展triggered或跨GTI缺口。背景末箱延伸及GDT BAK live-time近似保持原样，不能声称普适精确；同TIME同PHA记录是否遥测重复仍需独立来源证据，不据TIME自行删除。
+
+**原件**：`reviews/evidence/gbm-spectrum-multiplicity-20261018/` 下`validate.py`、`baseline_pipeline.py`/`baseline_provenance.json`、`runs/20261018T091958183599Z/validation.json`及NPZ/原生PHA/BAK、`checks.json`、`regression.log`、`offline-ci.log`、`independent-review.md`。接口依据：[GDT EventList](https://astro-gdt.readthedocs.io/en/stable/api/gdt.core.data_primitives.EventList.html)、[GDT PHAII源码](https://astro-gdt.readthedocs.io/en/stable/_modules/gdt/core/phaii.html)、[Fermi官方数据产品](https://fermi.gsfc.nasa.gov/ssc/data/access/gbm/gbm_data_products.html)。
+
+- 修改及自查署名：Codex `/root`；harness=Codex desktop；精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T17:23:35+08:00；范围=本轮最小源码修复、边界回归/CI、文档及真实证据复核/留档；结果如上；未提交、合并、推送或发布，不冒称第二位独立reviewer。
+- 真实验证署名：Codex `/root/wxt_cache_design`；harness=Codex desktop / collaboration；精确模型/推理档位=未披露/未披露；验证完成时间=2026-10-18T17:20:12+08:00；范围=冻结基线与实际三det准备流程、原始逐道计数/死时间、背景/BAK/门禁、GTI/光变/恢复；结果=上述软件及产物检查通过、背景科学门禁未通过；未改生产源码/测试。
+- 独立review署名：Codex `/root/gbm_fix_review`；harness=Codex collaboration；精确模型/推理档位=未披露/未披露；最终复核时间=2026-10-18T17:21:33+08:00；范围=本轮源/背景GDT调用、6个边界组合、稀疏/精确能道边界及文档；结果=mask及两处文档问题均关闭、无剩余可操作发现；未独立重跑真实全流程或全部CI。
+
+
+#### 2026-10-18T17:33:34+08:00 背景残差门禁的条件校准核对（仅诊断）
+
+用户追问背景残差失败原因。本次重读实际调用，残差为`r=(N-mu)/sqrt(max(N,1))`，并非signed Poisson deviance；deviance仅用于候选模型留出打分。诊断在两个离源背景窗的完整4s箱上运行，与拟合使用同一背景窗，146箱×b1的123道/na、nb的121道合并统计，不是留出残差。
+
+- 新数据的r均值为b1=-0.150388、na=-0.126180、nb=-0.126260，超出当前门禁均值阈值；三者时间趋势均超过当前3倍标准误阈值。名义95%覆盖实际分别92.844%、92.771%、93.326%，全部失败；名义68%覆盖只有na失败。修复前后这些指标近似相同，不是本次事件多重性修复新引入。
+- 固定真实背景网格/曝光，按已记录阶数重建一次拟合并逐项复现JSON残差；seed20261018，每det从该固定mu独立Poisson抽样1000次，模拟不重新拟合。三det模拟的均值门禁、95%覆盖门禁及总体通过率均0%；实测95%覆盖均位于对应模拟95%区间。这证明门禁把该残差硬套均值0/标准正态覆盖的基准不成立，不能据failed直接断言物理本底错。实测均值本身与固定mu模拟分布仍有差异，不能反向声称所有残差已由该偏差完全解释。
+- 实测三det趋势均高于上述1000次固定mu模拟；这仍是待检查的时间结构。该经验秩不是正式拟合优度p值：模拟未重新拟合/重选阶数、未传播参数不确定度或死时间/跨道相关，不能据此宣布模型被否定或验证通过。下一步需以重拟合/完整选择过程校准检验，并看按时间聚合的残差。本次未修改生产门禁、背景模型或放宽阈值。
+
+证据：同目录`residual-summary.json`（原始门禁失败项及趋势阈值）、`residual_poisson_check.py`/`.json`（可复现模拟、网格/源码/脚本哈希及限制）。统计背景：[Mighell 1999, arXiv:astro-ph/9903093](https://arxiv.org/abs/astro-ph/9903093)讨论观测计数估误差的modified Neyman统计偏差；这不等于声称GDT最终多项式拟合使用该统计量，GDT采用两遍拟合且第二遍为模型方差。
+
+诊断与留档署名：Codex `/root`；harness=Codex desktop；精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T17:33:34+08:00；范围=实际代码/JSON复核、趋势门限重算、文献核查及解释；未改生产代码。独立核对/模拟署名：Codex `/root/gbm_fix_review`；harness=Codex collaboration；精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T17:32:36+08:00；范围=记录阶数重建与条件Poisson校准；结果=门禁误报证据及未解决趋势/统计限制见JSON。
+
+
+### 21.27 2026-10-18T22:06:06+08:00 本轮修复收尾、开放项与 0.2.4 源码合并准备
+
+用户决定暂不继续背景方法修正，授权记录已改/待改、合并 master、更新版本并推送。本轮冻结 §21.24–§21.26 的科学实现，不把诊断性模拟替换成生产门禁修复。合并目标经远端默认分支确认是 `master`；起点 `6a5de4cff0df35dce483517b0a11c2ecdd20e7fe`。
+
+**已修改并保留**：
+
+1. GBM R87：实际源/背景 GTI 与 GDT 拼接后有效覆盖、缺数据补取复检、新增/修改/删除输入的缓存失效、native CSPEC 文件发现及光变兼容修复。
+2. GBM 源谱及背景分箱：保留同 TIME 原始事件多重性；源曝光采用请求窗口，源/背景均按全能道及 overflow 死时间计算。真实三探测器恢复 2/2/4 个源事件，具体逐道计数、曝光与 BAK 差异见 §21.26；不宣称修正前后曝光不变。
+3. WXT：T100/T90 抽谱产物在记录哈希前完成 OGIP 关键字和响应准备，后续最终阶段只读；完整恢复和提前停止恢复均以真实产物验证。
+4. 六个发行包 pyproject、Rust crate 及两份 conda 配方版本锁步 0.2.4；GW `__version__` 改为复用核心包的安装元数据读取方式，消除硬编码 0.2.1。没有新增依赖、生产函数或框架；Cargo.lock 本来被忽略，本次不扩大跟踪。
+5. 更新 `docs/changelog.rst`、`release_notes.rst`、`known_issues.rst` 与 GBM/WXT 使用说明。发布安装命令明确指向已发布 0.2.3，当前 0.2.4 用源码安装；未创建发布 tag 或上传 PyPI。核心 conda 配方移除旧版本 SHA，和 Rust 配方一样明确等待最终发行 sdist 校验。
+
+**仍待修正/验收**：
+
+- GBM 残差门禁对观测计数加权残差使用正态均值/覆盖阈值，条件 Poisson 核查已确认标定误报；完整重拟合/重选阶数的统计校准尚未实现。实测时间趋势仍待解释，失败状态继续为 `needs_review`，没有放宽阈值或宣布物理本底正确。
+- GBM 背景末箱延伸及 GDT BAK 整体 live-time 比例近似未改；triggered、跨 GTI、新响应、通量/上限/FAR 完整科学验收未做。
+- XSELECT 写出并退出交互后的 SIGABRT/SIGSEGV 和长路径退出超时未修复；产物/缓存通过与原生工具健康分开记录。WXT slew、时变响应及新拟合未纳入本轮。
+- 全量严格 Sphinx 仍有 5 条既有警告（timescale docstring 1、Swift autodoc 可选依赖导入 4）。本轮页面已生成且无新增页面诊断，不称全量文档门禁通过。
+- 既有 T90/红移暂缓决定、R174/R175/R184 等坐标/姿态/缓存、旋转区域、host 星表来源及其他历史开放项不因本轮合并而关闭。
+- PyPI 子包自动发布授权未重验；Rust 本轮只同步版本，不构建或验收。Rust 发布工作流尚无 sdist，conda 配方仍不是可直接提交状态。
+
+**验证记录**：科学真实数据验收沿用 §21.24–§21.26 的冻结源码和独立原件，未因纯版本/文档修改机械重跑科学分析。最终 GBM/WXT SHA256 分别为 `156a7332706f21d916f1d89925407dcaa2a1786fdc848721d0dbcde603e9feea` / `1e8484ef79bd4a216d228a642c6255ad435a245d7344ae12aeb247e76990af50`，与已验快照一致。最终已跟踪 21 测试文件按 CI marker 复跑为 **430 passed / 1 deselected / 9 warnings**；本地新增定向回归仍按原忽略政策，不冒称远端新增门禁。当前打包/独立安装核查与最终 Git 操作结果在下方追加；仅明确通过后记为完成。
+
+- 修改/文档/元数据及最终自查署名：Codex `/root`；harness=Codex desktop；运行环境精确模型/推理档位=未披露/未披露；记录时间=2026-10-18T22:06:06+08:00；范围=本轮收尾、开放项、0.2.4、CI/Sphinx及构建安装执行；科学源码保持已验快照，新元数据由本代理自查，不称独立第二 reviewer。
+- 只读发行动作核查署名：Codex `/root/wxt_cache_design`；harness=Codex desktop / collaboration；精确模型/推理档位=未披露/未披露；原记录时间=2026-10-18T18:04:44+08:00；范围=版本/构建/工作流清单及打包脚本准备；原件=`reviews/evidence/release-pipeline-coverage-20261018/packaging-readonly.md`。最终打包脚本由 `/root` 接手执行，结果不冒称为该子代理的独立验收。

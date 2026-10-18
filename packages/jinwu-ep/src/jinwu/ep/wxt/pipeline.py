@@ -1436,8 +1436,8 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             "final_events": ("extraction",),
             "duration": ("duration", "mission", "plotting"),
             "lightcurves": ("extraction", "plotting"),
-            "t100_spectra": ("extraction",),
-            "t90_spectra": ("extraction",),
+            "t100_spectra": ("extraction", "background_scaling"),
+            "t90_spectra": ("extraction", "background_scaling"),
             "ogip_finalize": ("background_scaling", "extraction", "spectrum", "energy_range_keV"),
             "bayesian_block_spectra": ("bayesian_block_spectra", "extraction", "background_scaling"),
             "fit": ("fitting", "bxa", "spectrum", "plotting"),
@@ -2318,9 +2318,20 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         if src.spectrum is None or bkg.spectrum is None:
             raise RuntimeError(f"XSELECT did not return {label} source/background PHA")
         alpha = float(context["exposure_arm_qc"].data["alpha"])
-        _, source_backscal = _pha_values(src.spectrum)
-        _set_pha_backscal(bkg.spectrum, source_backscal / alpha)
-        outputs = {"source_pha": str(src.spectrum), "background_pha": str(bkg.spectrum)}
+        # Finish all PHA writes before this stage records its output hashes.
+        source, background, rmf, arf = _finalize_pha_pair(
+            src.spectrum,
+            bkg.spectrum,
+            alpha=alpha,
+            rmf=files.rmf,
+            arf=files.arf,
+            alpha_rtol=self.config.background_scaling.alpha_rtol,
+            exposure_rtol=self.config.background_scaling.exposure_rtol,
+        )
+        outputs = {
+            "source_pha": str(source), "background_pha": str(background),
+            "rmf": str(rmf), "arf": str(arf),
+        }
         outputs.update(collect_xselect_artifacts(src).outputs("source"))
         outputs.update(collect_xselect_artifacts(bkg).outputs("background"))
         return StageResult(outputs=outputs, data={"start": start, "stop": stop, "time_basis": label})
@@ -2344,7 +2355,6 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         )
 
     def _stage_ogip_finalize(self, context) -> StageResult:
-        files = self._files(context)
         alpha = float(context["exposure_arm_qc"].data["alpha"])
         source_events = Path(context["final_events"].outputs["source_event"])
         background_events = Path(context["final_events"].outputs["background_event"])
@@ -2352,14 +2362,9 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         products: dict[str, Any] = {}
         for label in ("t100", "t90"):
             stage = context[f"{label}_spectra"]
-            source, background, rmf, arf = _finalize_pha_pair(
-                Path(stage.outputs["source_pha"]),
-                Path(stage.outputs["background_pha"]),
-                alpha=alpha,
-                rmf=files.rmf,
-                arf=files.arf,
-                alpha_rtol=self.config.background_scaling.alpha_rtol,
-                exposure_rtol=self.config.background_scaling.exposure_rtol,
+            source, background, rmf, arf = (
+                Path(stage.outputs[key])
+                for key in ("source_pha", "background_pha", "rmf", "arf")
             )
             start = float(stage.data["start"])
             stop = float(stage.data["stop"])

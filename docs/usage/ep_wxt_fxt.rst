@@ -66,7 +66,7 @@ WXT 输入与最小运行
    * - duration / lightcurves
      - 时标、净光变、背景缩放、时间参考
    * - t100_spectra / t90_spectra / ogip_finalize
-     - 对应时间段的源/背景谱和 OGIP 完整性
+     - 抽谱阶段补齐背景缩放、响应和背景引用；ogip_finalize 只读校验计数与 OGIP 完整性
    * - bayesian_block_spectra / fit
      - 合并后的分段谱、候选模型、误差与选择理由
    * - fluxcurve / report
@@ -75,6 +75,11 @@ WXT 输入与最小运行
 在 result 的 ``workspace`` 下检查每个 stage manifest 与诊断产品。
 fit 参数 ``error_status``、背景/曝光来源、flux 来源与未完成阶段都应保留。
 结果文件存在不能替代响应、时间和区域验收。
+
+``t100_spectra`` / ``t90_spectra`` 完成时，PHA 的 ``BACKSCAL``、``BACKFILE``、
+``RESPFILE``、``ANCRFILE`` 已设置，响应已复制到同目录，再记录缓存哈希。
+后续校验不会回写这些文件；未改动的产物可直接恢复运行。修改 PHA 或响应内容
+仍会使对应缓存失效。升级前由旧实现生成的缓存会因代码变化重建一次。
 
 WXT 报告选项
 ------------

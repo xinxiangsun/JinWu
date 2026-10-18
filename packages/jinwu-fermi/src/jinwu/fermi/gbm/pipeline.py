@@ -801,11 +801,16 @@ def extract_gbm_spectral_products(
     This function intentionally handles one detector and one continuous source
     segment.  Callers that have disjoint GBM coverage must call it per segment
     and retain separate responses, rather than silently bridging a gap.
+    Bin all native channels before selecting the analysis band, retaining
+    coincident events and their dead time. Source exposure uses the requested
+    interval; background bins retain their event-based time origin.
     """
     ranges = tuple(_validate_intervals(source_ranges_met))
     background_ranges = tuple(_validate_intervals(background_ranges_met))
     if not ranges:
         raise ValueError("source_ranges_met must contain at least one interval")
+    if len(ranges) != 1:
+        raise ValueError("extract one continuous GBM coverage segment at a time")
     if not background_ranges:
         raise ValueError("background_ranges_met must contain at least one interval")
     e_min, e_max = (float(value) for value in energy_range_keV)
@@ -823,31 +828,44 @@ def extract_gbm_spectral_products(
         raise FileNotFoundError("all TTE paths must exist before spectrum extraction")
     from gdt.core.background.binned import Polynomial
     from gdt.core.background.fitter import BackgroundFitter
-    from gdt.core.binning.unbinned import bin_by_time
+    from gdt.core.binning.unbinned import bin_by_edges, bin_by_time
     from gdt.missions.fermi.gbm.tte import GbmTte
 
     ttes = [GbmTte.open(path) for path in paths]
     tte = ttes[0] if len(ttes) == 1 else GbmTte.merge(ttes, force_unique=False)
+    channels = np.flatnonzero(
+        (np.asarray(tte.ebounds.high_edges()) > e_min)
+        & (np.asarray(tte.ebounds.low_edges()) < e_max)
+    )
+    if not channels.size:
+        raise ValueError("energy_range_keV does not overlap the TTE energy channels")
     outdir = Path(output_dir).expanduser().resolve()
     outdir.mkdir(parents=True, exist_ok=True)
-    source_pha = tte.to_pha(time_ranges=list(ranges), energy_range=(e_min, e_max))
+    # PhotonList.to_pha/slice_time/slice_energy merge by TIME alone. Binning
+    # first preserves all event rows and includes out-of-band dead time.
+    source_pha = tte.to_phaii(bin_by_edges, np.asarray(ranges[0])).to_pha(
+        energy_range=(e_min, e_max)
+    )
     source_name = f"gbm_{detector}_source.pha"
     source_pha.write(outdir, filename=source_name, poisson_errs=True, overwrite=True)
     fit_start = min(start for start, _ in background_ranges)
     fit_stop = max(stop for _, stop in background_ranges)
+    grid = tte.data.channel_slice(int(channels[0]), int(channels[-1])).time_slice(
+        fit_start, fit_stop
+    ).time_range
+    if grid is None or grid[1] <= grid[0]:
+        raise ValueError("background fitting requires events at distinct times in the analysis band")
     phaii = tte.to_phaii(
         bin_by_time,
         float(background_bin_s),
-        time_range=(fit_start, fit_stop),
-        energy_range=(e_min, e_max),
-    )
+        tstart=grid[0],
+        tstop=grid[1],
+    ).slice_energy((e_min, e_max))
     fitter, summary = _select_polynomial_background(
         phaii,
         background_ranges,
         background_bin_s=float(background_bin_s),
     )
-    if len(ranges) != 1:
-        raise ValueError("extract one continuous GBM coverage segment at a time")
     bak = integrate_background_interval(fitter, ranges[0])
     background_name = f"gbm_{detector}_background.bak"
     bak.write(outdir, filename=background_name, poisson_errs=False, overwrite=True)
@@ -1836,6 +1854,7 @@ def tte_coverage(paths: Sequence[str | Path]) -> tuple[float, float]:
 def gti_intervals_for_paths(
     paths: Sequence[str | Path],
     interval: tuple[float, float],
+    *, merge_compatible: bool = False,
 ) -> tuple[tuple[float, float], ...]:
     """Return merged TTE GTI overlap intervals in absolute Fermi MET.
 
@@ -1844,11 +1863,16 @@ def gti_intervals_for_paths(
     extensions from each TTE file, intersects them with ``interval`` and
     merges touching intervals.  It never turns a wall-clock interval into a
     scaled exposure estimate.
+
+    ``merge_compatible=True`` additionally applies the existing continuous
+    pipeline's GDT merge policy: later files contribute only after the last
+    event already retained. This prevents accepting GTI coverage whose photons
+    would be discarded by that merge; the default remains the raw GTI union.
     """
     start, stop = _validate_intervals((interval,))[0]
     from gdt.missions.fermi.gbm.tte import GbmTte
 
-    selected: list[tuple[float, float]] = []
+    records = []
     for path in paths:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1856,21 +1880,63 @@ def gti_intervals_for_paths(
         gti = getattr(tte, "gti", None)
         if gti is None or not hasattr(gti, "as_list"):
             raise ValueError(f"TTE {path} has no readable GTI")
-        for left, right in gti.as_list():
+        # GDT subtracts TRIGTIME for triggered TTE; this API returns absolute MET.
+        offset = float(getattr(tte, "trigtime", None) or 0.0)
+        overlaps = []
+        for left, right in _validate_intervals(gti.as_list()):
+            left, right = left + offset, right + offset
             overlap_left = max(start, float(left))
             overlap_right = min(stop, float(right))
             if overlap_right > overlap_left:
-                selected.append((overlap_left, overlap_right))
-    if not selected:
-        return ()
-    selected.sort()
-    merged: list[list[float]] = []
-    for left, right in selected:
-        if merged and left <= merged[-1][1] + 1e-9:
-            merged[-1][1] = max(merged[-1][1], right)
+                overlaps.append((overlap_left, overlap_right))
+        if merge_compatible:
+            if tte.time_range is None:
+                raise ValueError(f"Cannot validate GDT event merging for empty TTE {path}")
+            records.append((float(tte.time_range[0]) + offset, float(tte.time_range[1]) + offset, overlaps))
         else:
-            merged.append([left, right])
-    return tuple((float(left), float(right)) for left, right in merged)
+            records.append((0.0, 0.0, overlaps))
+    selected = []
+    if merge_compatible:
+        cutoff = -math.inf
+        for index in np.argsort([record[0] for record in records]):
+            _, last_event, overlaps = records[index]
+            selected.extend((max(left, cutoff), right) for left, right in overlaps if right > max(left, cutoff))
+            cutoff = max(cutoff, last_event)
+    else:
+        selected = [window for _, _, overlaps in records for window in overlaps]
+    return tuple(_merge_intervals(selected))
+
+
+def _tte_gti_coverage(
+    paths: Sequence[str | Path], intervals: Sequence[tuple[float, float]],
+) -> dict[str, Any]:
+    """Describe TTE coverage and gaps in required absolute-MET seconds.
+
+    Source and background windows are checked separately from unused gaps.
+    Merge overlapping files before checking, with an absolute 2-microsecond
+    boundary tolerance matching TTE timestamp precision, independent of MET.
+    """
+    required = _validate_intervals(intervals)
+    if not required:
+        raise ValueError("at least one required TTE interval is needed")
+    available = gti_intervals_for_paths(paths, (required[0][0], required[-1][1]), merge_compatible=True)
+    covered = _intersect_intervals(required, available)
+    missing = []
+    for start, stop in required:
+        cursor = start
+        for left, right in covered:
+            if right <= cursor or left >= stop:
+                continue
+            if left - cursor > 2e-6:
+                missing.append((cursor, left))
+            cursor = max(cursor, right)
+        if stop - cursor > 2e-6:
+            missing.append((cursor, stop))
+    return {
+        "required_intervals_met": required,
+        "covered_intervals_met": covered,
+        "missing_intervals_met": missing,
+    }
 
 
 def background_windows(
@@ -2760,7 +2826,9 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
       coverage:  {status, segments_met, coverage_fraction, covered_exposure_s,
                   detector_angles_deg, poshist_path, tte_gti_applied, cadence_s, reasons}
       detectors: {all_detectors, nai, bgo}  (GBMDetectorSelection dict)
-      download:  {tte: {det: [path]}, cspec: {det: [path]}, poshist: path}
+      download:  {tte: {det: [path]}, cspec: {det: [path]}, poshist_path,
+                  tte_coverage: {det: {required_intervals_met, covered_intervals_met,
+                                       missing_intervals_met} or {error}}}
       windows:   {segment_met, source_explicit, per_detector: {det: {background_windows_met, flags}}, warnings}
       spectra:   {per_detector: {det: {pha, bak, kind, band_keV}}}
       response:  {rsp: {det: path}, response_backend}
@@ -2806,6 +2874,20 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
     def include_config_in_input_fingerprint(self) -> bool:
         """Keep GBM preparation caches independent from fit-only options."""
         return False
+
+    def stage_input_dependencies(self, stage: PipelineStage) -> tuple[Path, ...]:
+        """Recheck downloaded TTE/CSPEC contents when resuming preparation."""
+        manifest = self.workspace / "data_manifest.json"
+        if stage.name not in {"download", "windows", "lightcurve", "spectra", "response"} or not manifest.is_file():
+            return ()
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        paths = {Path(path) for kind in ("tte", "cspec")
+                 for files in payload[kind].values() for path in files}
+        # Retain old paths to detect deletions, and discover additions too.
+        for kind in ("tte", "cspec"):
+            for detector in payload[kind]:
+                paths.update(self._find_product_files(kind, detector, self._search_roots()))
+        return tuple(sorted(paths))
 
     def stage_config_dependencies(self, stage: PipelineStage) -> Any:
         config = self.config
@@ -3105,11 +3187,10 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
     ) -> list[Path]:
         found: list[Path] = []
         seen: set[Path] = set()
+        suffixes = ("fit", "fit.gz", "pha", "pha.gz") if kind == "cspec" else ("fit", "fit.gz")
         for root in roots:
-            for pattern in (
-                f"glg_{kind}_{detector}_*.fit",
-                f"glg_{kind}_{detector}_*.fit.gz",
-            ):
+            for suffix in suffixes:
+                pattern = f"glg_{kind}_{detector}_*.{suffix}"
                 for path in sorted(root.rglob(pattern)):
                     resolved = path.resolve()
                     if resolved in seen or not path.is_file() or path.stat().st_size < 2880:
@@ -3124,29 +3205,59 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
         interval = self._interval
         # Fetch far enough to span the largest allowed background windows.
         context_s = analysis.background_context_max_s + analysis.background_guard_min_s
+        source_windows = self.input.source_windows_met or context["coverage"].data["segments_met"]
 
-        def scan() -> tuple[dict[str, list[Path]], dict[str, list[Path]]]:
+        def scan():
             roots = self._search_roots()
             tte = {det: self._find_product_files("tte", det, roots) for det in detectors}
             cspec = {det: self._find_product_files("cspec", det, roots) for det in detectors}
-            return tte, cspec
+            coverage = {}
+            for det in detectors:
+                required = list(source_windows)
+                background_error = None
+                try:
+                    if self.input.background_windows_met is not None:
+                        required.extend(self.input.background_windows_met)
+                    elif len(source_windows) == 1 and tte[det]:
+                        windows, _ = background_windows(
+                            source_windows[0], tte_coverage(tte[det]),
+                            guard_s=analysis.background_guard_min_s,
+                            context_min_s=analysis.background_context_min_s,
+                            context_max_s=analysis.background_context_max_s,
+                        )
+                        required.extend(windows)
+                        start, stop = source_windows[0]
+                        if not (any(right < start for _, right in windows)
+                                and any(left > stop for left, _ in windows)):
+                            background_error = "no_bracketing_background"
+                    coverage[det] = _tte_gti_coverage(tte[det], required)
+                    if background_error:
+                        coverage[det]["background_window_error"] = background_error
+                except (OSError, ValueError, KeyError, IndexError) as exc:
+                    coverage[det] = {"required_intervals_met": required,
+                                     "error": f"{type(exc).__name__}: {exc}"}
+            missing = [det for det in detectors if not tte[det] or not cspec[det]
+                       or coverage[det].get("error") or coverage[det].get("background_window_error")
+                       or coverage[det]["missing_intervals_met"]]
+            return tte, cspec, coverage, missing
 
-        tte, cspec = scan()
-        missing = [det for det in detectors if not tte[det] or not cspec[det]]
+        tte, cspec, coverage, missing = scan()
         if missing and self.input.download:
-            fetch_gbm_continuous_products(
-                interval,
+            required = [window for item in coverage.values() for window in item["required_intervals_met"]]
+            start = min([interval.start_met - context_s] + [left for left, _ in required])
+            stop = max([interval.stop_met + context_s] + [right for _, right in required])
+            fetch_gbm_products_for_interval(
+                Time(start, format="fermi"), Time(stop, format="fermi"),
                 destination=self._cache_dir,
                 detectors=detectors,
                 products=("tte", "cspec", "poshist"),
-                context_s=context_s,
             )
-            tte, cspec = scan()
-            missing = [det for det in detectors if not tte[det] or not cspec[det]]
+            tte, cspec, coverage, missing = scan()
         payload = {
             "tte": {det: [str(path) for path in tte[det]] for det in detectors},
             "cspec": {det: [str(path) for path in cspec[det]] for det in detectors},
             "poshist_path": context["coverage"].data.get("poshist_path"),
+            "tte_coverage": coverage,
         }
         manifest_path = self._write_json(self.workspace / "data_manifest.json", payload)
         if missing:
@@ -3155,7 +3266,7 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
                 outputs={"data_manifest": str(manifest_path)},
                 data=payload,
                 message=(
-                    f"GBM products incomplete for detectors {missing}; provide data "
+                    f"GBM products incomplete (missing files, TTE GTI gaps or background windows) for detectors {missing}; provide data "
                     f"under {self.input.resolved_root()} or rerun with --download"
                 ),
             )
@@ -3222,6 +3333,14 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
                 "background_windows_met": [list(window) for window in windows],
                 "flags": flags,
             }
+            try:
+                coverage = _tte_gti_coverage(tte_by_det[det], [seg, *windows])
+                per_detector[det]["tte_coverage"] = coverage
+                if coverage["missing_intervals_met"]:
+                    blocked.append(f"det_{det}:incomplete_tte_gti")
+            except (OSError, ValueError, KeyError, IndexError) as exc:
+                per_detector[det]["tte_coverage"] = {"error": f"{type(exc).__name__}: {exc}"}
+                blocked.append(f"det_{det}:unreadable_tte_gti")
         payload = {
             "segment_met": list(seg),
             "source_explicit": source_explicit,
@@ -3247,7 +3366,7 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
         out_dir.mkdir(parents=True, exist_ok=True)
         warnings_list: list[str] = []
         try:
-            from gdt.core.binning.unbinned import bin_by_time
+            from gdt.core.binning.unbinned import bin_by_edges
             from gdt.missions.fermi.gbm.tte import GbmTte
         except ImportError as exc:
             warnings_list.append(f"gdt_unavailable:{exc}")
@@ -3267,20 +3386,21 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
             try:
                 ttes = [GbmTte.open(path) for path in tte_by_det[det]]
                 tte = ttes[0] if len(ttes) == 1 else GbmTte.merge(ttes, force_unique=False)
-                lightcurve = tte.to_lightcurve(
-                    bin_by_time,
-                    analysis.lc_bin_s,
-                    time_range=seg,
-                    energy_range=band,
-                )
-                times = np.asarray(lightcurve.times, dtype=float)
+                edges = np.r_[np.arange(seg[0], seg[1], analysis.lc_bin_s), seg[1]]
+                lightcurve = tte.to_phaii(
+                    bin_by_edges,
+                    edges,
+                ).to_lightcurve(energy_range=band)
+                times = np.asarray(lightcurve.centroids, dtype=float)
                 rates = np.asarray(lightcurve.rates, dtype=float)
-                rate_errors = np.asarray(lightcurve.rate_errors, dtype=float)
+                rate_errors = np.asarray(lightcurve.rate_uncertainty, dtype=float)
                 np.savez(
                     npz_path,
                     time=times,
                     rate=rates,
                     rate_err=rate_errors,
+                    time_edges=edges,
+                    exposure=np.asarray(lightcurve.exposure, dtype=float),
                     tstart=float(seg[0]),
                     tstop=float(seg[1]),
                     energy_range_keV=np.asarray(band, dtype=float),
