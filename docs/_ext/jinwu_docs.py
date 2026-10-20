@@ -51,13 +51,6 @@ def normalize_docstrings(app, what, name, obj, options, lines):
             parts[j] = re.sub(r'(?<!\\)\|', r'\\|', parts[j])
             parts[j] = re.sub(r'(?<=\w)_(?!\w)', r'\\_', parts[j])
         lines[i] = re.sub(r'^(\s*)\\\* ', r'\1* ', ''.join(parts))
-    # This historical return sentence sits inside an unterminated NumPy
-    # Parameters section; make it a note instead of a fictitious parameter.
-    if name == 'jinwu.core.timescale.iterative_bayesian_blocks':
-        for i, line in enumerate(lines):
-            if line.startswith('返回 :class:'):
-                lines[i:i] = ['', 'Notes', '-----', '']
-                break
 
 def separate_docstring_blocks(app, what, name, obj, options, lines):
     """Add required RST block boundaries after Napoleon's field conversion."""

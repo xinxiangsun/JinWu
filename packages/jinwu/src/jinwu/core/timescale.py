@@ -1072,13 +1072,18 @@ def iterative_bayesian_blocks(
     p0 / poly / buffer_blocks / max_iter : 同原实现语义。
     signal_range : 可选的信号区间初值。
 
+    Notes
+    -----
     When a positive-count bin has zero expected background, the background-time
     transformation is undefined. Segment with actual live exposure instead,
     retaining the supplied background for signed subtraction. The result marks
     this fallback; it does not regularize zero background or measure a signal
     significance. Positive-background inputs retain the original algorithm.
 
-    返回 :class:`IterativeBBResult`。
+    Returns
+    -------
+    IterativeBBResult
+        迭代分块、背景模型与信号区间的诊断结果。
     """
     from scipy.signal import argrelmax, peak_prominences
 
