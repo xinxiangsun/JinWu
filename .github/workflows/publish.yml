@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Python (jinwu, jinwu-ep, jinwu-swift, jinwu-fermi, jinwu-gw) ──
+  # ── Python (jinwu, jinwu-ep, jinwu-swift, jinwu-fermi, jinwu-gw, jinwu-gecam) ──
   build-python:
     runs-on: ubuntu-latest
     steps:
@@ -18,7 +18,7 @@ jobs:
       - name: Build all Python distributions
         run: |
           pip install build
-          for pkg in packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw; do
+          for pkg in packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw packages/jinwu-gecam; do
             echo "::group::build $pkg"
             python -m build "$pkg" --outdir dist/
             echo "::endgroup::"
@@ -85,9 +85,10 @@ jobs:
           import jinwu.swift.grb.pipeline
           import jinwu.fermi
           import jinwu.gw
+          import jinwu.gecam
 
           names = sorted(e.name for e in entry_points(group="jinwu.instruments"))
-          assert {"ep", "swift", "fermi", "gw"} <= set(names), f"missing entry points: {names}"
+          assert {"ep", "swift", "fermi", "gw", "gecam"} <= set(names), f"missing entry points: {names}"
 
           from jinwu.core import timescale
           p = Path(inspect.getsourcefile(timescale))
@@ -98,7 +99,7 @@ jobs:
       - name: Run offline gate tests against installed wheels
         run: |
           wheel-env/bin/python -m pytest \
-            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py \
+            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py packages/jinwu-gecam/tests \
             -p no:cacheprovider -m 'not network and not heasoft and not real_data' -ra
 
   # ── Publish + Release ──────────────────────────────

@@ -9,7 +9,7 @@ from pathlib import Path
 CATEGORIES = [("core", "数据、时间与分析核心"), ("ftools", "FITS 与 FTOOLS"),
               ("model", "模型与背景"), ("physics", "吸收与物理工具"),
               ("lf", "模拟与红移"), ("host", "星表与聚类"), ("ep", "Einstein Probe"),
-              ("swift", "Swift"), ("fermi", "Fermi / GBM"), ("gw", "GW 定位与覆盖")]
+              ("swift", "Swift"), ("fermi", "Fermi / GBM"), ("gecam", "GECAMTools"), ("gw", "GW 定位与覆盖")]
 
 def normalize_docstrings(app, what, name, obj, options, lines):
     """Normalize source markup for autodoc without modifying scientific source.

@@ -15,7 +15,7 @@ jinwu.core.plot
 
 from __future__ import annotations
 from PIL import Image
-from typing import Optional, Union, List, Tuple, Any, cast, Literal
+from typing import Optional, Union, List, Tuple, Any, Sequence, cast, Literal
 from pathlib import Path
 import re
 import warnings
@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .plotstyle import PALETTE, apply_style, format_log_axis, paper_figsize, save_figure
+from .plotstyle import PALETTE, SERIES_COLORS, apply_style, format_log_axis, paper_figsize, save_figure
 
 """在运行期尝试导入实际数据类；若失败，则使用哑类以便 isinstance 不抛错。"""
 try:  # runtime import; avoids typing.Any isinstance crash
@@ -1792,6 +1792,9 @@ def plotfit(
     dpi: int = 300,
     density: Optional[int] = None,
     figsize: Optional[Tuple[float, float]] = None,
+    *,
+    spectrum_labels: Sequence[str] | None = None,
+    statistic_label: str | None = None,
     **kwargs
 ) -> Tuple[Optional[Path], Optional[Figure]]:
     """
@@ -1812,6 +1815,8 @@ def plotfit(
         dpi: 输出分辨率（默认300）
         density: dpi 的旧别名，仅为兼容保留；与 dpi 同给时以 dpi 为准。
         figsize: 新图尺寸；缺省采用 paper_style 画布，否则按面板数自动计算。
+        spectrum_labels: Matplotlib 图例的逐谱标签，顺序与 XSPEC 谱编号一致。
+        statistic_label: Matplotlib 标题采用的统计量标签。
         **kwargs: 其他绘图参数（title/xlabel/ylabel/label）
 
     返回:
@@ -1888,6 +1893,14 @@ def plotfit(
 
         return ps_file, None
 
+    if spectrum_labels is not None:
+        if len(spectrum_labels) != _xspec_plot_groups(xspec):
+            raise ValueError("spectrum_labels must contain one label per XSPEC spectrum")
+        xspec.Plot.setGroup(None)
+    colors = [
+        SERIES_COLORS[i % len(SERIES_COLORS)] for i in range(len(spectrum_labels))
+    ] if spectrum_labels is not None else None
+
     n_panels = len(panels)
     height_ratios = {1: (3,), 2: (3, 2), 3: (3, 3, 2)}
     ratios = height_ratios.get(n_panels, tuple([3] * (n_panels - 1) + [2]))
@@ -1910,7 +1923,7 @@ def plotfit(
     }
 
     def plot_data_model(ax, items: list[dict[str, np.ndarray]], *, positive_y: bool, with_legend: bool) -> None:
-        for item in items:
+        for i, item in enumerate(items):
             x_vals = item["x"]
             y_vals = item["y"]
             x_errs = item["xerr"]
@@ -1941,19 +1954,19 @@ def plotfit(
                 markersize=3.5,
                 capsize=2,
                 elinewidth=0.9,
-                color=PALETTE["data"],
-                label="Data" if with_legend else "_nolegend_",
+                color=colors[i] if colors is not None else PALETTE["data"],
+                label=(spectrum_labels[i] if spectrum_labels is not None else "Data") if with_legend else None,
             )
             ax.plot(
                 x_vals[:size][mask],
                 model_y[:size][mask],
                 linewidth=1.8,
-                color=PALETTE["model"],
-                label="Model" if with_legend else "_nolegend_",
+                color=colors[i] if colors is not None else PALETTE["model"],
+                label="Model" if with_legend and spectrum_labels is None else None,
             )
 
-    def plot_residual(ax, items: list[dict[str, np.ndarray]]) -> None:
-        for item in items:
+    def plot_residual(ax, items: list[dict[str, np.ndarray]], *, with_legend: bool) -> None:
+        for i, item in enumerate(items):
             x_vals = item["x"]
             y_vals = item["y"]
             x_errs = item["xerr"]
@@ -1980,7 +1993,8 @@ def plotfit(
                 markersize=3.5,
                 capsize=2,
                 elinewidth=0.9,
-                color=PALETTE["residual"],
+                color=colors[i] if colors is not None else PALETTE["residual"],
+                label=spectrum_labels[i] if spectrum_labels is not None and with_legend else None,
             )
 
     title = kwargs.get("title")
@@ -1989,8 +2003,8 @@ def plotfit(
         if redshift:
             title += f" (z={redshift})"
         try:
-            statistic_label = xspec.Fit.statMethod
-            if statistic_label.lower() == "cstat":
+            fit_statistic_label = statistic_label or xspec.Fit.statMethod
+            if statistic_label is None and fit_statistic_label.lower() == "cstat":
                 backgrounds = []
                 for spectrum_index in range(1, xspec.AllData.nSpectra + 1):
                     try:
@@ -1998,8 +2012,8 @@ def plotfit(
                     except Exception:
                         backgrounds.append(False)
                 if any(backgrounds):
-                    statistic_label = "W-stat" if all(backgrounds) else "C/W-stat"
-            title += f"   {statistic_label}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof:g}"
+                    fit_statistic_label = "W-stat" if all(backgrounds) else "C/W-stat"
+            title += f"   {fit_statistic_label}={xspec.Fit.statistic:.2f}/{xspec.Fit.dof:g}"
         except Exception:
             title += f"   group min {group_min}"
 
@@ -2009,7 +2023,7 @@ def plotfit(
         if has_model:
             plot_data_model(ax, panel_data[token], positive_y=positive_y, with_legend=(index == 0))
         else:
-            plot_residual(ax, panel_data[token])
+            plot_residual(ax, panel_data[token], with_legend=(index == 0))
         if index == 0:
             ax.set_title(title)
         if token == "delchi":
@@ -2025,7 +2039,7 @@ def plotfit(
         if has_model and not positive_y:  # ratio 面板
             ax.axhline(1, color=PALETTE["reference"], linestyle="--", linewidth=1.2)
 
-    # 图例只放首个面板（Data/Model 语义全局一致），残差面板保持干净
+    # 图例只放首个面板。
     _dedup_legend(axes[0], loc="best")
 
     output_file = None

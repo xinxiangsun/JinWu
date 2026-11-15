@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jinwu-gecam"
+version = "0.3.0"
+description = "GECAMTools interfaces and resumable GECAM workflows for jinwu."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.11"
+dependencies = ["jinwu>=0.3,<0.4"]
+
+[project.urls]
+Repository = "https://github.com/xinxiangsun/jinwu"
+Documentation = "https://jinwu.readthedocs.io"
+
+[project.entry-points."jinwu.instruments"]
+gecam = "jinwu.gecam"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["jinwu.gecam*"]

@@ -57,3 +57,7 @@ external_sources/
 /tests/
 /testrs/
 /reviews/
+
+# === Private local analysis (never publish source-specific inputs/results) ===
+/local_private/
+/artifacts/ta_validation

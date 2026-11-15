@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu-gw"
-version = "0.2.4"
+version = "0.3.0"
 description = "Gravitational-wave sky localization and high-energy coverage plots for jinwu."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.11"
 dependencies = [
-    "jinwu>=0.2,<0.3",
-    "jinwu-fermi>=0.2,<0.3",
+    "jinwu>=0.3,<0.4",
+    "jinwu-fermi>=0.3,<0.4",
     "numpy>=1.24",
     "astropy>=7.1",
     "matplotlib>=3.7",

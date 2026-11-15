@@ -34,11 +34,11 @@
 | | `extract_spectrum` / `extract_curve` / `extract_image` / `accumulate_spectrum_from_events` | 从事件提取产品 |
 | | `write_curve` / `write_image` / `write_pha` | 产品写入 |
 | `jinwu.core.spectrum_prep` | `prepare_spectra` / `PreparedSpectrum` / `PreparedJointSpectrum` / `PreparedCatalog` | 谱准备、链接、联合 |
-| `jinwu.core.fit` | `fit_prepared` / `fit_xray_models` / `fit` / `run_xspec_chain` | XSPEC 拟合入口（`fit_prepared` 单谱、`fit_xray_models` 多候选比较；旧 `fit_spectrum`/`fit_spectrum_from_files` 已于 2026-08 移除） |
+| `jinwu.core.fit` | `fit_prepared` / `fit_xray_models` / `fit` / `run_xspec_chain` | XSPEC 拟合入口。`fit_prepared` 支持单谱与联合谱、逐谱统计量、共享归一化或相对交叉校准，以及显式 `model_energy_grid`；`fit_xray_models` 比较多候选。旧 `fit_spectrum`/`fit_spectrum_from_files` 已于 2026-08 移除 |
 | | `PowerLawModel` / `BrokenPowerLawModel` / `SmoothlyBrokenPowerLawModel` / `DoubleBrokenPowerLawModel` / `ExponentialModel` / `GaussianModel` / `ConstantModel` | 模型类 |
 | | `ModelRegistry` / `LightcurveFitter` / `resolve_xray_model_specs` / `calculate_model_fit_metrics` | 模型注册、拟合器、指标 |
 | | `FitResult` / `XspecChainResult` / `XRayModelSpec` | 结果与规格类型 |
-| `jinwu.core.plot` | `plot_spectrum` / `plot_lightcurve` / `plot_event_txx` / `plotfit` | X 射线绘图（统一样式 `jinwu.core.plotstyle`；旧 `plot_ogip`/`plot_xspec_origin` 已移除） |
+| `jinwu.core.plot` | `plot_spectrum` / `plot_lightcurve` / `plot_event_txx` / `plotfit` | X 射线绘图，统一样式 `jinwu.core.plotstyle`。`plotfit` 的 `spectrum_labels` 为联合谱与残差图提供逐谱图例。旧 `plot_ogip`/`plot_xspec_origin` 已移除 |
 | `jinwu.core.galactic` | `resolve_galactic_absorption` / `GalacticAbsorptionResult` | 银河吸收 |
 | `jinwu.core.datasets` | `netdata` / `LightcurveDataset` / `SpectrumDataset` / `JointDataset` | 数据集契约 |
 | `jinwu.core.config` | `instrument(name, **kwargs)` / `register_instrument` / `FXT` / `WXT` / `BAT` / `GBM` / `GECAM` / `UVOT` + 各 `Config` | 仪器与配置 |
@@ -160,3 +160,8 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `screen_cosmic_ray_frames` | `packages/jinwu-ep/src/jinwu/ep/wxt/cosmic_rays.py` | CMOSFRAM 唯一匹配、逐帧诊断，以及人工确认后整帧排除并同步 GTI/有效曝光 | 是 |
 | `_cflux_source_components` | `packages/jinwu/src/jinwu/core/fit.py` | 共用于模型初始化与通量导出，校验吸收在外且cflux包住完整加性源谱，并定位包括自定义模型在内的norm分量 | 是 |
 | `_tte_gti_coverage` | `packages/jinwu-fermi/src/jinwu/fermi/gbm/pipeline.py` | 复用 GTI 读取并按现有 GDT 事件拼接规则检查实际源/背景窗，返回绝对 MET 秒覆盖与缺口；供下载与窗口门禁共用 | 是 |
+| `open_event` / `extract_lightcurve` / `extract_spectra` | `packages/jinwu-gecam/src/jinwu/gecam/backend.py` | GECAMTools 原生事件、带单位选择的光变与谱接口 | 是 |
+| `GECAMPipeline` | `packages/jinwu-gecam/src/jinwu/gecam/pipeline.py` | 事件检查、原生光变与谱提取、成品分析、报告和阶段恢复。提供完整响应时运行共享谱拟合 | 是 |
+| `SourceAnalysisPipeline` / `SourceAnalysisInput` / `SourceAnalysisConfig` / `SpectralObservation` / `LightcurveProduct` | `packages/jinwu/src/jinwu/core/source_analysis.py` | 按显式同源时窗编排逐历元或同历元联合谱拟合、统一 UTC 光变与可选 Gaussian 时域拟合、共同观测者系通量及恢复指纹 | 是 |
+| `prepare_ogip_spectrum` | `packages/jinwu/src/jinwu/core/spectrum_prep.py` | 从带显式源谱、本底、响应和统计语义的 OGIP 产品准备 Type-I 拟合输入 | 是 |
+| `prepare_gecam_spectra` / `gecam_lightcurve_products` | `packages/jinwu-gecam/src/jinwu/gecam/analysis.py` | 将 GECAM 原生 Type-II 谱与光变转换为共享分析输入 | 是 |

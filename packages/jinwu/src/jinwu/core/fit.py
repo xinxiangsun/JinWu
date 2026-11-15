@@ -2366,6 +2366,11 @@ def _prepared_input_dict(prepared) -> dict[str, str | int | None]:
 
 
 def _prepared_spectrum_key(prepared) -> str:
+    key = getattr(prepared, "spectrum_key", None)
+    if key is not None:
+        if not key.strip():
+            raise ValueError("A prepared spectrum key must be nonempty")
+        return key
     if prepared.module:
         return f"{prepared.obsid}:{prepared.module}"
     if prepared.detector:
@@ -2480,7 +2485,13 @@ def _link_default_prepared_model_groups(models, model_name: str, *, shared_absor
                     _link_parameter(parameter, reference_parameter)
 
 
-def _set_prepared_xspec_links(spectrum, prepared) -> None:
+def _set_prepared_xspec_links(spectrum, prepared, *, explicit=False) -> None:
+    if explicit:
+        spectrum.background = str(Path(prepared.background_pha).resolve()) if prepared.background_pha else None
+        spectrum.response = str(Path(prepared.rmf).resolve())
+        spectrum.response.arf = str(Path(prepared.arf).resolve()) if prepared.arf else None
+        return
+
     if prepared.background_pha is not None:
         try:
             background = spectrum.background
@@ -2574,6 +2585,18 @@ def _xspec_show_text(xspec, outdir: Path, label: str, warnings_list: list[str]) 
         return ""
 
 
+def _prepared_poisson_flags(spectrum) -> dict[str, bool | None]:
+    try:
+        background = spectrum.background
+    except Exception:  # PyXspec raises when there is no associated background.
+        background = None
+    return {
+        "source_is_poisson": getattr(spectrum, "isPoisson", None),
+        "background_is_poisson": getattr(background, "isPoisson", None),
+        "has_background": background is not None,
+    }
+
+
 def _write_prepared_report(
     *,
     path: Path,
@@ -2616,6 +2639,14 @@ def _write_prepared_report(
                 ]
             )
     lines.extend(["", "[fit_summary]", str(results.get("text", ""))])
+    if results.get("cflux_extrapolated_spectra"):
+        lines.append(f"cflux extrapolated beyond noticed band: {results['cflux_extrapolated_spectra']}")
+    if "requested_statistics_per_spectrum" in results:
+        lines.extend(["", "[statistics_per_spectrum]"])
+        for key, row in results["statistics"]["per_spectrum"].items():
+            lines.append(f"{key} {row}")
+    if results.get("model_energy_grid") is not None:
+        lines.extend(["", "[model_energy_grid]", str(results["model_energy_grid"])])
     if error_command:
         lines.extend(["", "[xspec.Fit.error]", f"command: {error_command}", error_text])
     if show_text:
@@ -2636,6 +2667,10 @@ def fit_prepared(
     energy_ranges: Mapping[str, tuple[float, float]] | None = None,
     flux_band_keV: tuple[float, float] | None = None,
     shared_absorption_only: bool = False,
+    joint_normalization: Literal["independent", "tied", "cross_calibration"] = "independent",
+    statistics: Mapping[str, str] | None = None,
+    explicit_bindings: bool = False,
+    model_energy_grid: tuple[float, float, int] | None = None,
     model_name: str = "tbabs*ztbabs*cflux*powerlaw",
     frozen_parameters: Mapping[str, float] | None = None,
     redshift: float = 0.0,
@@ -2678,6 +2713,21 @@ def fit_prepared(
     Flux-fitting expressions must have the form
     ``[foreground factors *] cflux * (source [+ source ...])``. Internal
     absorption and partial-source cflux expressions are rejected explicitly.
+    ``statistics`` optionally assigns an XSPEC statistic per prepared spectrum
+    key (the keys in ``energy_ranges``). With ``explicit_bindings=True``, use the
+    supplied response and only the supplied background and ARF.
+    ``joint_normalization='tied'`` links
+    source amplitude as well as shape across individual spectra. The
+    ``'cross_calibration'`` mode requires a leading ``constant*``: its first
+    factor is fixed to 1 and subsequent factors are free. Existing defaults
+    retain independent amplitudes by instrument/energy group. Select compatible
+    observation intervals before fitting.
+    ``model_energy_grid=(emin_keV, emax_keV, nbins)`` sets a logarithmic model
+    grid for MLE and must cover the native response grids and cflux band.
+    The native grid is restored after saving the results. Replay the saved
+    XCM to continue calculations on the fit grid.
+    A common cflux band outside an instrument's fitted range is an extrapolation
+    of the fitted model for that instrument.
     ``apec_root`` is an optional complete filename prefix for a paired AtomDB
     ``_line.fits``/``_coco.fits`` dataset. The original APECROOT setting is restored
     after saving the fit; the explicit override is currently supported for MLE.
@@ -2685,6 +2735,24 @@ def fit_prepared(
     from jinwu.core.plot import plotfit
     from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum
 
+    if joint_normalization not in {"independent", "tied", "cross_calibration"}:
+        raise ValueError("Unknown joint_normalization")
+    if shared_absorption_only and joint_normalization != "independent":
+        raise ValueError("shared_absorption_only requires independent normalizations")
+    model_expression = re.sub(r"\s+", "", model_name).lower()
+    has_cflux = re.search(r"\bcflux\b", model_expression) is not None
+    if joint_normalization != "independent" and has_cflux and flux_band_keV is None:
+        raise ValueError("Tied cflux amplitudes require an explicit common flux_band_keV")
+    if joint_normalization == "cross_calibration":
+        if not model_expression.startswith("constant*") or model_expression.count("constant") != 1:
+            raise ValueError("cross_calibration requires exactly one leading constant*")
+        if any(re.sub(r"\s+", "", key).lower() == "constant.factor" for key in frozen_parameters or ()):
+            raise ValueError("cross_calibration controls constant.factor; remove it from frozen_parameters")
+    if model_energy_grid is not None:
+        grid_lo, grid_hi, grid_bins = model_energy_grid
+        if (not (math.isfinite(grid_lo) and math.isfinite(grid_hi) and 0 < grid_lo < grid_hi)
+                or isinstance(grid_bins, bool) or not isinstance(grid_bins, (int, np.integer)) or grid_bins < 2):
+            raise ValueError("model_energy_grid requires positive increasing energies (keV) and integer nbins >= 2")
     error_metadata = _profile_error_metadata(error_delta_stat)
     if isinstance(prepared, PreparedSpectrum):
         prepared_spectra = [prepared]
@@ -2703,23 +2771,38 @@ def fit_prepared(
         raise RuntimeError("fit_prepared requires ready prepared spectra")
     if any(spectrum.grouped_pha is None for spectrum in prepared_spectra):
         raise RuntimeError("fit_prepared requires grouped PHA paths")
+    if explicit_bindings and any(spectrum.rmf is None for spectrum in prepared_spectra):
+        raise ValueError("explicit_bindings requires an explicit response for every spectrum")
 
-    xspec = _require_xspec()
-    output = Path(outdir).expanduser().resolve()
-    output.mkdir(parents=True, exist_ok=True)
-    warnings_list: list[str] = []
+    spectrum_keys = [_prepared_spectrum_key(item) for item in prepared_spectra]
+    strict_spectra = bool(statistics or explicit_bindings or joint_normalization != "independent")
+    if strict_spectra and len(set(spectrum_keys)) != len(spectrum_keys):
+        raise ValueError("Prepared spectra must have unique keys; set PreparedSpectrum.spectrum_key for duplicates")
+    if has_cflux and (strict_spectra or model_energy_grid is not None) and any(
+        re.sub(r"\s+", "", key).lower() in {"cflux.emin", "cflux.emax"} for key in frozen_parameters or ()
+    ):
+        raise ValueError("Set the cflux limits using flux_band_keV, without freezing cflux.Emin or cflux.Emax")
     fit_ranges = _prepared_energy_ranges(
         prepared_spectra,
         emin=emin,
         emax=emax,
         energy_ranges=energy_ranges,
     )
-    first_key = _prepared_spectrum_key(prepared_spectra[0])
+    if statistics and set(statistics) - set(spectrum_keys):
+        raise ValueError("Unknown per-spectrum statistic keys")
+    requested_statistics = [(statistics or {}).get(key, stat_method).lower() for key in spectrum_keys]
+    if statistics and any(name not in {"chi", "cstat", "pgstat", "pstat", "lstat", "whittle"} for name in requested_statistics):
+        raise ValueError("Unsupported per-spectrum XSPEC statistic")
+    first_key = spectrum_keys[0]
     fit_emin, fit_emax = fit_ranges[first_key]
     for lower, upper in [*fit_ranges.values(), *([flux_band_keV] if flux_band_keV is not None else [])]:
         if not (math.isfinite(float(lower)) and math.isfinite(float(upper)) and 0 < lower < upper):
             raise ValueError("energy bands must have finite limits with 0 < lower < upper (keV)")
 
+    xspec = _require_xspec()
+    output = Path(outdir).expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    warnings_list: list[str] = []
     xspec.AllChains.clear()
     xspec.AllData.clear()
     xspec.AllModels.clear()
@@ -2741,13 +2824,17 @@ def fit_prepared(
             previous_apec_root = xspec.Xset.getModelString("APECROOT")
         except Exception:
             pass
+    grid_set = False
     try:
         if uses_apec and apec_root is not None:
             xspec.Xset.addModelString("APECROOT", str(apec_root))
         xspec.Fit.query = "yes"
         xspec.Fit.statMethod = stat_method
 
-        data_groups = _prepared_data_groups(prepared_spectra, fit_ranges, shared_absorption_only=shared_absorption_only)
+        data_groups = _prepared_data_groups(
+            prepared_spectra, fit_ranges,
+            shared_absorption_only=(shared_absorption_only or joint_normalization != "independent"),
+        )
         group_for_index = {
             spectrum_index: group
             for group in data_groups
@@ -2756,7 +2843,7 @@ def fit_prepared(
         xspec_spectra = []
         if len(prepared_spectra) == 1:
             xspec_spectrum = _load_prepared_xspec_spectrum(xspec, prepared_spectra[0])
-            _set_prepared_xspec_links(xspec_spectrum, prepared_spectra[0])
+            _set_prepared_xspec_links(xspec_spectrum, prepared_spectra[0], explicit=explicit_bindings)
             xspec_spectra.append(xspec_spectrum)
         else:
             for index, spectrum in enumerate(prepared_spectra, start=1):
@@ -2766,15 +2853,63 @@ def fit_prepared(
                     index=index,
                     data_group=group_for_index[index]["group_index"],
                 )
-                _set_prepared_xspec_links(xspec_spectrum, spectrum)
+                _set_prepared_xspec_links(xspec_spectrum, spectrum, explicit=explicit_bindings)
                 xspec_spectra.append(xspec_spectrum)
 
+        poisson_flags = [_prepared_poisson_flags(spectrum) for spectrum in xspec_spectra]
+        data_show_text = ""
+        if statistics:
+            for index, (key, statistic, flags) in enumerate(
+                zip(spectrum_keys, requested_statistics, poisson_flags), start=1,
+            ):
+                source_poisson = flags["source_is_poisson"]
+                background_poisson = flags["background_is_poisson"]
+                has_background = flags["has_background"]
+                if statistic in {"cstat", "pgstat", "pstat", "lstat"} and source_poisson is not True:
+                    raise ValueError(f"{key}: {statistic} requires a Poisson source spectrum")
+                if ((statistic == "cstat" and has_background or statistic == "lstat")
+                        and background_poisson is not True):
+                    raise ValueError(f"{key}: {statistic} requires Poisson errors on the background spectrum")
+                if statistic == "pgstat" and background_poisson is not False:
+                    raise ValueError(f"{key}: pgstat requires a background spectrum with Gaussian errors")
+                if statistic == "pstat" and not has_background:
+                    raise ValueError(f"{key}: pstat requires an explicitly known background")
+                xspec.Fit.statMethod = f"{statistic} {index}"
+            data_show_text = _capture_xspec_log(
+                xspec, output / "fit_prepared.xspec_data.tmp.log", xspec.AllData.show, warnings_list,
+            )
+            assigned = re.findall(r"Using fit statistic:\s+(\S+)", data_show_text)
+            if assigned != requested_statistics:
+                raise RuntimeError(f"XSPEC statistic assignment mismatch: expected {requested_statistics}, got {assigned}")
         xspec.AllData.ignore("bad")
         for xspec_spectrum, spectrum in zip(xspec_spectra, prepared_spectra):
-            spectrum_emin, spectrum_emax = fit_ranges[_prepared_spectrum_key(spectrum)]
+            key = _prepared_spectrum_key(spectrum)
+            spectrum_emin, spectrum_emax = fit_ranges[key]
             xspec_spectrum.ignore(f"**-{spectrum_emin} {spectrum_emax}-**")
+            if strict_spectra and not xspec_spectrum.noticed:
+                raise ValueError(f"{key}: no usable channels in the requested fit band")
 
         model = xspec.Model(model_name)
+        if strict_spectra or model_energy_grid is not None:
+            for index, spectrum in enumerate(xspec_spectra, start=1):
+                native = spectrum.response.energies
+                group_index = group_for_index[index]["group_index"]
+                current = _xspec_model_for_group(xspec, model, group_index).energies(index)
+                if len(current) != len(native) or not np.allclose(current, native, rtol=1e-7, atol=1e-10):
+                    raise ValueError("Reset the existing custom XSPEC model energy grid before this fit")
+                if model_energy_grid is not None and (
+                    (grid_lo > native[0] and not math.isclose(grid_lo, native[0], rel_tol=1e-7))
+                    or (grid_hi < native[-1] and not math.isclose(grid_hi, native[-1], rel_tol=1e-7))
+                ):
+                    raise ValueError("model_energy_grid must cover every native response energy grid")
+        if model_energy_grid is not None:
+            grid_set = True
+            xspec.AllModels.setEnergies(f"{grid_lo} {grid_hi} {grid_bins} log")
+            energies = model.energies(1)
+            if len(energies) != grid_bins + 1 or not np.allclose(
+                (energies[0], energies[-1]), (grid_lo, grid_hi), rtol=1e-7, atol=0,
+            ):
+                raise RuntimeError("XSPEC did not apply the requested model_energy_grid")
         group_models = []
         for group in data_groups:
             group_model = _xspec_model_for_group(xspec, model, group["group_index"])
@@ -2799,7 +2934,32 @@ def fit_prepared(
                 flux_band_keV=flux_band_keV,
             )
             _freeze_prepared_parameters(group_model, frozen_parameters)
-        _link_default_prepared_model_groups(group_models, model_name, shared_absorption_only=shared_absorption_only)
+        if joint_normalization == "independent":
+            _link_default_prepared_model_groups(group_models, model_name, shared_absorption_only=shared_absorption_only)
+        else:
+            reference = group_models[0]
+            if joint_normalization == "cross_calibration":
+                reference.constant.factor = 1.0
+                reference.constant.factor.frozen = True
+            for group_model in group_models[1:]:
+                for component_name in reference.componentNames:
+                    component = getattr(group_model, component_name)
+                    if component_name == "constant" and joint_normalization == "cross_calibration":
+                        component.factor = 1.0
+                        component.factor.frozen = False
+                        continue
+                    for name in component.parameterNames:
+                        parameter = getattr(component, name)
+                        if not parameter.frozen:
+                            _link_parameter(parameter, getattr(getattr(reference, component_name), name))
+        if has_cflux and (strict_spectra or model_energy_grid is not None):
+            for index, key in enumerate(spectrum_keys, start=1):
+                group_model = group_models[group_for_index[index]["group_index"] - 1]
+                lo, hi = group_model.cflux.Emin.values[0], group_model.cflux.Emax.values[0]
+                energies = group_model.energies(index)
+                if ((lo < energies[0] and not math.isclose(lo, energies[0], rel_tol=1e-7))
+                        or (hi > energies[-1] and not math.isclose(hi, energies[-1], rel_tol=1e-7))):
+                    raise ValueError(f"{key}: cflux band is outside the XSPEC model energy grid")
         perform_text = _capture_xspec_log(
             xspec,
             output / "fit_prepared.xspec_perform.tmp.log",
@@ -2846,7 +3006,10 @@ def fit_prepared(
             warnings_list=warnings_list,
             errors_computed=profile_errors_succeeded,
         )
-        prepared_inputs = [_prepared_input_dict(spectrum) for spectrum in prepared_spectra]
+        prepared_inputs = [
+            {**_prepared_input_dict(spectrum), "spectrum_key": key}
+            for spectrum, key in zip(prepared_spectra, spectrum_keys)
+        ]
         if srcname is None:
             first = prepared_spectra[0]
             srcname = "_".join(
@@ -2896,18 +3059,6 @@ def fit_prepared(
             )
 
         show_text = _xspec_show_text(xspec, output, label, warnings_list)
-        report = _write_prepared_report(
-            path=output / f"{label}_fit.txt",
-            prepared_inputs=prepared_inputs,
-            results=results,
-            show_text=show_text,
-            error_command=command if calculate_errors else None,
-            error_text=error_text,
-            warnings_list=warnings_list,
-            data_groups=data_groups,
-            per_group=per_group,
-        )
-
         results["energy_range"] = {"emin": fit_emin, "emax": fit_emax}
         results["energy_ranges"] = {
             key: {"emin": limits[0], "emax": limits[1]}
@@ -2924,8 +3075,30 @@ def fit_prepared(
         results["per_group"] = per_group
         results["flux_band_keV"] = list(flux_band_keV or (fit_emin, fit_emax))
         results["shared_absorption_only"] = bool(shared_absorption_only)
+        results["joint_normalization"] = joint_normalization
+        results["requested_statistics_per_spectrum"] = dict(zip(spectrum_keys, requested_statistics))
+        results["explicit_bindings"] = explicit_bindings
+        results["model_energy_grid"] = (
+            {"emin_keV": grid_lo, "emax_keV": grid_hi, "nbins": grid_bins, "spacing": "log"}
+            if model_energy_grid is not None else None
+        )
+        noticed_ranges = {}
+        for key, spectrum in zip(spectrum_keys, xspec_spectra):
+            channels = getattr(spectrum, "energies", ())
+            if len(channels):
+                noticed_ranges[key] = {"emin": min(lo for lo, _ in channels), "emax": max(hi for _, hi in channels)}
+        results["noticed_energy_ranges"] = noticed_ranges
+        if has_cflux and flux_band_keV is not None:
+            results["cflux_extrapolated_spectra"] = [
+                key for key, limits in noticed_ranges.items()
+                if flux_band_keV[0] < limits["emin"] or flux_band_keV[1] > limits["emax"]
+            ]
+        if joint_normalization == "cross_calibration":
+            results["calibration_reference_spectrum"] = first_key
+            results["flux_abs"]["definition"] = "absorption and reference calibration factor included"
+            for group in per_group:
+                group["flux_abs"]["definition"] = "absorption and this group's calibration factor included"
         results["input_files"] = prepared_inputs
-        results["report_txt"] = str(report)
         results["warnings"] = warnings_list
         results["error_parameters"] = (
             [int(token) for token in str(command).split()[1:] if token.isdigit()]
@@ -2956,40 +3129,42 @@ def fit_prepared(
         }
         # 方法：XSPEC 统计命令选 cstat 且光谱挂载 Poisson 背景文件时，实际计算的是 W 统计量——对每 bin 背景率 f̂ 做 profile likelihood 解析消去背景阈值参数（s>0,b>0 分支 f̂ 由二次方程 ti*f^2+(ti*y-s-b)*f-b*y=0 的正根给出，总统计量=2Σ半贡献），故此处把 (cstat+背景) 报告为 wstat
         # 参考：Cash 1979, ApJ 228, 939；Humphrey, Liu & Buote 2009, ApJ 693, 822（W 统计量推导）；XSPEC manual Appendix B "Statistics in XSPEC"；本地 HEASoft 6.37 源码 Xspec/src/XSStat/CstatVariants.cxx（specificPerformB 五分支闭式）与 Cstat.h:307（statValues*=2.0）
-        poisson_flags = []
-        for spectrum, prepared_item in zip(xspec_spectra, prepared_spectra):
-            background_flag = None
-            try:
-                background_object = spectrum.background
-            except Exception:
-                background_object = None
-            has_background = background_object is not None or prepared_item.background_pha is not None
-            if background_object is not None and hasattr(background_object, "isPoisson"):
-                background_flag = bool(background_object.isPoisson)
-            poisson_flags.append({"source_is_poisson": getattr(spectrum, "isPoisson", None),
-                                  "background_is_poisson": background_flag,
-                                  "has_background": has_background})
         results["poisson_flags"] = poisson_flags
-        effective_per_spectrum = [stat_method.lower() for _ in poisson_flags]
-        if stat_method.lower() == "cstat":
-            effective_per_spectrum = [
-                "cstat" if not item["has_background"] else
-                "cstat_background_requires_review" if item["background_is_poisson"] is False else "wstat"
-                for item in poisson_flags
-            ]
+        effective_per_spectrum = [
+            ("cstat" if not item["has_background"] else
+             "cstat_background_requires_review" if item["background_is_poisson"] is False else "wstat")
+            if statistic == "cstat" else statistic
+            for item, statistic in zip(poisson_flags, requested_statistics)
+        ]
         unique_statistics = set(effective_per_spectrum)
         results["effective_statistic"] = (
             next(iter(unique_statistics)) if len(unique_statistics) == 1 else "mixed_cstat_wstat"
-            if unique_statistics == {"cstat", "wstat"} else "mixed_statistics_requires_review"
+            if unique_statistics == {"cstat", "wstat"} else "mixed_statistics"
+            if statistics else "mixed_statistics_requires_review"
         )
         results["effective_statistics_per_spectrum"] = effective_per_spectrum
-        results["effective_statistic_definition"] = "sum of per-spectrum statistics; cstat without background, wstat with Poisson background"
+        results["statistics"]["per_spectrum"] = {
+            key: {
+                "requested": requested,
+                "effective": effective,
+                "value": getattr(spectrum, "statistic", None),
+            }
+            for key, requested, effective, spectrum in zip(
+                spectrum_keys, requested_statistics, effective_per_spectrum, xspec_spectra,
+            )
+        }
+        if statistics:
+            method = requested_statistics[0] if len(set(requested_statistics)) == 1 else "mixed"
+            old_method = results["statistics"].get("method", "")
+            results["statistics"]["method"] = method
+            results["text"] = results["text"].replace(f"Stat/dof: {old_method}=", f"Stat/dof: {method}=")
+        results["effective_statistic_definition"] = "sum of declared per-spectrum statistics; cstat with Poisson background is W-stat"
         if "cstat_background_requires_review" in unique_statistics:
             warnings_list.append("Non-Poisson background: effective statistic cannot be identified as W-stat.")
-        results["effective_statistic_verified"] = all(
+        results["effective_statistic_verified"] = ("cstat_background_requires_review" not in unique_statistics and all(
             not item["has_background"] or item["background_is_poisson"] is not None
             for item in poisson_flags
-        )
+        ))
         results["free_parameter_count"] = _count_free_xspec_parameters(group_models)
         results["free_parameter_count_definition"] = "thawed unlinked source/calibration parameters; profiled background rates excluded"
         results["channel_count"] = int(results["statistics"]["dof"]) + results["free_parameter_count"]
@@ -2999,7 +3174,7 @@ def fit_prepared(
             if all(hasattr(spectrum, "noticed") for spectrum in xspec_spectra) else None
         )
         results["information_criterion_kind"] = (
-            "profile_likelihood_score" if "wstat" in effective_per_spectrum
+            "profile_likelihood_score" if unique_statistics & {"wstat", "pgstat"}
             else "likelihood_score"
         )
         results["group_mins"] = {
@@ -3012,6 +3187,14 @@ def fit_prepared(
         )
         plot_paths = []
         plot_errors = []
+        plot_spectrum_labels = spectrum_keys if len(spectrum_keys) > 1 else None
+        if plot_spectrum_labels is not None and len(set(spectrum_keys)) < len(spectrum_keys):
+            plot_spectrum_labels = [f"{key} ({index})" for index, key in enumerate(spectrum_keys, 1)]
+        statistic_label = None
+        if statistics:
+            names = {"cstat": "C-stat", "wstat": "W-stat", "pgstat": "PG-stat"}
+            labels = [names.get(name, name) for name in dict.fromkeys(effective_per_spectrum)]
+            statistic_label = labels[0] if len(labels) == 1 else "Mixed (" + " + ".join(labels) + ")"
         for requested_format in requested_formats:
             try:
                 figure_path, figure = plotfit(
@@ -3024,6 +3207,8 @@ def fit_prepared(
                     backend=plot_backend,
                     output_format=requested_format,
                     density=plot_density,
+                    spectrum_labels=plot_spectrum_labels,
+                    statistic_label=statistic_label,
                 )
                 if figure_path is not None:
                     plot_paths.append(str(figure_path))
@@ -3046,6 +3231,18 @@ def fit_prepared(
                 "Required XSPEC fit plots were not produced: " + "; ".join(plot_errors)
             )
 
+        report = _write_prepared_report(
+            path=output / f"{label}_fit.txt",
+            prepared_inputs=prepared_inputs,
+            results=results,
+            show_text=show_text,
+            error_command=command if calculate_errors else None,
+            error_text=error_text,
+            warnings_list=warnings_list,
+            data_groups=data_groups,
+            per_group=per_group,
+        )
+        results["report_txt"] = str(report)
         from jinwu.core.products import save_xspec_session
 
         products = save_xspec_session(
@@ -3056,7 +3253,7 @@ def fit_prepared(
             report_txt=report,
             transcript="\n\n".join(
                 part
-                for part in (perform_text.strip(), error_text.strip(), show_text.strip())
+                for part in (data_show_text.strip(), perform_text.strip(), error_text.strip(), show_text.strip())
                 if part
             ),
             plots=plot_paths,
@@ -3067,6 +3264,11 @@ def fit_prepared(
                 if isinstance(value, str) and Path(value).exists()
             ],
         )
+        if grid_set or strict_spectra:
+            # XSPEC 12.15 saves spectra, parameters and statistics but omits energies.
+            grid_command = f"{grid_lo} {grid_hi} {grid_bins} log" if grid_set else "reset"
+            with products.xcm.open("a", encoding="utf-8") as stream:
+                stream.write(f"\nenergies {grid_command}\n")
         results["fit_products"] = {
             "result_json": str(products.result_json),
             "report_txt": str(products.report_txt),
@@ -3077,6 +3279,8 @@ def fit_prepared(
         }
         return results
     finally:
+        if grid_set:
+            xspec.AllModels.setEnergies("reset")
         if uses_apec and apec_root is not None:
             if previous_apec_root:
                 xspec.Xset.addModelString("APECROOT", previous_apec_root)
@@ -3134,11 +3338,15 @@ def fit_spectral(
             fit_kwargs.setdefault("apec_root", settings.apec_root)
 
     if resolved_method == "bxa":
+        if fit_kwargs.get("model_energy_grid") is not None:
+            raise ValueError("model_energy_grid currently supports XSPEC MLE")
         from jinwu.core.bxa_fit import fit_prepared_bxa
 
         return fit_prepared_bxa(prepared, outdir=output, **fit_kwargs)
     if resolved_method == "chain" and fit_kwargs.get("apec_root") is not None:
         raise ValueError("An explicit apec_root currently supports MLE; the chain needs its own AtomDB setting scope")
+    if resolved_method == "chain" and fit_kwargs.get("model_energy_grid") is not None:
+        raise ValueError("model_energy_grid currently supports XSPEC MLE")
 
     result = fit_prepared(prepared, outdir=output, **fit_kwargs)
     if resolved_method == "mle":

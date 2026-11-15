@@ -2,10 +2,10 @@
 
 # ============================================================
 #  jinwu monorepo 一键构建与发布
-#  发行包: packages/{jinwu,jinwu-ep,jinwu-swift,jinwu-fermi,jinwu-gw,jinwurs}
+#  发行包: packages/{jinwu,jinwu-ep,jinwu-swift,jinwu-fermi,jinwu-gw,jinwu-gecam,jinwurs}
 # ============================================================
 
-PY_PACKAGES = packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw
+PY_PACKAGES = packages/jinwu packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw packages/jinwu-gecam
 
 # 自动探测 Python 解释器（部分环境无裸 `python` 命令，只有 python3）
 PYTHON := $(shell command -v python3 2>/dev/null || command -v python)
@@ -86,7 +86,7 @@ publish: build rust-build sha256
 # 测试
 # -----------------------------------------------------------
 check:
-	$(PYTHON) -m pytest test/ -x -q
+	$(PYTHON) -m pytest test/ packages/jinwu-gecam/tests -x -q
 
 # -----------------------------------------------------------
 # 从 packages/jinwu/pyproject.toml 读取版本号，同步到所有文件
@@ -102,7 +102,7 @@ sync:
 	@sed -i 's/^version = ".*"/version = "$(_VERSION)"/' packages/jinwurs/Cargo.toml
 	@sed -i 's/^version = ".*"/version = "$(_VERSION)"/' packages/jinwurs/pyproject.toml
 	@# 仪器包版本（锁步发布）
-	@for pkg in packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw; do \
+	@for pkg in packages/jinwu-ep packages/jinwu-swift packages/jinwu-fermi packages/jinwu-gw packages/jinwu-gecam; do \
 		sed -i 's/^version = ".*"/version = "$(_VERSION)"/' "$$pkg/pyproject.toml"; \
 	done
 	@# jinwurs 独立 conda recipe（sha256 在 jinwurs 发布 sdist 后单独更新，见其目录 README/CI）
@@ -115,7 +115,7 @@ release: sync
 	@echo ""
 	@echo "→ 提交变更..."
 	git add packages/jinwu/pyproject.toml packages/jinwu-ep/pyproject.toml \
-		packages/jinwu-swift/pyproject.toml packages/jinwu-fermi/pyproject.toml packages/jinwu-gw/pyproject.toml \
+		packages/jinwu-swift/pyproject.toml packages/jinwu-fermi/pyproject.toml packages/jinwu-gw/pyproject.toml packages/jinwu-gecam/pyproject.toml \
 		packages/jinwurs/Cargo.toml packages/jinwurs/pyproject.toml packages/jinwurs/README.md \
 		recipe/meta.yaml
 	git diff --cached --stat

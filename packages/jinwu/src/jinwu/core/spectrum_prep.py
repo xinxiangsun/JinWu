@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from numbers import Integral
 from pathlib import Path
 import shutil
+from tempfile import TemporaryDirectory
 from typing import Iterable
 
 from .config import instrument
@@ -16,6 +18,7 @@ __all__ = [
     "PreparedJointSpectrum",
     "PreparedCatalog",
     "prepare_spectra",
+    "prepare_ogip_spectrum",
 ]
 
 
@@ -35,6 +38,7 @@ class PreparedSpectrum:
     energy_range_keV: tuple[float, float]
     diagnostics: list[str] = field(default_factory=list)
     status: str = "ready"
+    spectrum_key: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -475,4 +479,207 @@ def prepare_spectra(
         warnings=warnings,
         diagnostics=diagnostics,
         status=status,
+    )
+
+
+def _ogip_type1(path: Path, row: int | None):
+    """Copy one spectrum, retaining double precision and native grouping flags."""
+    import numpy as np
+    from astropy.io import fits
+
+    with fits.open(path) as hdus:
+        original = hdus["SPECTRUM"]
+        data = original.data
+        channels = data["CHANNEL"]
+        is_type2 = (
+            original.header.get("HDUCLAS4", "").upper() == "TYPE:II"
+            or "SPEC_NUM" in original.columns.names
+            or (len(channels) and np.ndim(channels[0]) != 0)
+        )
+        if is_type2:
+            if not isinstance(row, Integral) or isinstance(row, bool) or not 1 <= row <= len(data):
+                raise ValueError(f"Explicit 1-based spectrum row required for {path}")
+            selected = data[int(row) - 1]
+            selected_channels = np.atleast_1d(selected["CHANNEL"])
+            columns = []
+            for name in ("CHANNEL", "COUNTS", "RATE", "STAT_ERR", "SYS_ERR", "QUALITY", "GROUPING", "AREASCAL", "BACKSCAL"):
+                if name not in original.columns.names:
+                    continue
+                values = np.asarray(selected[name])
+                if values.ndim == 0 and name in {"SYS_ERR", "QUALITY", "GROUPING", "AREASCAL", "BACKSCAL"}:
+                    continue
+                values = np.atleast_1d(values)
+                if values.shape != selected_channels.shape:
+                    raise ValueError(f"Invalid {name} vector in {path}")
+                fmt = "J" if name in {"CHANNEL", "QUALITY", "GROUPING"} else "D"
+                columns.append(fits.Column(name=name, format=fmt, unit=original.columns[name].unit, array=values))
+            spectrum = fits.BinTableHDU.from_columns(columns, name="SPECTRUM")
+            # Non-structural metadata belongs to the selected spectrum.
+            for key, value in original.header.items():
+                if key and key not in spectrum.header and not key.startswith(
+                    ("TFORM", "TTYPE", "TUNIT", "TDIM", "TLMIN", "TLMAX", "TSCAL", "TZERO", "TNULL", "TDISP",
+                     "CHECKSUM", "DATASUM", "THEAP")
+                ):
+                    spectrum.header[key] = value
+            for key in ("EXPOSURE", "BACKSCAL", "AREASCAL", "RESPFILE", "ANCRFILE", "BACKFILE", "POISSERR",
+                        "TIME", "TIMEDEL", "QUALITY", "GROUPING", "SYS_ERR", "CORRFILE", "CORRSCAL"):
+                if key in original.columns.names and np.ndim(selected[key]) == 0:
+                    spectrum.header[key] = selected[key].item() if isinstance(selected[key], np.generic) else selected[key]
+        else:
+            if row is not None:
+                raise ValueError(f"A row selector is only valid for type-II spectra: {path}")
+            spectrum = original.copy()
+        header = spectrum.header
+        header["HDUCLASS"], header["HDUCLAS1"] = "OGIP", "SPECTRUM"
+        header["HDUCLAS4"], header["HDUVERS"] = "TYPE:I", "1.2.1"
+        if not len(spectrum.data) or ("COUNTS" in spectrum.columns.names) == ("RATE" in spectrum.columns.names):
+            raise ValueError(f"Expected nonempty COUNTS or RATE spectrum in {path}")
+        header["HDUCLAS3"] = "COUNT" if "COUNTS" in spectrum.columns.names else "RATE"
+        header["DETCHANS"] = int(original.header.get("DETCHANS", len(spectrum.data)))
+        original_channel_index = original.columns.names.index("CHANNEL") + 1
+        channel_index = spectrum.columns.names.index("CHANNEL") + 1
+        for limit, channel in (("TLMIN", spectrum.data["CHANNEL"].min()), ("TLMAX", spectrum.data["CHANNEL"].max())):
+            header[f"{limit}{channel_index}"] = int(original.header.get(f"{limit}{original_channel_index}", channel))
+        for key in ("EXPOSURE", "BACKSCAL", "AREASCAL"):
+            default = 1.0 if key != "EXPOSURE" else np.nan
+            if key in spectrum.columns.names:
+                values = spectrum.data[key]
+            else:
+                values = header.get(key, hdus[0].header.get(key, default))
+                header[key] = values
+            if np.any(~np.isfinite(values)) or np.any(np.asarray(values) <= 0):
+                raise ValueError(f"Invalid {key} in {path}")
+        copies = [hdus[0].copy(), spectrum]
+        copies.extend(h.copy() for h in hdus[1:] if h.name != "SPECTRUM")
+        return fits.HDUList(copies)
+
+
+def prepare_ogip_spectrum(
+    source: str | Path, *, outdir: str | Path, instrument: str,
+    response: str | Path, energy_range, background: str | Path | None = None,
+    arf: str | Path | None = None, source_row: int | None = None,
+    background_row: int | None = None, source_poisson: bool | None = None,
+    background_poisson: bool | None = None, obsid: str | None = None,
+    detector: str | None = None, source_id: str | None = None,
+    spectrum_key: str | None = None,
+) -> PreparedSpectrum:
+    """Prepare existing OGIP products, including one explicitly selected type-II row.
+
+    ``energy_range`` is a two-element Quantity convertible to keV. ``source_row``
+    and ``background_row`` are 1-based for type-II files and None for type-I.
+    Explicit response/background/ARF paths override header associations. An
+    existing background association may not silently be discarded: supply its
+    file explicitly. No regrouping, fitting, or count correction is performed.
+    Original counts, errors, exposure, channel numbers and grouping are retained;
+    type-II vectors are written as type-I doubles (the generic PHA writer uses
+    single precision). ``outdir`` must be new or empty. Source and background
+    Poisson flags may be explicitly supplied when an upstream producer omits
+    them, but count data are checked before accepting ``True``.
+    Set ``spectrum_key`` when observation and detector metadata would identify
+    more than one spectrum with the same key.
+    """
+    import astropy.units as u
+    import numpy as np
+    from .io import read_pha, read_rmf, read_arf
+    from .ogip import check_response_compatibility
+
+    if not isinstance(energy_range, u.Quantity):
+        raise TypeError("energy_range must be a Quantity")
+    band = np.asarray(energy_range.to_value(u.keV))
+    if band.shape != (2,) or not np.all(np.isfinite(band)) or not 0 < band[0] < band[1]:
+        raise ValueError("energy_range must contain positive increasing limits")
+    paths = [Path(p).expanduser().resolve(strict=True) if p is not None else None
+             for p in (source, background, response, arf)]
+    source, background, response, arf = paths
+    if background is None and (background_row is not None or background_poisson is not None):
+        raise ValueError("Background metadata requires a background file")
+    output = Path(outdir).expanduser().resolve()
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f"Use a new or empty prepared directory: {output}")
+    spectra = [_ogip_type1(source, source_row)]
+    if background is not None:
+        spectra.append(_ogip_type1(background, background_row))
+    association = str(spectra[0]["SPECTRUM"].header.get("BACKFILE", "")).strip().lower()
+    if background is None and association not in {"", "none"}:
+        raise ValueError("Supply the associated background file explicitly")
+    for hdus, poisson in zip(spectra, (source_poisson, background_poisson)):
+        hdu = hdus["SPECTRUM"]
+        correction = str(hdu.header.get("CORRFILE", "NONE")).strip().lower()
+        if correction not in {"", "none"}:
+            raise ValueError("Preparing a spectrum with a correction file is unsupported")
+        hdu.header["CORRFILE"] = "NONE"
+        hdu.header.setdefault("CORRSCAL", 0.0)
+        if poisson is not None:
+            hdu.header["POISSERR"] = bool(poisson)
+        if "POISSERR" not in hdu.header:
+            raise ValueError("POISSERR is missing; explicitly specify the source/background count convention")
+        column = "COUNTS" if "COUNTS" in hdu.columns.names else "RATE"
+        counts = np.asarray(hdu.data[column], dtype=float)
+        if not np.all(np.isfinite(counts)):
+            raise ValueError("Nonfinite spectrum data")
+        if hdu.header["POISSERR"]:
+            raw = counts if column == "COUNTS" else counts * hdu.header["EXPOSURE"]
+            if np.any(raw < 0) or not np.allclose(raw, np.rint(raw), rtol=0, atol=1e-5):
+                raise ValueError("Poisson spectrum must contain nonnegative integer counts")
+        else:
+            if "STAT_ERR" not in hdu.columns.names:
+                raise ValueError("Non-Poisson spectrum requires STAT_ERR")
+            error = np.asarray(hdu.data["STAT_ERR"])
+            if np.any(~np.isfinite(error)) or np.any(error < 0):
+                raise ValueError("Invalid STAT_ERR")
+    if len(spectra) == 2 and not np.array_equal(spectra[0]["SPECTRUM"].data["CHANNEL"], spectra[1]["SPECTRUM"].data["CHANNEL"]):
+        raise ValueError("Source/background channels do not match")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".ogip-", dir=output.parent) as temporary:
+        staging = Path(temporary)
+        for name, original in (("response.rsp", response), ("effective_area.arf", arf)):
+            if original is not None:
+                shutil.copy2(original, staging / name)
+        for index, hdus in enumerate(spectra):
+            header = hdus["SPECTRUM"].header
+            header["BACKFILE"] = "background.pha" if index == 0 and background is not None else "NONE"
+            header["RESPFILE"] = "response.rsp"
+            header["ANCRFILE"] = "effective_area.arf" if arf is not None else "NONE"
+            hdus.writeto(staging / ("source.pha" if index == 0 else "background.pha"), checksum=True)
+            hdus.close()
+        rmf = read_rmf(staging / "response.rsp")
+        pha = read_pha(staging / "source.pha")
+        compatibility = check_response_compatibility(
+            pha, rmf,
+            arf=read_arf(staging / "effective_area.arf") if arf is not None else None,
+        )
+        if not compatibility.ok:
+            raise ValueError(f"Incompatible response: {compatibility.errors()}")
+        if (rmf.channel is None or pha.det_chans != rmf.det_chans
+                or len(rmf.channel) != rmf.det_chans or np.any(np.diff(rmf.channel) != 1)
+                or np.any(np.diff(pha.channels) <= 0) or not np.all(np.isin(pha.channels, rmf.channel))):
+            raise ValueError("Response EBOUNDS and spectrum channel definitions do not match")
+        if (np.any(~np.isfinite(rmf.e_min)) or np.any(~np.isfinite(rmf.e_max))
+                or np.any(rmf.e_min < 0) or np.any(rmf.e_max < rmf.e_min)):
+            raise ValueError("Invalid response EBOUNDS energy limits")
+        ignored = pha.channels[pha.quality > 0] if pha.quality is not None else ()
+        inputs = (pha, read_pha(staging / "background.pha")) if background is not None else (pha,)
+        for spectrum in inputs:
+            if spectrum.det_chans != rmf.det_chans:
+                raise ValueError("Response EBOUNDS and spectrum DETCHANS do not match")
+            if spectrum.ebounds is None:
+                continue
+            channels, lower, upper = spectrum.ebounds
+            indices = channels - rmf.channel[0]
+            # GECAM pads excluded overflow channels with zero-width PHA bins.
+            compare = ~((lower == upper) & np.isin(channels, ignored))
+            if (np.any(indices < 0) or np.any(indices >= len(rmf.channel)) or np.any(np.diff(channels) <= 0)
+                    or not np.all(np.isin(spectrum.channels, channels))
+                    or not np.allclose(lower[compare], rmf.e_min[indices[compare]], rtol=1e-6, atol=1e-8)
+                    or not np.allclose(upper[compare], rmf.e_max[indices[compare]], rtol=1e-6, atol=1e-8)):
+                raise ValueError(f"Response EBOUNDS do not match {spectrum.path.name}")
+        staging.rename(output)
+    return PreparedSpectrum(
+        instrument=instrument, obsid=obsid, module=None, detector=detector, source_id=source_id,
+        source_pha=source, grouped_pha=output / "source.pha",
+        background_pha=output / "background.pha" if background is not None else None,
+        arf=output / "effective_area.arf" if arf is not None else None,
+        rmf=output / "response.rsp", group_min=0, energy_range_keV=tuple(map(float, band)),
+        diagnostics=["Existing grouping preserved; no regrouping", f"Selected source row: {source_row}; background row: {background_row}"],
+        spectrum_key=spectrum_key,
     )

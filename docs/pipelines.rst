@@ -32,6 +32,12 @@
    * - GBM Haar MVT
      - run_gbm_mvt / compute_mvt
      - TTE 或均匀计数光变、重采样、分类与诊断
+   * - GECAM GRD EVT
+     - GECAMPipeline
+     - GECAMTools 原生光变、可选谱与本底；显式提供响应后可做谱拟合
+   * - 同源多仪器
+     - SourceAnalysisPipeline
+     - 显式同历元联合谱、各历元独立拟合、统一 UTC 光变与共同能段通量；保留科学审查状态
    * - GW 定位与覆盖
      - jinwu-gw plot
      - 天区概率与几何覆盖；不输出已验证的能谱/曝光
@@ -47,3 +53,5 @@
    usage/gbm_subthreshold
    usage/gbm_mvt
    usage/gw_coverage
+   usage/gecam
+   usage/source_analysis

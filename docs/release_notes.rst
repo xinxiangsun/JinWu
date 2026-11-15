@@ -5,6 +5,16 @@
 各发行包的实际发布文件以 PyPI 为准。
 仓库历史 changelog 的发布日期与修复条目属于原有记录，不代表本次文档任务重新执行了所有验收。
 
+0.3.0 更新
+----------
+
+新增独立 :doc:`usage/gecam` 插件，使用可选 GECAMTools 按提取、成品准备、
+能谱和光变拟合分阶段执行并恢复。:doc:`usage/source_analysis` 汇总共享分析入口，
+显式传入 epoch/UTC，并支持逐谱统计量与联合谱交叉校准。
+六个 Python 包与可选 Rust 包统一为 0.3.0，已有内部依赖版本范围同步为
+``>=0.3,<0.4``。Swift 保持显式选择，``jinwu[all]`` 不包含 Swift。
+本次推送不触发 PyPI 发布；已执行的验证及限制见 ``packages/jinwu-gecam/VALIDATION.md``。
+
 0.2.4 更新
 ----------
 

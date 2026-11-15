@@ -8,6 +8,11 @@
 各包当前源码版本为 |release|，声明 Python ≥ 3.11，本手册的构建环境为 Python 3.12。
 HEASoft、PyXspec、任务校准库与外部任务程序按流程配置，不由普通 pip 安装代替。
 
+当前源码的 ``jinwu[all]`` 包含除 Swift 外的全部可选依赖。
+Swift 相关开发暂缓，仅在显式指定 ``jinwu[swift]`` 或 ``jinwu-swift`` 时安装；
+同时需要时可指定 ``jinwu[all,swift]``。该配置将在后续发布版中生效。
+开发暂缓不影响现有 Swift 工作流和历史数据分析的按需使用。
+
 .. list-table:: 依赖选择
    :header-rows: 1
    :widths: 25 35 40
@@ -33,6 +38,9 @@ HEASoft、PyXspec、任务校准库与外部任务程序按流程配置，不由
    * - GBM targeted search
      - ``jinwu-fermi[search]``
      - 搜索输入、响应数据库、背景和 FAR 校准样本
+   * - GECAM GRD EVT
+     - ``jinwu-gecam`` / ``jinwu[gecam]`` （源码新增）
+     - 官方 GECAMTools ≥ 20240514 另装；响应生成还需 CALDB
    * - GW coverage
      - ``jinwu-gw``
      - HEALPix / MOC；GBM 几何另需 POSHIST
@@ -75,6 +83,9 @@ macOS arm64；其他平台可使用 Python 实现，或自行构建 Rust 扩展�
 
    conda activate hea
    python -m pip install -e ./packages/jinwu
+   # 全部可选依赖（不含 Swift）
+   python -m pip install -e './packages/jinwu[all]' -e ./packages/jinwu-gecam
+   python -m pip install -e ./packages/jinwu-gecam
    python -m pip install -e ./packages/jinwu-ep
    # 按需选择，extras 必须加引号
    python -m pip install -e './packages/jinwu-swift[ukssdc,survey]'

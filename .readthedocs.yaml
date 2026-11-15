@@ -11,7 +11,7 @@ sphinx:
 
 # Monorepo: the distributions live under packages/ (the repo root itself is
 # NOT installable — no [project] table).  docs/api.rst references modules from
-# all five Python distributions, so install each of them; the docs extra on
+# all Python distributions, so install each of them; the docs extra on
 # the core package provides Sphinx and the theme.
 python:
   install:
@@ -30,3 +30,5 @@ python:
     # RTD would either fail to import it or document MagicMock shims.
     - method: pip
       path: packages/jinwu-gw
+    - method: pip
+      path: packages/jinwu-gecam

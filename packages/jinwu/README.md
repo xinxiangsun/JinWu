@@ -11,6 +11,11 @@ and contribute to the same `jinwu` import namespace:
 - [`jinwu-swift`](https://pypi.org/project/jinwu-swift/) — Swift/BAT
 - [`jinwu-fermi`](https://pypi.org/project/jinwu-fermi/) — Fermi/GBM
 
+GECAMTools 接口由源码中的 `jinwu-gecam` 提供（`jinwu.gecam`）；官方后端需另装。
+
+当前源码的 `all` 包含除 Swift 外的全部可选依赖；Swift 开发暂缓，
+安装时需显式选择 `[swift]` 或 `[all,swift]`。此配置将在后续发布版中生效。
+
 ```bash
 pip install jinwu              # core only
 pip install "jinwu[ep]"        # core + Einstein Probe support

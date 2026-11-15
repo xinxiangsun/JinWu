@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu"
-version = "0.2.4"
+version = "0.3.0"
 description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -45,11 +45,12 @@ docs = [
     "myst-parser>=3",
 ]
 rust = ["jinwurs"]
-ep = ["jinwu-ep>=0.2,<0.3"]
-swift = ["jinwu-swift>=0.2,<0.3"]
-fermi = ["jinwu-fermi>=0.2,<0.3"]
-gbm = ["jinwu-fermi>=0.2,<0.3"]
-gw = ["jinwu-gw>=0.2,<0.3"]
+ep = ["jinwu-ep>=0.3,<0.4"]
+swift = ["jinwu-swift>=0.3,<0.4"]
+fermi = ["jinwu-fermi>=0.3,<0.4"]
+gbm = ["jinwu-fermi>=0.3,<0.4"]
+gw = ["jinwu-gw>=0.3,<0.4"]
+gecam = ["jinwu-gecam>=0.3,<0.4"]
 # Pure-data HEALPix sky-map reader (jinwu.core.skymap); consumed by
 # jinwu-fermi[search-skymap] without pulling in the full jinwu-gw stack.
 skymap = ["astropy-healpix>=1.0"]
@@ -68,6 +69,8 @@ cluster = [
 ]
 # BXA (Bayesian X-ray Analysis) 贝叶斯拟合后端; xspec 由 HEASoft 环境提供(非 pip 可装), 故不在此列
 bxa = ["bxa>=5", "ultranest>=3"]
+# Swift remains opt-in while its development is paused.
+all = ["jinwu[docs,rust,ep,fermi,gw,gecam,skymap,crossmatch,cluster,bxa]"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -8,6 +8,7 @@
 | `jinwu-ep` | `jinwu.ep` | Einstein Probe (WXT) |
 | `jinwu-swift` | `jinwu.swift` | Swift/BAT |
 | `jinwu-fermi` | `jinwu.fermi` | Fermi/GBM |
+| `jinwu-gecam` | `jinwu.gecam` | GECAMTools 接口与可恢复流程（源码新增） |
 | `jinwu-gw` | `jinwu.gw` | GW localization and high-energy coverage plots |
 
 ### 通过 PyPI 安装
@@ -42,6 +43,7 @@ pip install -e packages/jinwu            # 核心（可编辑安装）
 pip install -e packages/jinwu-ep         # 按需安装仪器包
 pip install -e packages/jinwu-swift      # Swift/BAT（survey 适配器可选依赖）
 pip install -e packages/jinwu-fermi      # Fermi/GBM（响应生成可选依赖）
+pip install -e packages/jinwu-gecam       # GECAMTools 接口，后端另装官方源码
 pip install -e packages/jinwu-gw          # GW 天区与覆盖绘图
 ```
 
@@ -66,7 +68,11 @@ Swift/BAT 单目标 survey 管线位于 `jinwu.swift.bat.survey`，按“本地�
 
 ### 可选依赖 / Optional Extras
 
+当前源码的 `all` 包含除 Swift 外的全部可选依赖。Swift 相关开发暂缓，
+需显式选择 `[swift]`（或 `[all,swift]`）；此配置将在后续发布版中生效。
+
 ```bash
+pip install -e './packages/jinwu[all]' -e ./packages/jinwu-gecam  # 当前源码：全部可选依赖，不含 Swift
 pip install "jinwu[ep]"          # Einstein Probe 仪器包 (jinwu-ep)
 pip install "jinwu[swift]"       # Swift 仪器包 (jinwu-swift, 含 swiftbat/batanalysis)
 pip install "jinwu[fermi]"       # Fermi 仪器包 (jinwu-fermi, 含 astro-gdt)
