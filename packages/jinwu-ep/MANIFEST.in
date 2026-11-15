@@ -1,0 +1,5 @@
+# Keep local examples and validation records out of source distributions.
+prune examples
+prune example
+exclude VALIDATION.md
+global-exclude *.ipynb

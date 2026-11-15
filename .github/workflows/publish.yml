@@ -15,6 +15,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check public checkout excludes private research files
+        run: |
+          private_paths=$(git ls-files -- ':(glob)**/examples/**' ':(glob)**/example/**' '*.ipynb' 'artifacts/**' 'reviews/**' 'scripts/**' 'conda-pypi-output/**' 'implementation_plan.md' 'ARCHITECTURE_ROADMAP.md' 'docs/locale/**' '*.mo' ':(glob)**/VALIDATION.md')
+          if [ -n "$private_paths" ]; then
+            echo "Private research or development files are tracked; remove them from the public checkout."
+            exit 1
+          fi
       - name: Build all Python distributions
         run: |
           pip install build

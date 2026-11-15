@@ -1,1 +1,0 @@
-25 synthetic trials (with zero-count bins): mismatching change-point sets = 0

@@ -34,3 +34,6 @@ Repository = "https://github.com/xinxiangsun/JinWu"
 manifest-path = "Cargo.toml"
 features = ["pyo3/extension-module", "pyo3/abi3-py311"]
 bindings = "pyo3"
+
+# Local research examples and validation records are never release inputs.
+exclude = ["examples/**", "example/**", "**/*.ipynb", "VALIDATION.md"]

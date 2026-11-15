@@ -109,11 +109,6 @@ Python API
    result = BATSurveyPipeline(job, config=BATSurvey()).run()
    print(result.science_status, result.products["report"])
 
-The annotated script
-``examples/bat_survey_pipeline.py`` in the ``jinwu-swift`` distribution
-accepts the same parameters as the CLI and is a good starting point for
-custom drivers.
-
 Survey data contract
 ~~~~~~~~~~~~~~~~~~~~
 

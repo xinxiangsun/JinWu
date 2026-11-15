@@ -1,1 +1,0 @@
-jinwurs NOT importable: No module named 'jinwurs'

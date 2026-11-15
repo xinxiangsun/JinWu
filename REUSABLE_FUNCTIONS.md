@@ -10,10 +10,9 @@
 > 规则：
 > 1. 先查本表 + 模块 docstring + 测试，再写新代码。
 > 2. 新增公共函数 → 在文末「登记区」追加；已有函数不改签名时无需条目。
-> 3. 提升新函数：遵守 `ARCHITECTURE_ROADMAP.md` 分层（`core` 不导入任务包/HEASoft/XSPEC 等
->   外部运行时；任务相关放 `packages/jinwu-<mission>`，经 `jinwu.instruments` entry point
->   被 pipeline 注册表发现）。参考现有 `jinwu.core.fit`（XSPEC 调用封装为函数）与
->   `jinwu.core.heasoft` 的边界方式。
+> 3. 分层与外部运行时边界见 `docs/development.rst`；任务相关逻辑放
+>   `packages/jinwu-<mission>`，通用科学能力放共享层。外部运行时按需加载，
+>   参考 `jinwu.core.fit` 与 `jinwu.core.heasoft`。
 
 ## core 层高频入口
 
@@ -42,7 +41,7 @@
 | `jinwu.core.galactic` | `resolve_galactic_absorption` / `GalacticAbsorptionResult` | 银河吸收 |
 | `jinwu.core.datasets` | `netdata` / `LightcurveDataset` / `SpectrumDataset` / `JointDataset` | 数据集契约 |
 | `jinwu.core.config` | `instrument(name, **kwargs)` / `register_instrument` / `FXT` / `WXT` / `BAT` / `GBM` / `GECAM` / `UVOT` + 各 `Config` | 仪器与配置 |
-| `jinwu.core.units` | `magnitude_to_flux` / `Magnitude` / `FilterInfo` / `InstrumentFilterLibrary` | 光学 mag/mJy 转换。⚠️ 2026-08-22 实测有缺陷待重写：默认 Vega（AB 需显式传 system）、强制 filter_info（纯 AB→fν 传 None 报错）、`u.ABmag` 不自动切系统。重写前勿推荐复用，详见 EP `REUSABLE_FUNCTIONS.md` 已知问题节 |
+| `jinwu.core.units` | `magnitude_to_flux` / `Magnitude` / `FilterInfo` / `InstrumentFilterLibrary` | 光学 mag/mJy 转换。⚠️ 2026-08-22 实测有缺陷待重写：默认 Vega（AB 需显式传 system）、强制 filter_info（纯 AB→fν 传 None 报错）、`u.ABmag` 不自动切系统。重写前勿推荐复用，使用前核对实际接口与单位约定 |
 | `jinwu.core.base` | `EnergyBand` / `RegionArea` / `OgipMeta` / `PhaBase` / `RmfBase` / `ArfBase` / `EventDataBase` / `LightcurveDataBase` | 基类与数据原语 |
 | `jinwu.core.ogip` | `ValidationReport` / `OgipFitsBase` | OGIP 校验 |
 | `jinwu.core.pipeline` | `register_pipeline` / `pipeline` / `InstrumentPipeline` / `PipelineStatus` | 流水线 |
@@ -117,7 +116,6 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `GBMMVTInput` / `GBMMVTConfig` / `GBMMVTPipeline` / `run_gbm_mvt` | `jinwu.fermi.gbm.mvt` | 独立 GBM TTE MVT 流程、探测器迭代、Poisson 重采样、稳定性与诊断；已泛化到 jinwu：是 | 2026-09-30 |
 | `latest_products` / `merge_tte_events` / `interval_exposure` / `read_detector_events` | `jinwu.fermi.gbm.tte` | 从 subthreshold 提取公共 TTE 版本选择、保留多重性的去重、GTI 与计数读取；旧导入保留；已泛化到 jinwu：是 | 2026-09-30 |
 | `bin_events` / `prepare_detector` / `peak_snr` / `select_detectors` / `resample_mvt` | `jinwu.fermi.gbm.mvt.data` / `resampling` | 显式时窗/能段 TTE 适配、原版总计数 SNR、累积前缀选探测器与可复现随机流；已泛化到 jinwu：是 | 2026-09-30 |
-| `load_pg_reference` / `compare_report` | `scripts/compare_gbm_mvt_snr.py` | 执行原 gv_significance PG 函数体、按同一 MVT bin 和拟合协方差核对统计量；分析验收脚本，未泛化到 jinwu：否 | 2026-09-30 |
 
 | `PreparedOnOffMarginalLikelihood` | `jinwu.core.model_comparison` | Exact normalized Gamma-Poisson ON/OFF likelihood with cached data terms | 是 |
 
@@ -127,24 +125,12 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 
 | `absorption_budget(backend="ztbabs")`, `AbsorptionBudget.plot(energy_scale=...)` | `jinwu.physics.absorption` | 原生 zTBabs/wilm 丰度缩放、线性能量轴与 tau=1 标注 / Native zTBabs/wilm scaling and tau=1 plots | 是 |
 
-| `absorption_budget` 教程 / tutorial | `examples/absorption/absorption_budget.ipynb`; `test/test_absorption_plot.py` | 自包含双语教程与自动化回归 / Self-contained bilingual tutorial and regression tests | 是 |
-
-| 吸收示例 / absorption examples | `examples/absorption/absorption_budget.ipynb`, `examples/absorption/absorption_budget.py` | 独立双语教程目录 / Dedicated bilingual example directory | 是 |
-
-| 其他示例教程 / Other tutorials | `examples/README.md`, `examples/migration_manifest.json` | 11 组双语迁移说明与 Notebook/Python 示例；状态分级 / 11 classified Notebook/script pairs | 是 |
-
 | `snr` / `li_ma_snr` | `jinwu.core.significance`（`core` / `core.utils` 导出，旧 Li–Ma 路径兼容） | 明确单位与背景统计的五种计数显著性；冻结 gv_significance 源码、PP 系统误差与 PG 背景拟合误差；已泛化到 jinwu：是 |
-| `load_gv_reference` / `compare_snr_case` / `validate_wxt` / `validate_gbm` | `scripts/validate_snr.py` | 固定来源与中间量对照、真实 PHA/TTE→背景拟合/协方差→SNR 验收；分析验证脚本，未泛化到 jinwu：否 |
-| `_duration_fixed_edges` / `_duration_event_blocks` / `_duration_plateau` / `_duration_koshut` | `packages/jinwu/src/jinwu/core/timescale.py` | 严格定界分箱、已知观测区间事件 BB、累计平台散布、Koshut Eq8–16 与 ON/OFF 方差扩展（内部秒/计数接口） | 是 |
-| `load_baseline` / `filtered_copy` / `main` | `scripts/compare_ep260119a_duration.py` | hash 固定旧版与修正版同输入 EP260119a 时标对照，独立 PI 筛选、真实累计诊断和原件完整性验收 | 否 |
-| `load_rejected_v2` / `check_window_consistency` | `scripts/compare_ep260119a_duration.py` | 固定撤回版本重现 T90/T100 不一致；逐名义结果及模拟样本验收同窗口计数守恒、区间包含关系 | 否 |
-| `_duration_reference_boundary_options` / `_duration_reference_edges` | `packages/jinwu/src/jinwu/core/timescale.py` | 显式秒参数复用参考WXT移边、孤立事件补边和最终snap规则；不读隐式配置文件，供名义及每次MC定窗使用 | 是 |
-| `run_case`（参考自动时标执行） | `reviews/evidence/duration-reference-run-20261003/run_reference.py` | 显式ON/OFF事件、alpha、配置及输出布局调用原get_lc→get_Td90_normal；固定随机种子保存自动窗口/计数/原码误差/溯源，供原事件和PI独立输入比较 | 否 |
-| `clipped_event_copy`（PI时窗副本） | `reviews/evidence/duration-pi-window-20261004/run_restricted_pi.py` | 单GTI PI50–400分析用显式EP秒上下限复用参考事件裁剪；保留事件列，更新副本GTI/时间头并逐列核验，原件不变；未泛化到jinwu | 否 |
 
+| `_duration_fixed_edges` / `_duration_event_blocks` / `_duration_plateau` / `_duration_koshut` | `packages/jinwu/src/jinwu/core/timescale.py` | 严格定界分箱、已知观测区间事件 BB、累计平台散布、Koshut Eq8–16 与 ON/OFF 方差扩展（内部秒/计数接口） | 是 |
+| `_duration_reference_boundary_options` / `_duration_reference_edges` | `packages/jinwu/src/jinwu/core/timescale.py` | 显式秒参数复用参考WXT移边、孤立事件补边和最终snap规则；不读隐式配置文件，供名义及每次MC定窗使用 | 是 |
 | `generate_api_pages` | `docs/_ext/jinwu_docs.py` | 从五包源码 AST 生成规范模块 API、导航与排除清单；供本地和 RTD 构建复用 | 否（文档构建工具） |
 | `normalize_docstrings` / `separate_docstring_blocks` | `docs/_ext/jinwu_docs.py` | 构建时统一中英文 NumPy/RST 文档格式、保留代码块并修复块边界；不改分析源码 | 否（Sphinx 文档工具） |
-
 | `_evaluate_expression` | `packages/jinwu/src/jinwu/ftools/ftselect.py` | 按语法树保留优先级并逐元素计算事件筛选表达式 | 是 |
 | `_load_signal_counts_npz` | `packages/jinwu/src/jinwu/lf/lcfake.py` | 从显式净计数或 ON/OFF 模板提取带符号源计数，避免模拟背景双计 | 是 |
 | `_create_flux_chain_at_best_fit` | `packages/jinwu/src/jinwu/core/bxa_fit.py` | 计算后验通量后恢复 XSPEC 最佳拟合；可选通量失败与状态恢复失败分开处理 | 是 |
@@ -152,7 +138,6 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `BackgroundCountsPosterior._observation` / `_exposure` / `_validate` | `packages/jinwu/src/jinwu/background/backprior.py` | 在采样、期望值和更新边界校验背景计数、秒曝光和后验参数 | 是 |
 | `_grppha_output_error` | `packages/jinwu/src/jinwu/ftools/grppha_hsp.py` | 共用于两种 HEASoft 后端，检查任务状态、FATAL 信息与分组 PHA 结构 | 是 |
 | `_parse_ds9_region_shape` / `parse_ds9_region_line` | `packages/jinwu/src/jinwu/ftools/region.py` | 解析 DS9 区域、保留排除符号及坐标系统；赤道六十进制坐标和显式角秒/角分尺寸 | 是 |
-| `plot_optical_table` | `artifacts/optical_table_20261008/plot_optical.py` | CSV 星等与上限绘图：触发后对数主图、触发前插图、直接标注；不做消光校正或星等系统转换 | 否（表格绘图入口） |
 | `_place_lightcurve_fit_labels` | `packages/jinwu/src/jinwu/core/plot.py` | `LightcurveFitter.plot_fit` 的智能斜率/折断标签排版；集中像素障碍、碰撞搜索和模型标签职责，使拟合入口直接保留主曲线与残差 | 是 |
 | `paper_style` / `paper_figsize` / `save_figure(bbox_inches=...)` | `packages/jinwu/src/jinwu/core/plotstyle.py` | 最终英寸尺寸的临时论文样式、协调字号点线与刻度、字体缺失提示、供绘图入口解析论文画布，以及在上下文内默认保留画布尺寸的 PNG/PDF 导出 | 是 |
 | `FXTInput` / `FXTPipeline` / `FXTResult` | `packages/jinwu-ep/src/jinwu/ep/fxt/pipeline.py` | FXT L2/L3 逐观测 FXTA/B 联合 PL 拟合、显式短时段重抽、模块计数与条件谱形上限，保留 pile-up 审查状态 | 是 |

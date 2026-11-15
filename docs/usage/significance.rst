@@ -116,20 +116,13 @@ change the frozen MVT detector selection, Haar statistic or empirical curve.
 Validation / 验收
 -----------------
 
-.. code-block:: bash
-
-   conda activate hea
-   MPLCONFIGDIR=/tmp/jinwu-snr-mpl python -m scripts.validate_snr \
-       --output reviews/evidence/snr/validation.json
-
-The validator executes original function bodies with obsolete unused
-``Z_Bi/ncephes`` imports omitted, compares final and intermediate values,
-reads real WXT ON/OFF PHA, and refits two real GBM triggers plus an off-source
-control from original TTE. GBM validation uses fixed complete 1-s bins,
-native-channel deadtime, and full fitted coefficient covariance. No original
-data or previous MVT result is overwritten. Analytical tolerances are
-rtol=atol=1e-10; numerical systematics use 1e-7. See
-``reviews/snr-gv-significance-migration.md`` for provenance and limitations.
+Compare the pinned upstream function bodies on identical ON counts, background
+and nuisance parameters. Include zero-count boundaries, deficits and optimizer
+failures, and inspect intermediate likelihood values as well as final scores.
+Real-product checks must preserve the selected interval, energy band, exposure
+and fitted-background covariance. For GBM, refit the background from the input
+TTE rather than substituting a Poisson error for its propagated uncertainty.
+Local scores still require separate trials calibration in a search.
 
 References
 ------------

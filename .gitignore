@@ -50,14 +50,25 @@ Icon?
 # === External Dependencies (large / not in repo) ===
 external_sources/
 
-# === Local test & review trees (top-level only) ===
-# Tracked copies (test suite, reviews evidence) remain tracked until
-# explicitly removed with git rm --cached.
+# === Local test trees (tracked CI tests remain in Git) ===
 /test/
 /tests/
 /testrs/
-/reviews/
 
-# === Private local analysis (never publish source-specific inputs/results) ===
+# === Private analysis, examples and development records ===
+# Ignore rules do not remove already tracked files; use git rm --cached.
 /local_private/
-/artifacts/ta_validation
+examples/
+example/
+*.ipynb
+artifacts/
+reviews/
+scripts/
+/conda-pypi-output/
+/implementation_plan.md
+/ARCHITECTURE_ROADMAP.md
+VALIDATION.md
+
+# Inactive legacy translation cache; current handbook is maintained directly.
+/docs/locale/
+*.mo

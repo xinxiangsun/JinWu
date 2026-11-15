@@ -125,8 +125,7 @@ paper classification.
 It differs from ``gv_significance.poisson_gaussian.significance(n,b,sigma)``:
 that function uses the Poisson ON count and Gaussian fitted-background error
 in a signed profile-likelihood statistic. Its value cannot replace the frozen
-helper on the existing validation curve. The same-bin GBM comparison is
-recorded in ``reviews/gbm-mvt-pg-snr.md``. The original GBM simulation helper
+helper on the existing validation curve. The original GBM simulation helper
 estimates background from all native-channel background events, then selects
 the peak light-curve energy band; its default bin origin follows the first
 event. The real-data adapter explicitly uses a selected-band fit and the
@@ -145,8 +144,8 @@ Empirical classification uses the frozen proxy and recorded input conventions.
 The reported percentile upper bound is an
 empirical conditional bound, not a guaranteed frequentist coverage statement.
 
-Licensing and migration evidence
---------------------------------
+Licensing and migration checks
+------------------------------
 
 The fork declares Apache-2.0 in its package metadata, README and initializer,
 although it has no standalone LICENSE. The port includes Apache text,
@@ -155,8 +154,8 @@ The original ``nrbutler/mvt`` repository has no explicit license declaration
 located in this audit. That provenance question remains unresolved before
 redistribution; local implementation and numerical acceptance do not settle it.
 
-``scripts/validate_gbm_mvt.py`` takes the untouched upstream source as input.
-It checks numerical function AST equality, seven return values, eight classes
-of intermediate arrays and every requested real-data Poisson sample against
-the saved migrated result. Evidence is in ``reviews/evidence/gbm-mvt/``.
-See ``reviews/gbm-mvt-migration.md`` for current acceptance results and limits.
+For a migration comparison, pin the upstream source and use identical input
+counts, errors, bin widths and random draws. Compare the seven return values,
+intermediate Haar arrays and every requested Poisson sample. Numerical
+agreement on identical inputs does not establish equivalence of upstream
+simulation conventions, empirical calibration or scientific interpretation.

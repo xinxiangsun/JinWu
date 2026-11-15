@@ -4,15 +4,28 @@
 多包结构
 ------------
 
-``packages/jinwu`` 提供核心，``jinwu-ep``、``jinwu-swift``、``jinwu-fermi``、``jinwu-gw``
+``packages/jinwu`` 提供共享分析，``jinwu-ep``、``jinwu-swift``、``jinwu-fermi``、``jinwu-gw``、``jinwu-gecam``
 提供仪器/任务扩展，共享 namespace。Rust 扩展 ``jinwurs`` 为可选加速。
 新增逻辑前先检查现有 API；公共函数记录参数、返回、单位与方法来源，
 新增可复用函数在仓库 ``REUSABLE_FUNCTIONS.md`` 登记。
 
+分层与依赖
+------------
+
+任务包负责仪器 I/O、校准与流程编排，共享层承载任务无关的数据、统计和物理语义。
+依赖从任务流程指向共享能力；新增通用算法不应反向依赖任务包。
+已有 HEASoft、XSPEC 等集成保留明确边界：按需加载外部运行时，缺失时给出可操作的错误。
+标准事件、PHA、RMF、ARF 等产品是任务处理与共享分析之间的主要边界。
+
+一般源模型放共享层；仅仪器专属的前向或校准模型属于任务包。
+优先复用成熟科学实现，通过显式适配接入；替换算法需说明数值、性能或科学收益。
+保持公共接口兼容，迁移时在相同输入与设置下比较原实现、中间量和最终结果，
+将算法修正与纯接口迁移分开验收。新抽象应有当前调用者或清楚的独立职责。
+
 构建本手册
 ------------
 
-从仓库根目录使用独立环境，安装当前五个 Python 包和锁定的文档依赖：
+从仓库根目录使用独立环境，安装当前六个 Python 包和锁定的文档依赖：
 
 .. code-block:: bash
 
@@ -20,7 +33,7 @@
    /tmp/jinwu-docs-env/bin/python -m pip install -r docs/requirements.txt
    /tmp/jinwu-docs-env/bin/python -m pip install \
        ./packages/jinwu ./packages/jinwu-ep ./packages/jinwu-swift \
-       ./packages/jinwu-fermi ./packages/jinwu-gw
+       ./packages/jinwu-fermi ./packages/jinwu-gw ./packages/jinwu-gecam
    /tmp/jinwu-docs-env/bin/python -m sphinx -b html -W --keep-going docs docs/_build/html
    /tmp/jinwu-docs-env/bin/python -m http.server --directory docs/_build/html 8000
 

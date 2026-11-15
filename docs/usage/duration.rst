@@ -156,34 +156,17 @@ Unsupported legacy options (edge-background fitting, peak selection and custom
 ``timebins``) now fail explicitly instead of being silently ignored. Use
 ``plateau_intervals`` and/or ``burst_tstart/stop`` for explicit intervals.
 
-Reproducible EP260119a comparison
----------------------------------
+Validation scope
+----------------
 
-``scripts/compare_ep260119a_duration.py`` loads a hash-pinned old source module
-and runs it beside the corrected implementation on identical photons and
-settings, including an independent PI 50--400 measurement. It writes JSON,
-tables and cumulative/BB diagnostic plots outside the original EP260119a
-project, and checks the hashes of its protected analysis/product files.
-The existing EP260119a timing script and results are not edited.
-
-The withdrawn v2 mixed a BB T100 with a full-observation plateau normalization
-and full-observation nominal crossings. Its T90 could exceed T100. Relabeling
-T100 as an activity window did not resolve the inconsistent definitions.
-Its source and products remain archived as rejected evidence; the default
-comparison historically wrote to
-``reviews/evidence/duration-20261002/window_consistent_v3/ep260119a``. Preserve
-these archived products by supplying a new ``--output-dir`` when rerunning it.
-
-The v4 comparison is a separate entry point:
-``reviews/evidence/duration-reference-edges-20261003/validate.py``. It loads
-the hash-pinned v3 source, compares the edge rules against the original
-reference statements on identical raw boundaries, and runs original
-EP260119a, its independent PI 50--400 selection, and pointed EP260809a CMOS32
-in adaptive/fixed modes. Its ``results.json`` contains full results,
-parameters, source/input hashes, environment and preservation checks.
-The background transform, inverse, cumulative, crossing and error choices
-remain as in v3. Agreement of refinement given identical raw edges does not
-establish agreement of the complete reference pipelines or uncertainty coverage.
+Use identical photons, GTIs, alpha, time references and settings when comparing
+method versions. Check signed count conservation, percentile crossings,
+T50/T90/T100 containment, window selection and uncertainty status separately.
+A full-observation percentile normalization can produce a T90 exceeding the
+BB-defined T100; it must not be mixed with this window-normalized estimator.
+Agreement of boundary refinement on identical raw edges does not establish
+agreement of complete pipelines or uncertainty coverage. Preserve input hashes
+and write comparisons to a separate output directory.
 
 References
 ------------

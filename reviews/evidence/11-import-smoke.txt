@@ -1,3 +1,0 @@
-modules imported: 103
-failures: 1
-  FAIL jinwu.gw.__main__ SystemExit(2)

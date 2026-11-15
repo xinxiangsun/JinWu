@@ -57,8 +57,12 @@ Type-I PHA 副本，以 ``pgstat`` 拟合。默认 ``cflux*powerlaw``，用 ``en
 ``prepare_gecam_spectra`` 的输出直接传入 :doc:`source_analysis` 做同源分析。
 
 响应由调用方提供。校准有效性、残差和统计诊断需要审查，``fit_performed`` 记录
-拟合是否执行，``science_status`` 为 ``requires_review``。真实数据流程验证限官方
-GECAM-B 样例。源码包的 VALIDATION.md 记录了样例的响应索引问题、规范化副本和对照结果。
+拟合是否执行，``science_status`` 为 ``requires_review``。响应索引、能道与能量边界
+必须逐产品核对；官方样例的对照不能替代其他观测或校准版本的验收。
+部分官方样例 RSP 有 ``NUMELT`` 求和溢出，并存在 ``F_CHAN=1``、缺失 ``TLMIN4``
+与零起始 EBOUNDS/PHA 通道号冲突。准备阶段会拒绝索引不一致的输入。
+仅在核对确切矩阵布局后对独立副本显式规范化并验证，保留原响应；
+编码修正不能代替有效面积校准。
 
 详细配置见源码包 README.md。官方接口与版本说明见
 `GECAMTools-Public <https://github.com/zhangpeng-sci/GECAMTools-Public>`_。

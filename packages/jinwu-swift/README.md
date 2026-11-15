@@ -132,10 +132,8 @@ python -m jinwu.swift.bat.survey NGC4253 \
   --window 2024-07-16T12:00:00 2024-07-16T13:00:00
 ```
 
-同样的参数也可直接运行带注释的
-[`examples/bat_survey_pipeline.py`](examples/bat_survey_pipeline.py)；它支持
-`--until`、`--no-resume`、本地 survey/mosaic 路径以及与命令行一致的查询、下载、
-并行和超时选项。
+更多参数及公共 Python 接口见[BAT survey 指南](../../docs/usage/bat_survey.rst)。
+命令行支持本地 survey/mosaic 路径，以及显式查询、下载、并行和超时选项。
 
 已有结果可用 `--survey-products` 或 `--mosaic-products` 直接接入；原始单观测目录
 可用 `--raw-products` 指定。`--until` 和 `--no-resume` 分别控制阶段停止和缓存恢复。

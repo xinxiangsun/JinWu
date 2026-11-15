@@ -21,7 +21,7 @@ GECAMTools 的 Python 导入名是 `gecam`，与 `jinwu.gecam` 分开。
 官方来源：[任务网站](https://gecam.ihep.ac.cn/grbDataAnalysisSoftware.jhtml)、
 [源码与版本说明](https://github.com/zhangpeng-sci/GECAMTools-Public)。
 20240514 的发布记录取消了旧版依赖上限；本接口要求该版本或更新版本，
-已验证范围见 [VALIDATION.md](VALIDATION.md)。
+使用方式与验收边界见[GECAM 指南](../../docs/usage/gecam.rst)。
 
 ## 使用
 
@@ -111,4 +111,8 @@ result = finished.run(resume=True)
 首版针对 A/B/C GRD EVT；真实数据验收限 GECAM-B 官方样例。
 下载、姿态选探头、CALDB 响应生成、T90、CPD 及并道数据由独立的原生工具处理。
 `science_status="requires_review"` 与 `fit_performed` 分别记录科学状态和拟合执行状态。
-使用响应前需检查校准版本、生成警告及响应关联。[样例响应编码问题、显式副本和验证记录](VALIDATION.md)。
+使用响应前需检查校准版本、生成警告及响应关联。部分官方样例 RSP 存在
+`NUMELT` 的 16 位求和溢出，以及 `F_CHAN=1`、缺失 `TLMIN4` 与零起始
+EBOUNDS/PHA 通道号之间的冲突；准备阶段会拒绝索引不一致的输入。
+应核对矩阵布局与通道定义，在独立副本中显式规范化并验证，保留原响应；
+不要对其他布局盲目套用修正。编码规范化不能代替有效面积校准或科学验收。
