@@ -137,6 +137,76 @@ A one-sided ``+3 sigma`` bound has probability ``Phi(3)=0.9986501`` and an
 asymptotic single-parameter profile threshold ``delta_stat=9``.  This is not
 the two-sided coverage ``0.9973002``.
 
+RapidXMM fixed-background Bayesian option
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For spatial aperture Poisson data (WXT/FXT), select
+``observed_method="rapid_xmm"`` to obtain the fixed-background posterior
+quantile described by `Ruiz et al. (2022), equations (7)--(10)
+<https://doi.org/10.1093/mnras/stac272>`_. The default remains
+``observed_method="profile_likelihood"``.
+
+For a count upper limit alone:
+
+.. code-block:: python
+
+   from jinwu.core import rapid_xmm_upper_limit
+
+   counts_upper = rapid_xmm_upper_limit(counts=5, background=3.2, confidence=0.9)
+   rate_upper = counts_upper / (exposure_s * encircled_energy_fraction)
+
+``counts`` is the total observed aperture count, and ``background`` is the
+fixed expected background in that aperture, with the same time and energy
+selection. The prior is uniform on non-negative source counts. Background
+uncertainty is not propagated; this is a Bayesian credible upper bound,
+not a calibrated frequentist confidence bound or a detection sensitivity.
+
+The response-aware interface uses the same observations and model as above:
+
+.. code-block:: python
+
+   from jinwu.core.upperlimit import OneSidedLevel
+
+   cfg.upper_limit = replace(
+       cfg.upper_limit,
+       observed_method="rapid_xmm",
+       default_sigma=OneSidedLevel.from_confidence(0.9).sigma,
+       result_modes=("observed_upper_bound",),
+   )
+   result = estimate_upper_limit(
+       observation, model=model, instrument_config=cfg,
+       interval=(tstart, tstop), energy_band=(0.5, 4.0),
+       output_dir="rapid_xmm_limit",
+   )
+
+For ``poisson_onoff`` inputs the background expectation is fixed to
+``sum(alpha * background_counts)``. Alternatively, set
+``background_likelihood="known_background"`` and supply the expectation in
+``observation.background_model``. Non-zero background systematics and explicit
+background error arrays are rejected for this method.
+
+Selected channels and modules are pooled: with total counts :math:`N`,
+fixed background :math:`B`, and summed response-folded counts per unit
+amplitude :math:`K`, the result is :math:`A_{\rm UL}=S_{\rm UL}(N,B)/K`.
+This follows the pooled aperture construction, rather than multiplying
+channel/module posteriors for a common amplitude. Each module retains its
+own exposure, response, and background scaling before summation. A response
+template must predict counts inside the source aperture; apply its aperture
+correction only once. The flux band and absorbed/unabsorbed definition are
+those used to build the fixed model template.
+
+Results record ``construction="rapid_xmm"``,
+``confidence_convention="posterior_quantile"``, the prior, and aperture
+totals. The JSON profile threshold is ``null``. ``default_sigma=3`` selects
+the posterior probability ``Phi(3)``; the example explicitly requests 90%.
+The likelihood scan is diagnostic and its delta statistic does not define
+the Bayesian bound. If detection sensitivity is also requested, it continues
+to use the configured detection calibration separately.
+
+``FXTPipeline`` accepts this option through its ``config`` argument, for
+example with an ``instrument("FXT")`` configuration modified as above;
+``upper_limit_sigma`` on the pipeline sets its reported upper-limit level.
+
 Legacy XSPEC parameter limits
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

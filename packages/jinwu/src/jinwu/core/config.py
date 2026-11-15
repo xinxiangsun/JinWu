@@ -270,7 +270,8 @@ class UpperLimitConfig:
     The strategy is deliberately part of the instrument configuration rather
     than a free argument to the calculator.  This prevents, for example, a
     coded-mask product from being interpreted as a simple aperture ON/OFF
-    measurement.
+    measurement. ``observed_method='rapid_xmm'`` selects a fixed-background
+    aperture posterior quantile; the default is a profile-likelihood bound.
     """
 
     strategy: Literal[
@@ -312,6 +313,7 @@ class UpperLimitConfig:
         "conditional_model", "empirical_if_available", "empirical_fixed_position",
         "empirical_global_search",
     ] = "conditional_model"
+    observed_method: Literal["profile_likelihood", "rapid_xmm"] = "profile_likelihood"
 
     def __post_init__(self) -> None:
         allowed_strategies = {
@@ -323,6 +325,13 @@ class UpperLimitConfig:
         }
         if self.strategy not in allowed_strategies:
             raise ValueError(f"Unknown upper-limit strategy: {self.strategy}")
+        if self.observed_method not in {"profile_likelihood", "rapid_xmm"}:
+            raise ValueError(f"Unknown observed upper-limit method: {self.observed_method}")
+        if self.observed_method == "rapid_xmm":
+            if self.strategy != "spatial_onoff":
+                raise ValueError("rapid_xmm requires spatial aperture Poisson counts")
+            if self.fractional_background_systematic not in (None, 0.0):
+                raise ValueError("rapid_xmm assumes a fixed background without systematic uncertainty")
         if self.calibration not in {"bootstrap", "asymptotic", "empirical_if_available"}:
             raise ValueError(f"Unknown upper-limit calibration: {self.calibration}")
         if self.calibration_mode not in {
@@ -409,7 +418,7 @@ class UpperLimitConfig:
             raise ValueError("enabled upper-limit strategies must provide observed_upper_bound")
 
         valid_combinations = {
-            "spatial_onoff": ({"poisson_onoff"}, {"rmf_arf"}, {"single", "joint_modules"}),
+            "spatial_onoff": ({"poisson_onoff", "known_background"}, {"rmf_arf"}, {"single", "joint_modules"}),
             "modeled_count_spectrum": (
                 {
                     "gaussian_model",

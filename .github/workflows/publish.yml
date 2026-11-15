@@ -4,11 +4,45 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'         # e.g. v0.2.0 — lockstep release of all packages
-  workflow_dispatch:
+  workflow_dispatch:  # Select the release tag as ref, never a branch.
 
 jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require a release tag matching every package version
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+
+          ref = os.environ["GITHUB_REF"]
+          match = re.fullmatch(r"refs/tags/v([0-9]+\.[0-9]+\.[0-9]+)", ref)
+          if match is None:
+              raise SystemExit("Publish requires a release tag; dispatch with --ref vX.Y.Z.")
+          expected = match.group(1)
+          packages = ("jinwu", "jinwu-ep", "jinwu-swift", "jinwu-fermi", "jinwu-gw", "jinwu-gecam", "jinwurs")
+          for package in packages:
+              path = Path("packages") / package / "pyproject.toml"
+              actual = tomllib.loads(path.read_text())["project"]["version"]
+              if actual != expected:
+                  raise SystemExit(f"{path}: {actual} does not match tag version {expected}")
+          path = Path("packages/jinwurs/Cargo.toml")
+          actual = tomllib.loads(path.read_text())["package"]["version"]
+          if actual != expected:
+              raise SystemExit(f"{path}: {actual} does not match tag version {expected}")
+          print(f"All seven packages match v{expected}")
+          PY
+
   # ── Python (jinwu, jinwu-ep, jinwu-swift, jinwu-fermi, jinwu-gw, jinwu-gecam) ──
   build-python:
+    needs: [check-release]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +72,7 @@ jobs:
 
   # ── Rust (jinwurs, abi3 → 3.11+) ──────────────────
   build-rust:
+    needs: [check-release]
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -57,6 +92,13 @@ jobs:
           command: build
           args: --release --out dist --manifest-path packages/jinwurs/Cargo.toml
           manylinux: auto
+      - name: Build Rust source distribution once
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: latest
+          command: sdist
+          args: --out dist --manifest-path packages/jinwurs/Cargo.toml
       - uses: actions/upload-artifact@v4
         with:
           name: rust-wheels-${{ matrix.os }}-py${{ matrix.python-version }}
@@ -123,7 +165,7 @@ jobs:
           pattern: '*'
           path: artifacts/
 
-      - name: Collect all wheels
+      - name: Collect all distributions
         run: |
           mkdir -p dist
           # abi3 wheels built by different Python versions share the same
@@ -136,9 +178,12 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: dist/*
           generate_release_notes: true

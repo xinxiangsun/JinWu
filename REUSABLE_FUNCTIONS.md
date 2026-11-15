@@ -143,6 +143,7 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `FXTInput` / `FXTPipeline` / `FXTResult` | `packages/jinwu-ep/src/jinwu/ep/fxt/pipeline.py` | FXT L2/L3 逐观测 FXTA/B 联合 PL 拟合、显式短时段重抽、模块计数与条件谱形上限，保留 pile-up 审查状态 | 是 |
 | `TAInput` / `TAPipeline` / `TAResult` / `combine_ta_flux_rows` / `save_ta_flux_curve` | `packages/jinwu-ep/src/jinwu/ep/ta.py` | 同源 WXT/FXT 分析、WXT 跨观测共享吸收、统一 EP 时间和观测者系 0.5–4 keV 去吸收通量表与图 | 是 |
 | `screen_cosmic_ray_frames` | `packages/jinwu-ep/src/jinwu/ep/wxt/cosmic_rays.py` | CMOSFRAM 唯一匹配、逐帧诊断，以及人工确认后整帧排除并同步 GTI/有效曝光 | 是 |
+| `rapid_xmm_upper_limit` / `estimate_upper_limit(observed_method via config)` | `packages/jinwu/src/jinwu/core/upperlimit.py` | 固定背景、非负源计数均匀先验的 RapidXMM 后验上限；可选汇总孔径计数并复用响应模板换算流量 | 是 |
 | `_cflux_source_components` | `packages/jinwu/src/jinwu/core/fit.py` | 共用于模型初始化与通量导出，校验吸收在外且cflux包住完整加性源谱，并定位包括自定义模型在内的norm分量 | 是 |
 | `_tte_gti_coverage` | `packages/jinwu-fermi/src/jinwu/fermi/gbm/pipeline.py` | 复用 GTI 读取并按现有 GDT 事件拼接规则检查实际源/背景窗，返回绝对 MET 秒覆盖与缺口；供下载与窗口门禁共用 | 是 |
 | `open_event` / `extract_lightcurve` / `extract_spectra` | `packages/jinwu-gecam/src/jinwu/gecam/backend.py` | GECAMTools 原生事件、带单位选择的光变与谱接口 | 是 |

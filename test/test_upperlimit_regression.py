@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+import json
 from statistics import NormalDist
 from types import SimpleNamespace
 
 from astropy.io import fits
 import numpy as np
 import pytest
+from scipy.integrate import quad
+
+from jinwu.core import rapid_xmm_upper_limit
 
 from jinwu.core.config import instrument
 from jinwu.core.upperlimit import (
@@ -326,3 +330,104 @@ def test_gecam_requires_explicit_calibration_identity():
 
 def test_count_predictor_is_public():
     assert "CountPredictor" in upperlimit.__all__
+
+
+@pytest.mark.parametrize("counts,background", [(0, 0), (0, 10000), (5, 0), (5, 3), (2, 10000)])
+@pytest.mark.parametrize("confidence", [0.9, NormalDist().cdf(3)])
+def test_quantile_matches_independent_posterior_integration(counts, background, confidence):
+    upper = rapid_xmm_upper_limit(counts, background, confidence=confidence)
+    # Shift the log density at its mode so even a large background deficit
+    # can be integrated independently of incomplete gamma functions.
+    mode = max(0.0, counts - background)
+    reference = max(background + mode, 1.0)
+
+    def density(source):
+        if background + source == 0:
+            return 1.0 if counts == 0 else 0.0
+        return np.exp(counts * np.log((background + source) / reference) - (source - mode))
+
+    normalization = quad(density, 0, np.inf, epsabs=1e-11)[0]
+    assert quad(density, 0, upper, epsabs=1e-11)[0] / normalization == pytest.approx(confidence, abs=2e-10)
+
+
+def test_zero_counts_and_extreme_deficit():
+    assert rapid_xmm_upper_limit(0, 5) == pytest.approx(-np.log(0.1))
+    assert rapid_xmm_upper_limit(1, 1e16) == pytest.approx(-np.log(0.1))
+
+
+@pytest.mark.parametrize("counts,background,confidence", [
+    (-1, 0, 0.9), (0.5, 0, 0.9), (np.nan, 0, 0.9),
+    (1, -1, 0.9), (1, np.inf, 0.9), (1, 0, 1), (1, 0, 0),
+])
+def test_invalid_aperture_inputs(counts, background, confidence):
+    with pytest.raises(ValueError):
+        rapid_xmm_upper_limit(counts, background, confidence=confidence)
+
+
+@pytest.mark.parametrize("known_background", [False, True])
+def test_pooled_modules_preserve_scaling_and_posterior_metadata(tmp_path, known_background):
+    cfg = instrument("FXT")
+    assert cfg.upper_limit.observed_method == "profile_likelihood"
+    cfg.upper_limit = replace(
+        cfg.upper_limit, observed_method="rapid_xmm",
+        background_likelihood="known_background" if known_background else "poisson_onoff",
+        default_sigma=NormalDist().inv_cdf(0.9), result_modes=("observed_upper_bound",),
+    )
+    observations = [
+        UpperLimitObservation(
+            name="A", source_counts=np.array([1, 2]), unit_source_counts=np.array([2., 1.]),
+            **({"background_model": np.array([1., 2.])} if known_background else
+               {"background_counts": np.array([10, 10]), "alpha": np.array([0.1, 0.2])}),
+        ),
+        UpperLimitObservation(
+            name="B", source_counts=np.array([0, 1]), unit_source_counts=np.array([1., 2.]),
+            **({"background_model": np.array([2., 2.])} if known_background else
+               {"background_counts": np.array([10, 10]), "alpha": 0.2}),
+        ),
+    ]
+    model = CountTemplateModel("fixed shape", flux_per_amplitude=1e-12)
+    result = estimate_upper_limit(
+        observations, model=model, instrument_config=cfg, interval=(0, 100),
+        energy_band=(0.5, 4), output_dir=tmp_path, plots=False,
+    )
+    bound = result.observed_upper_bound
+    assert bound.amplitude_upper == pytest.approx(rapid_xmm_upper_limit(4, 7) / 6)
+    assert bound.flux_upper == pytest.approx(bound.amplitude_upper * 1e-12)
+    assert bound.confidence_convention == "posterior_quantile"
+    assert bound.profile_status == "not_applicable"
+    assert bound.level.delta_stat is None
+    assert result.provenance["background_likelihood"] == "known_background"
+    assert result.provenance["aperture_totals"]["background"] == 7
+    payload = json.loads((tmp_path / "upper_limit.json").read_text())
+    assert payload["observed_upper_bound"]["level"]["delta_stat"] is None
+    assert "posterior quantile" in (tmp_path / "upper_limit_summary.txt").read_text()
+    assert "delta_stat=" not in (tmp_path / "upper_limit_summary.txt").read_text()
+
+
+def test_zero_count_aperture_interface():
+    cfg = instrument("WXT")
+    cfg.upper_limit = replace(cfg.upper_limit, observed_method="rapid_xmm", result_modes=("observed_upper_bound",))
+    result = estimate_upper_limit(
+        UpperLimitObservation("empty", source_counts=np.array([0]), background_counts=np.array([0]),
+                              alpha=0.1, unit_source_counts=np.array([2.])),
+        model="unit", instrument_config=cfg, interval=(0, 1), plots=False,
+    )
+    assert result.observed_upper_bound.amplitude_upper == pytest.approx(
+        -np.log1p(-NormalDist().cdf(3)) / 2,
+    )
+
+
+def test_rapid_xmm_rejects_non_aperture_policy_and_background_errors():
+    with pytest.raises(ValueError, match="spatial aperture"):
+        replace(instrument("BAT").upper_limit, observed_method="rapid_xmm")
+    cfg = instrument("WXT")
+    with pytest.raises(ValueError, match="fixed background"):
+        replace(cfg.upper_limit, observed_method="rapid_xmm", fractional_background_systematic=0.1)
+    cfg.upper_limit = replace(cfg.upper_limit, observed_method="rapid_xmm", result_modes=("observed_upper_bound",))
+    for counts, errors in [([0.5], None), ([1], np.array([1.]))]:
+        observation = UpperLimitObservation(
+            "aperture", source_counts=np.asarray(counts), background_counts=np.array([1]),
+            alpha=0.1, background_sigma=errors, unit_source_counts=np.array([1.]),
+        )
+        with pytest.raises(ValueError, match="integer|fixed background"):
+            estimate_upper_limit(observation, model="unit", instrument_config=cfg, interval=(0, 1))

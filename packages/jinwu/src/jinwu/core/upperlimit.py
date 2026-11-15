@@ -2,7 +2,7 @@
 
 The legacy :class:`UpperLimit` class remains available for direct XSPEC chain
 and ``Fit.error`` work.  New analyses should use :func:`estimate_upper_limit`,
-which separates an observed profile-likelihood bound from a calibrated
+which separates an observed-data bound from a calibrated
 detection sensitivity and obtains its statistical strategy from
 ``InstrumentConfig.upper_limit``.
 """
@@ -25,7 +25,7 @@ from astropy.io import fits
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import brentq, minimize, minimize_scalar
-from scipy.special import xlogy
+from scipy.special import gammaincc, gammainccinv, xlogy
 
 from jinwu.core.config import InstrumentConfig, UpperLimitConfig
 from jinwu.core.products import sha256_file
@@ -61,6 +61,7 @@ __all__ = [
     "register_upper_limit_strategy",
     "FastNormFit",
     "estimate_upper_limit",
+    "rapid_xmm_upper_limit",
     "profile_source_amplitude",
 ]
 
@@ -121,11 +122,11 @@ _CALIBRATION_STATUSES = frozenset(
 #       Chernoff, 1954, Ann. Math. Statist. 25, 573
 @dataclass(frozen=True, slots=True)
 class OneSidedLevel:
-    """One-sided Gaussian-equivalent profile-likelihood level."""
+    """One-sided Gaussian-equivalent level; posterior bounds have no delta threshold."""
 
     sigma: float
     confidence: float
-    delta_stat: float
+    delta_stat: float | None
     label: str
 
     @classmethod
@@ -153,6 +154,81 @@ class OneSidedLevel:
             delta_stat=float(sigma * sigma),
             label=f"one-sided {100.0 * value:g}%",
         )
+
+
+def rapid_xmm_upper_limit(
+    counts: int,
+    background: float,
+    *,
+    confidence: float = 0.9,
+) -> float:
+    """Return a fixed-background Bayesian source-count upper limit.
+
+    Parameters
+    ----------
+    counts : int
+        Total observed aperture counts (source plus background), not net counts.
+    background : float
+        Fixed expected background counts in the same aperture and time/energy
+        window. Its uncertainty is not propagated.
+    confidence : float, optional
+        Posterior probability below the upper limit, strictly between 0 and 1.
+
+    Returns
+    -------
+    float
+        Non-negative source-count upper limit in the aperture. Divide by the
+        exposure in seconds and the encircled energy fraction for a count rate,
+        or by the response-folded counts per unit flux for a flux limit. Apply
+        the aperture correction only once.
+
+    Notes
+    -----
+    Uses a uniform prior for non-negative source counts, with likelihood
+    ``Poisson(counts | source + background)``. Implements Ruiz et al. (2022),
+    MNRAS 511, 4265, equations (7)--(10), using the equivalent upper-gamma
+    survival ratio to avoid subtraction from unity:
+    https://doi.org/10.1093/mnras/stac272 .
+    This is a posterior quantile, not a detection threshold or a calibrated
+    frequentist confidence limit.
+    """
+    n, b, probability = float(counts), float(background), float(confidence)
+    if not math.isfinite(n) or n < 0 or not n.is_integer():
+        raise ValueError("counts must be a non-negative integer (total aperture counts)")
+    if not math.isfinite(b) or b < 0:
+        raise ValueError("background must be finite and non-negative")
+    if not math.isfinite(probability) or not 0 < probability < 1:
+        raise ValueError("confidence must be finite and between 0 and 1")
+    log_tail = math.log1p(-probability)
+    if n == 0:
+        return -log_tail
+    tail = (1.0 - probability) * float(gammaincc(n + 1.0, b))
+    if tail >= np.finfo(float).tiny:
+        upper = float(gammainccinv(n + 1.0, tail)) - b
+        if math.isfinite(upper) and upper > 0:
+            return upper
+
+    # In a deep background deficit Q(n+1, b) can underflow. For integer n,
+    # Q(n+1,x) = exp(-x) x**n/n! * sum_j (n)_j/x**j. Here b > n,
+    # so the decreasing recurrence converges without large exponentials.
+    if b <= n:
+        raise RuntimeError("Could not resolve the fixed-background posterior tail")
+
+    def log_series(x: float) -> float:
+        term = total = 1.0
+        for index in range(int(n)):
+            term *= (n - index) / x
+            total += term
+            if term <= 1e-15 * total:
+                break
+        return math.log(total)
+
+    baseline = log_series(b)
+    return float(brentq(
+        lambda source: -source + n * math.log1p(source / b)
+        + log_series(b + source) - baseline - log_tail,
+        0.0, -log_tail / (1.0 - n / b),
+    ))
 
 
 @runtime_checkable
@@ -640,7 +716,7 @@ class GaussianNetRateProfileResult:
 
 @dataclass(frozen=True, slots=True)
 class ObservedUpperBound:
-    """Observed-data profile-likelihood bound for a non-negative amplitude."""
+    """Observed-data bound; ``construction`` identifies its statistical meaning."""
 
     amplitude_mle: float
     amplitude_upper: float
@@ -1086,7 +1162,7 @@ def register_upper_limit_strategy(strategy: UpperLimitStrategy) -> UpperLimitStr
 
 
 for _strategy in (
-    UpperLimitStrategy("spatial_onoff", ("poisson_onoff",), True),
+    UpperLimitStrategy("spatial_onoff", ("poisson_onoff", "known_background"), True),
     UpperLimitStrategy(
         "modeled_count_spectrum",
         (
@@ -1560,6 +1636,38 @@ def estimate_upper_limit(
         for observation in raw_observations
     ]
     likelihood = _ProfileLikelihood(prepared, policy.background_likelihood)
+    aperture_totals = None
+    if policy.observed_method == "rapid_xmm":
+        if any(np.any(item.source_counts != np.floor(item.source_counts)) for item in prepared):
+            raise ValueError("rapid_xmm requires integer total aperture counts, not net rates")
+        if any(raw.background_sigma is not None or raw.background_covariance is not None
+               for raw in raw_observations):
+            raise ValueError("rapid_xmm assumes fixed background; background errors are not supported")
+        counts = float(sum(np.sum(item.source_counts) for item in prepared))
+        background = float(sum(
+            np.sum(item.alpha * item.background_counts)
+            if item.background_counts is not None else np.sum(item.background_model)
+            for item in prepared
+        ))
+        conversion = float(sum(np.sum(item.unit_source_counts) for item in prepared))
+        aperture_totals = {
+            "counts": counts, "background": background,
+            "unit_source_counts": conversion,
+        }
+        # RapidXMM pools aperture counts (Ruiz et al. eq. 10); it is not the
+        # product of the channel/module posteriors for a common flux.
+        aperture = replace(
+            prepared[0], source_counts=np.asarray([counts]),
+            unit_source_counts=np.asarray([conversion]),
+            background_model=np.asarray([background]),
+            background_counts=None, alpha=None,
+        )
+        likelihood = _ProfileLikelihood([aperture], "known_background")
+        warnings_list.append(
+            "RapidXMM uses a uniform prior on non-negative source counts and a fixed "
+            "background expectation; background uncertainty is not propagated. "
+            "Selected channels/modules are pooled into one aperture count measurement."
+        )
     level = OneSidedLevel.from_sigma(policy.default_sigma)
     configured_false_alarm_probability = (
         1.0 - float(level.confidence)
@@ -1581,9 +1689,17 @@ def estimate_upper_limit(
     }
     if "observed_upper_bound" in policy.result_modes:
         fit_state = likelihood.fit()
-        amplitude_mle, amplitude_upper, fit_statistic, null_statistic = (
-            likelihood.upper_bound(level, fit_state=fit_state)
-        )
+        if aperture_totals is None:
+            amplitude_mle, amplitude_upper, fit_statistic, null_statistic = (
+                likelihood.upper_bound(level, fit_state=fit_state)
+            )
+        else:
+            amplitude_mle = fit_state.amplitude_mle
+            amplitude_upper = rapid_xmm_upper_limit(
+                aperture_totals["counts"], aperture_totals["background"],
+                confidence=level.confidence,
+            ) / aperture_totals["unit_source_counts"]
+            fit_statistic, null_statistic = fit_state.fit_statistic, fit_state.null_statistic
         observed = ObservedUpperBound(
             amplitude_mle=amplitude_mle,
             amplitude_upper=amplitude_upper,
@@ -1594,14 +1710,20 @@ def estimate_upper_limit(
                 amplitude_upper, model_info["fluence_per_amplitude"]
             ),
             fluence_unit=model_info["fluence_unit"],
-            level=level,
+            level=(level if aperture_totals is None else replace(
+                level, delta_stat=None, label=f"posterior {100 * level.confidence:g}%",
+            )),
             fit_statistic=fit_statistic,
             null_statistic=null_statistic,
-            construction="profile_likelihood",
+            construction=policy.observed_method,
             calibration_status="conditional_model",
             signed_mle=amplitude_mle,
             constrained_mle=amplitude_mle,
-            profile_status="ready",
+            profile_status="ready" if aperture_totals is None else "not_applicable",
+            confidence_convention=(
+                "one_sided_gaussian_equivalent" if aperture_totals is None
+                else "posterior_quantile"
+            ),
         )
         scan_amplitudes = np.linspace(0.0, max(1e-12, 1.25 * amplitude_upper), 240)
         scan = {
@@ -1725,6 +1847,8 @@ def estimate_upper_limit(
         ),
         policy.background_likelihood,
     )
+    if aperture_totals is not None:
+        background_likelihood = "known_background"
     result = ResponseAwareUpperLimitResult(
         instrument=instrument_config.name,
         strategy=policy.strategy,
@@ -1741,11 +1865,19 @@ def estimate_upper_limit(
             "model": _json_safe(model_info["metadata"]),
             "response_folding": policy.response_folding,
             "background_likelihood": background_likelihood,
+            "observed_method": policy.observed_method,
+            "detection_background_likelihood": policy.background_likelihood,
+            "aperture_totals": aperture_totals,
+            "source_prior": (
+                "uniform_nonnegative_source_counts" if aperture_totals is not None else None
+            ),
             "background_provenance": [
                 _json_safe(dict(item.metadata)) for item in prepared
             ],
             "covariance_source": [
-                "background_covariance"
+                "fixed_background"
+                if aperture_totals is not None
+                else "background_covariance"
                 if item.background_covariance is not None
                 else "background_sigma"
                 if item.background_sigma is not None
@@ -2791,8 +2923,10 @@ def _render_summary(result: ResponseAwareUpperLimitResult) -> str:
         lines.extend(
             [
                 "Observed-data upper bound:",
+                f"  construction: {observed.construction}",
                 f"  level: {observed.level.label} (p={observed.level.confidence:.9f}, "
-                f"delta_stat={observed.level.delta_stat:g})",
+                + ("posterior quantile)" if observed.construction == "rapid_xmm"
+                   else f"delta_stat={observed.level.delta_stat:g})"),
                 f"  amplitude <= {observed.amplitude_upper:.8g} {observed.amplitude_unit}",
             ]
         )
@@ -2840,8 +2974,10 @@ def _write_diagnostic_plots(
         ax.plot(amplitudes, delta_stat, color=PALETTE["data"], lw=1.8)
         if result.observed_upper_bound is not None:
             bound = result.observed_upper_bound
-            ax.axhline(bound.level.delta_stat, color=PALETTE["reference"], ls="--", label=bound.level.label)
-            ax.axvline(bound.amplitude_upper, color=PALETTE["reference"], ls=":")
+            if bound.construction != "rapid_xmm":
+                ax.axhline(bound.level.delta_stat, color=PALETTE["reference"], ls="--", label=bound.level.label)
+            ax.axvline(bound.amplitude_upper, color=PALETTE["reference"], ls=":",
+                       label="Posterior upper quantile" if bound.construction == "rapid_xmm" else None)
         ax.set_xlabel("Model amplitude")
         ax.set_ylabel("Profile delta statistic")
         ax.legend(frameon=False)

@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 	from .upperlimit import (
 		GaussianNetRateObservation, GaussianNetRateProfileResult,
 		profile_gaussian_upper_bound, EmpiricalCalibrationAdapter,
+		rapid_xmm_upper_limit,
 	)
 
 # Package version
@@ -116,6 +117,7 @@ _PLOTPANEL_EXPORTS = {
 _UPPER_LIMIT_EXPORTS = {
 	'GaussianNetRateObservation', 'GaussianNetRateProfileResult',
 	'profile_gaussian_upper_bound', 'EmpiricalCalibrationAdapter',
+	'rapid_xmm_upper_limit',
 }
 
 _TIME_EXPORTS = {
@@ -195,6 +197,7 @@ __all__ = [
 	# Unit-aware Gaussian upper-limit primitives
 	'GaussianNetRateObservation', 'GaussianNetRateProfileResult',
 	'profile_gaussian_upper_bound', 'EmpiricalCalibrationAdapter',
+	'rapid_xmm_upper_limit',
 	# Process-wide fit settings API
 	'get_fit_settings', 'set_fit_settings', 'reset_fit_settings',
 	'set_fit_method', 'get_fit_method', 'fit_settings',
