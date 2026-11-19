@@ -151,3 +151,5 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `SourceAnalysisPipeline` / `SourceAnalysisInput` / `SourceAnalysisConfig` / `SpectralObservation` / `LightcurveProduct` | `packages/jinwu/src/jinwu/core/source_analysis.py` | 按显式同源时窗编排逐历元或同历元联合谱拟合、统一 UTC 光变与可选 Gaussian 时域拟合、共同观测者系通量及恢复指纹 | 是 |
 | `prepare_ogip_spectrum` | `packages/jinwu/src/jinwu/core/spectrum_prep.py` | 从带显式源谱、本底、响应和统计语义的 OGIP 产品准备 Type-I 拟合输入 | 是 |
 | `prepare_gecam_spectra` / `gecam_lightcurve_products` | `packages/jinwu-gecam/src/jinwu/gecam/analysis.py` | 将 GECAM 原生 Type-II 谱与光变转换为共享分析输入 | 是 |
+| `DockerMount` / `DockerRunner` | `packages/jinwu/src/jinwu/core/docker.py` | 显式 Docker context、bind mount、容器环境与安全 argv 的命令预览、同步/异步执行、日志和镜像归档载入 | 是 |
+| `WXTDockerRunner` / `FXTDockerRunner` | `packages/jinwu-ep/src/jinwu/ep/docker.py` | 官方 wxtpipeline/fxtchain 容器入口，显式/调用时环境配置、只读 CALDB、独立 PFILES 与 workspace 路径映射 | 是 |

@@ -23,6 +23,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+	from .docker import DockerMount, DockerRunner
 	from . import heasoft as heasoft
 	from . import plot as plot
 	from . import plotpanel as plotpanel
@@ -162,11 +163,13 @@ _ATTRIBUTE_MODULES = {
 		('config', _FIT_SETTINGS_EXPORTS),
 		('fit', _FIT_EXPORTS),
 		('bxa_fit', _BXA_EXPORTS),
+		('docker', {'DockerMount', 'DockerRunner'}),
 	)
 	for name in names
 }
 
 __all__ = [
+	'DockerMount', 'DockerRunner',
 	# Submodules
 	'heasoft', 'plot', 'time', 'ops', 'io', 'lf', 'redshift', 'timescale', 'model_comparison',
 	# OGIP validation

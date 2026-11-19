@@ -10,7 +10,9 @@ Submodules:
 from __future__ import annotations
 
 from . import fxt, wxt
+from .docker import FXTDockerRunner, WXTDockerRunner
 from .ta import TAInput, TAPipeline, TAResult, combine_ta_flux_rows, save_ta_flux_curve
 
 __all__ = ['wxt', 'fxt', 'TAInput', 'TAPipeline', 'TAResult',
-           'combine_ta_flux_rows', 'save_ta_flux_curve']
+           'combine_ta_flux_rows', 'save_ta_flux_curve',
+           'FXTDockerRunner', 'WXTDockerRunner']

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu-gecam"
-version = "0.3.1"
+version = "0.3.2"
 description = "GECAMTools interfaces and resumable GECAM workflows for jinwu."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }

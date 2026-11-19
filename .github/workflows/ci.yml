@@ -42,6 +42,6 @@ jobs:
         # 的部分文件按 .gitignore 规则被忽略，仓库内跟踪的测试必须显式存在
         # （publish.yml 的 wheel-gate 也引用其中三个文件）。
         run: |
-          python -m pytest test/ packages/jinwu-swift/tests packages/jinwu-gecam/tests -p no:cacheprovider \
+          python -m pytest test/ packages/jinwu-ep/tests packages/jinwu-swift/tests packages/jinwu-gecam/tests -p no:cacheprovider \
             -m 'not network and not heasoft and not real_data' \
             -ra --strict-markers

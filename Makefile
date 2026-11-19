@@ -86,7 +86,7 @@ publish: build rust-build sha256
 # 测试
 # -----------------------------------------------------------
 check:
-	$(PYTHON) -m pytest test/ packages/jinwu-gecam/tests -x -q
+	$(PYTHON) -m pytest test/ packages/jinwu-ep/tests packages/jinwu-gecam/tests -x -q
 
 # -----------------------------------------------------------
 # 从 packages/jinwu/pyproject.toml 读取版本号，同步到所有文件

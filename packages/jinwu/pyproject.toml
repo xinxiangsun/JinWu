@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu"
-version = "0.3.1"
+version = "0.3.2"
 description = "Joint inference and physical modeling toolkit for high-energy transient light-curve and spectral analysis."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -45,7 +45,7 @@ docs = [
     "myst-parser>=3",
 ]
 rust = ["jinwurs"]
-ep = ["jinwu-ep>=0.3,<0.4"]
+ep = ["jinwu-ep>=0.3.2,<0.4"]
 swift = ["jinwu-swift>=0.3,<0.4"]
 fermi = ["jinwu-fermi>=0.3,<0.4"]
 gbm = ["jinwu-fermi>=0.3,<0.4"]

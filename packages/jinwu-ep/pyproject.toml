@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu-ep"
-version = "0.3.1"
+version = "0.3.2"
 description = "Einstein Probe (WXT) instrument support for the jinwu analysis toolkit."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
@@ -13,7 +13,7 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "jinwu>=0.3,<0.4",
+    "jinwu>=0.3.2,<0.4",
     "regions>=0.5",
 ]
 keywords = ["astrophysics", "transient", "einstein-probe", "wxt", "jinwu"]
