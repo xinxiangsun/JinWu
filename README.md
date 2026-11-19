@@ -1,25 +1,3 @@
-# 安装方式 / Installation
-
-金乌现已拆分为一个核心包和多个仪器包，它们共享 `jinwu` 导入命名空间：
-
-| 发行包 | 导入路径 | 内容 |
-|---|---|---|
-| `jinwu` | `jinwu.core`、`jinwu.lightcurve` 等 | 核心分析层（OGIP I/O、时间、拟合、背景、绘图） |
-| `jinwu-ep` | `jinwu.ep` | Einstein Probe (WXT) |
-| `jinwu-swift` | `jinwu.swift` | Swift/BAT |
-| `jinwu-fermi` | `jinwu.fermi` | Fermi/GBM |
-| `jinwu-gecam` | `jinwu.gecam` | GECAMTools 接口与可恢复流程（源码新增） |
-| `jinwu-gw` | `jinwu.gw` | GW localization and high-energy coverage plots |
-
-### 通过 PyPI 安装
-
-```bash
-pip install jinwu              # 仅核心
-pip install "jinwu[ep]"        # 核心 + EP 支持
-pip install "jinwu[swift]"     # 核心 + Swift 支持
-pip install "jinwu[fermi]"     # 核心 + Fermi/GBM 支持
-```
-
 # JinWu：Joint Inference for high energy transient light‑curve & spectral analysis With Unifying physical modeling
 
 ## 项目简介 / Project Introduction
@@ -33,6 +11,89 @@ JinWu, the Golden Crow, is a legendary solar bird in ancient Chinese mythology, 
 This project provides a unified, flexible, and extensible toolkit for researchers and enthusiasts in high-energy astrophysics, supporting various physical models, data fitting, and inference methods, and fostering scientific communication and innovation.
 
 Especially, this repo devoting on EP/WXT&FXT data products process.
+
+## 安装前置条件
+
+| 使用场景 | 需要准备 |
+|---|---|
+| FITS / OGIP 读写、光变分析与绘图 | Python ≥ 3.11（推荐 3.12）和 `pip`。NumPy、SciPy、Astropy、Matplotlib 和 Pillow 由 pip 安装。 |
+| 在 Python 中用 XSPEC 拟合，或在本机调用 XSELECT | 在运行 JinWu 的同一个 Conda 环境安装并激活 HEASoft。XSPEC 的 Python 模块名为 `xspec`。 |
+| 从 EP Level-1 数据运行 `wxtpipeline` 或 `fxtchain` | `jinwu[ep]`、可用的 Docker Engine 或 Docker Desktop、对应仪器的处理软件镜像、匹配的 CALDB 和 Level-1 数据。只运行容器内的处理任务时，可以省去本机 HEASoft。 |
+
+推荐用 **Conda 管理本机 HEASoft**，用 **Docker 运行 EP 官方处理软件**。如果处理完还要在本机用 PyXspec 拟合，两套环境都要准备。
+
+### 通过 PyPI 安装 JinWu
+
+在打算运行 JinWu 的 Python 环境执行：
+
+```bash
+python -m pip install jinwu
+# 处理 Einstein Probe WXT / FXT 数据时安装 EP 插件
+python -m pip install "jinwu[ep]"
+```
+
+核心与仪器包共享 `jinwu` 命名空间。其他仪器插件和可选功能见下方的可选依赖。
+
+### 通过 Conda 安装 HEASoft
+
+先安装 Conda（例如 [Miniforge](https://github.com/conda-forge/miniforge)），再从 HEASARC 的官方频道创建独立环境。做 EP 谱分析时，可以在同一环境安装 EP 插件。
+
+```bash
+conda create -n hea python=3.12 pip heasoft \
+  -c https://heasarc.gsfc.nasa.gov/FTP/software/conda/ \
+  -c conda-forge
+conda activate hea
+command -v xselect
+python -c "import xspec; print(xspec.Xset.version)"
+python -m pip install "jinwu[ep]"
+```
+
+每次打开新终端后先执行 `conda activate hea`。使用 Jupyter 时，选择该环境对应的 Python 内核。如果激活后找不到 HEASoft 命令，按官方说明检查初始化（`source heainit.sh`）。部分 XSPEC 模型还需要额外的数据文件。HEASoft 6.37 起使用 `ftgetmodeldata` 获取，6.35 和 6.36 使用 `xspec-data`。参见 [HEASARC Conda 安装说明](https://heasarc.gsfc.nasa.gov/docs/software/conda.html)。
+
+### 通过 Docker 安装并配置 EP 处理软件
+
+1. 安装并启动 Docker Engine 或 Docker Desktop，运行 `docker info` 确认当前用户能连接 Docker，运行 `docker context show` 确认正在使用的 context。下文的加载和运行使用同一个 context。
+2. 获取所需仪器的镜像归档和匹配版本的 CALDB，并解压 CALDB。FXT 可从 [FXTDAS 官方下载页](https://epfxt.ihep.ac.cn/ftl/das/latest)和 [FXT CALDB 下载页](https://epfxt.ihep.ac.cn/ftl/caldb/index)获取。WXT 镜像及标定库按 [EP 任务门户](https://ep.bao.ac.cn/ep/cms/helpdesk)提供的分发途径获取。
+3. 将所需仪器的配置加入 `~/.bashrc`（Zsh 用 `~/.zshrc`），将以下示例路径替换为本机实际路径。CALDB 变量指向解压后的根目录，`DASIMG` 变量在加载阶段指向镜像归档。
+
+```bash
+export WXTCALDB="$HOME/ep/caldb/wxt"
+export WXTDASIMG="$HOME/ep/images/wxtdas.tar"
+export FXTCALDB="$HOME/ep/caldb/fxt"
+export FXTDASIMG="$HOME/ep/images/fxtsoftv2.0.img.tar.gz"
+```
+
+保存后让当前终端读取配置，然后按需加载镜像。镜像只需加载一次，升级镜像时再加载新归档。
+
+```bash
+source ~/.bashrc                     # Zsh 用户改用 source ~/.zshrc
+docker load -i "$WXTDASIMG"           # 需要 WXT 时执行
+docker load -i "$FXTDASIMG"           # 需要 FXT 时执行
+docker image ls
+```
+
+记录 `docker load` 输出的镜像名和标签。Python 调用时通过 `image=` 传入该引用，`from_env()` 会读取对应的 CALDB 变量。也可以在载入后把 `WXTDASIMG` / `FXTDASIMG` 改成镜像引用，省略 `image=`。从 IDE 或 Jupyter 启动 Python 时，请让它继承这些环境变量，或在构造 runner 时显式传入 `image=` 和 `caldb=`。
+
+```python
+from pathlib import Path
+from jinwu.ep import FXTDockerRunner, WXTDockerRunner
+
+# 替换为实际工作目录，其中包含 Level-1 观测目录。
+workspace = Path("/data/ep_work")
+# 标签以 docker load 的实际输出为准，只需构造所用仪器的 runner。
+fxt = FXTDockerRunner.from_env(workspace, image="fxtsoft:v2.0")
+fxt.run_chain("06800001128", params={"exitstage": 2})
+
+# WXT 示例。换成实际的观测目录、文件名前缀和 CMOS 编号。
+# 多模式观测如需重写共享中间文件，可在独立输出目录下设置 clobber=True。
+wxt = WXTDockerRunner.from_env(workspace, image="wxtdas:R1")
+wxt.run_pipeline(
+    "01709321360",
+    params={"steminputs": "ep01709321360", "stemcmosid": "3"},
+)
+```
+
+传给 runner 的相对路径以 `workspace` 为基准。默认输出到输入目录旁的 `<观测目录>_fxtchain` 或 `<观测目录>_wxtpipeline`，也可手动指定 `outdir=`。请将 CALDB 放在 `workspace` 之外，runner 会将 CALDB 单独挂载为只读。使用 Docker Desktop 时，确认数据和 CALDB 路径可供 Docker 共享。如果加载镜像时显式指定了 `docker --context NAME`，构造 runner 时也传入 `context="NAME"`。WXT 运行示例及参数见 [EP WXT / FXT 使用指南](docs/usage/ep_wxt_fxt.rst)。
 
 ### 源码安装
 
@@ -54,22 +115,10 @@ Swift/BAT 单目标 survey 管线位于 `jinwu.swift.bat.survey`，按“本地�
 [`packages/jinwu-swift/README.md`](packages/jinwu-swift/README.md) 的 Python
 示例和命令行用法。
 
-### 必要依赖 / Required Dependencies
-
-核心依赖随 `pip install jinwu` 自动安装：
-
-- numpy
-- scipy
-- astropy
-- matplotlib
-- pillow
-
-谱拟合需要 HEASOFT 的 XSPEC（PyXspec）运行环境，不随 pip 安装。
-
 ### 可选依赖 / Optional Extras
 
 当前源码的 `all` 包含除 Swift 外的全部可选依赖。Swift 相关开发暂缓，
-需显式选择 `[swift]`（或 `[all,swift]`）；此配置将在后续发布版中生效。
+需显式选择 `[swift]`（或 `[all,swift]`）。
 
 ```bash
 pip install -e './packages/jinwu[all]' -e ./packages/jinwu-gecam  # 当前源码：全部可选依赖，不含 Swift
