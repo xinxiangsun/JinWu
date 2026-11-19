@@ -148,7 +148,7 @@ jobs:
       - name: Run offline gate tests against installed wheels
         run: |
           wheel-env/bin/python -m pytest \
-            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py packages/jinwu-gecam/tests \
+            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py packages/jinwu-ep/tests packages/jinwu-gecam/tests \
             -p no:cacheprovider -m 'not network and not heasoft and not real_data' -ra
 
   # ── Publish + Release ──────────────────────────────
