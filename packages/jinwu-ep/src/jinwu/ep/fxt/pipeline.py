@@ -19,24 +19,24 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 
-from ...core.base import EnergyBand
-from ...core.config import FXT, InstrumentConfig
-from ...core.fit import fit_xray_models
-from ...core.galactic import resolve_galactic_absorption
-from ...core.instruments import DataFile, Manifest, SpectrumBundle, scan
-from ...core.io import channel_mask_from_ebounds, read_pha, read_rmf
-from ...core.pipeline import PipelineInput, register_pipeline
-from ...core.products import (
+from jinwu.core.base import EnergyBand
+from jinwu.core.config import FXT, InstrumentConfig
+from jinwu.core.fit import fit_xray_models
+from jinwu.core.galactic import resolve_galactic_absorption
+from jinwu.core.instruments import DataFile, Manifest, SpectrumBundle, scan
+from jinwu.core.io import channel_mask_from_ebounds, read_pha, read_rmf
+from jinwu.core.pipeline import PipelineInput, register_pipeline
+from jinwu.core.products import (
     FluxCurveResult, FluxPoint, NetLightcurve, build_net_lightcurve, collect_runtime_environment,
     plot_net_lightcurve, save_flux_curve, save_net_lightcurve, write_json,
 )
-from ...core.significance import li_ma_snr
-from ...core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum, prepare_spectra
-from ...core.time import Time
-from ...core.upperlimit import (
+from jinwu.core.significance import li_ma_snr
+from jinwu.core.spectrum_prep import PreparedJointSpectrum, PreparedSpectrum, prepare_spectra
+from jinwu.core.time import Time
+from jinwu.core.upperlimit import (
     CountTemplateModel, UpperLimitObservation, XspecCountPredictor, estimate_upper_limit,
 )
-from ...core.xselect import extract_products_with_xselect
+from jinwu.core.xselect import extract_products_with_xselect
 
 __all__ = ["FXTInput", "FXTPipeline", "FXTResult"]
 
