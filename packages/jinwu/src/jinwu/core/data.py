@@ -216,8 +216,10 @@ class RmfData(RmfBase):
                 row_vals = self.matrix[i]
                 if isinstance(row_vals, np.ndarray):
                     cursor = 0
-                    fcs = np.atleast_1d(self.f_chan[i]) if np.ndim(self.f_chan) > 1 else np.atleast_1d(self.f_chan)
-                    ncs = np.atleast_1d(self.n_chan[i]) if np.ndim(self.n_chan) > 1 else np.atleast_1d(self.n_chan)
+                    # FITS group columns are per energy row, including scalar
+                    # single-group columns and variable-length object arrays.
+                    fcs = np.atleast_1d(self.f_chan[i])
+                    ncs = np.atleast_1d(self.n_chan[i])
                     for g in range(ng):
                         start = int(fcs[g])
                         width = int(ncs[g])
