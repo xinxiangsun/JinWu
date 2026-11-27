@@ -37,6 +37,24 @@ __all__ = [
 # 参考：HEASoft 6.37 heacore/heasp/grouping.cxx grouping::loadMin；
 #       heasptools/ftgrouppha/ftgrouppha.cxx（getMinCountsGrouping 调用路径）；
 #       heacore/heasp/pha.cxx pha::setGrouping（坏通道强制自成组、质量取最坏）。
+def _load_min_groups(counts: np.ndarray, min_counts: float) -> tuple[list[list[int]], int]:
+    """Return greedy loadMin groups and the start of the incomplete tail."""
+    counts = np.asarray(counts, dtype=float)
+    groups: list[list[int]] = []
+    current: list[int] = []
+    accumulated = 0.0
+    for index, value in enumerate(counts):
+        current.append(index)
+        accumulated += float(value)
+        if accumulated >= float(min_counts):
+            groups.append(current)
+            current = []
+            accumulated = 0.0
+    tail_start = int(counts.size) - len(current) if current else int(counts.size)
+    groups.extend([index] for index in current)
+    return groups, tail_start
+
+
 def compute_grouping_by_min_counts(counts: np.ndarray, min_counts: float) -> np.ndarray:
     """Compute grouping array given per-channel `counts` and `min_counts`.
 
@@ -51,25 +69,12 @@ def compute_grouping_by_min_counts(counts: np.ndarray, min_counts: float) -> np.
     the tail flag into a QUALITY column.
     """
     counts = np.asarray(counts, dtype=float)
-    n = counts.size
-    grouping = np.zeros(n, dtype=int)
-    if n == 0:
-        return grouping
-    acc = 0.0
-    is_new_group = True
-    istart = 0
-    for i in range(n):
-        acc += float(counts[i])
-        grouping[i] = 1 if is_new_group else -1
-        if acc >= float(min_counts):
-            acc = 0.0
-            is_new_group = True
-            istart = i + 1
-        else:
-            is_new_group = False
-    if istart < n:
-        # 尾组：未达阈值的剩余通道各自单列一组（HEASoft loadMin 语义）
-        grouping[istart:] = 1
+    grouping = np.zeros(counts.size, dtype=int)
+    groups, _tail_start = _load_min_groups(counts, min_counts)
+    for members in groups:
+        grouping[members[0]] = 1
+        for index in members[1:]:
+            grouping[index] = -1
     return grouping
 
 
@@ -81,19 +86,9 @@ def min_counts_group_quality(counts: np.ndarray, min_counts: float) -> np.ndarra
     per-channel quality via element-wise max before folding into output bins.
     """
     counts = np.asarray(counts, dtype=float)
-    n = counts.size
-    quality = np.zeros(n, dtype=int)
-    if n == 0:
-        return quality
-    acc = 0.0
-    istart = 0
-    for i in range(n):
-        acc += float(counts[i])
-        if acc >= float(min_counts):
-            acc = 0.0
-            istart = i + 1
-    if istart < n:
-        quality[istart:] = 2
+    quality = np.zeros(counts.size, dtype=int)
+    _groups, tail_start = _load_min_groups(counts, min_counts)
+    quality[tail_start:] = 2
     return quality
 
 
@@ -122,6 +117,49 @@ def fold_group_quality(per_channel_quality: np.ndarray | None, gid_arr: np.ndarr
                 qg = int(m)
         out[row] = qg
     return out
+
+
+def _sum_group_columns(channels: np.ndarray, counts: np.ndarray,
+                       gid_arr: np.ndarray, gids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Collapse channels into groups: first member channel and summed counts.
+
+    Shared by the PHA rebin paths that merge existing channels. Error
+    propagation, EBOUNDS and quality handling stay with each caller because
+    they differ between those paths.
+    """
+    ch = np.asarray(channels, dtype=int)
+    cnt = np.asarray(counts, dtype=float)
+    gid_a = np.asarray(gid_arr, dtype=int)
+    out_ch = np.empty(np.asarray(gids).size, dtype=int)
+    out_cnt = np.empty(np.asarray(gids).size, dtype=float)
+    for row, gid in enumerate(np.asarray(gids).ravel()):
+        mask = gid_a == int(gid)
+        out_ch[row] = int(ch[mask][0])
+        out_cnt[row] = float(np.sum(cnt[mask]))
+    return out_ch, out_cnt
+
+
+def _derived_pha(pha: PhaData, *, channels: np.ndarray, counts: np.ndarray,
+                 stat_err: Optional[np.ndarray],
+                 ebounds: Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]],
+                 quality: Optional[np.ndarray] = None,
+                 grouping: Optional[np.ndarray] = None,
+                 columns: Optional[Tuple[str, ...]] = None) -> PhaData:
+    """Build a regrouped PHA, preserving the metadata grouping/rebin paths keep.
+
+    Copies `path`, `exposure`, `backscal`, `areascal`, `header`, `meta`,
+    `headers_dump` and (by default) `columns`. RATE, response/ancillary files,
+    raw columns and channel keys (TLMIN/TLMAX/DETCHANS) deliberately stay at
+    their defaults. EBOUNDS is caller-supplied because the physical paths either
+    keep it, drop it, or aggregate it; `columns=None` keeps `pha.columns`.
+    """
+    return PhaData(
+        path=pha.path, channels=channels, counts=counts, stat_err=stat_err,
+        exposure=pha.exposure, backscal=pha.backscal, areascal=pha.areascal,
+        quality=quality, grouping=grouping, ebounds=ebounds, header=pha.header,
+        meta=pha.meta, headers_dump=pha.headers_dump,
+        columns=pha.columns if columns is None else columns,
+    )
 
 
 def read_groupfile(path: str | Path) -> List[Tuple[int, int]]:
@@ -268,17 +306,8 @@ def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_count
     # rebin: collapse channels into groups
     gid_arr = _group_flags_to_ids(grouping)
     gids = np.unique(gid_arr[gid_arr > 0])
-    new_channels = []
-    new_counts = []
-    new_stat = []
-    for gid in gids:
-        mask = gid_arr == int(gid)
-        if not np.any(mask):
-            continue
-        new_channels.append(int(ch[mask][0]))
-        s = float(np.sum(cnt[mask]))
-        new_counts.append(s)
-        new_stat.append(float(np.sqrt(s)))
+    new_channels, new_counts = _sum_group_columns(ch, cnt, gid_arr, gids)
+    new_stat = np.sqrt(new_counts)
 
     # 组质量折叠（rebinChannels 规则）；min_counts 路径先叠加尾组 QUALITY=2
     per_ch_quality = None
@@ -290,10 +319,11 @@ def grppha(input_pha: str | PhaData, *, outfile: Optional[str] = None, min_count
                           else np.maximum(per_ch_quality, tail_q))
     new_quality = fold_group_quality(per_ch_quality, gid_arr, gids)
 
-    newpha = PhaData(path=pha.path, channels=np.asarray(new_channels, dtype=int), counts=np.asarray(new_counts, dtype=float),
-                     stat_err=np.asarray(new_stat, dtype=float), exposure=pha.exposure, backscal=pha.backscal,
-                     areascal=pha.areascal, quality=new_quality, grouping=None,
-                     ebounds=None, header=pha.header, meta=pha.meta, headers_dump=pha.headers_dump, columns=('CHANNEL','COUNTS'))
+    newpha = _derived_pha(pha, channels=np.asarray(new_channels, dtype=int),
+                          counts=np.asarray(new_counts, dtype=float),
+                          stat_err=np.asarray(new_stat, dtype=float),
+                          quality=new_quality, grouping=None, ebounds=None,
+                          columns=('CHANNEL', 'COUNTS'))
 
     if outfile is not None:
         write_pha_core(newpha, outfile, overwrite=overwrite)

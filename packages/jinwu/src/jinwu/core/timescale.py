@@ -22,7 +22,7 @@ import numpy as np
 from astropy.stats import bayesian_blocks
 
 from .base import LightcurveDataBase, EventDataBase
-from .utils import li_ma_snr
+from .utils import li_ma_snr, positive_scalar_or_none as _txx54_positive_scalar
 
 if TYPE_CHECKING:
     from .data import LightcurveData, EventData
@@ -362,21 +362,6 @@ def _txx54_event_input_to_dict(obj: object, *, arg_name: str) -> dict:
     raise TypeError(
         f"{arg_name}: txx 仅支持事件文件路径或 EventDataBase/EventData 输入，当前={type(obj).__name__}"
     )
-
-
-def _txx54_positive_scalar(v: object) -> Optional[float]:
-    if v is None:
-        return None
-    try:
-        arr = np.asarray(v, dtype=float).reshape(-1)
-    except Exception:
-        return None
-    if arr.size == 0:
-        return None
-    val = float(np.nanmedian(arr))
-    if not np.isfinite(val) or val <= 0.0:
-        return None
-    return val
 
 
 def _txx54_bin_evt_to_array(evt: dict, binsize: float, t0: float, t1: float) -> np.ndarray:

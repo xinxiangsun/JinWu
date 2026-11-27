@@ -6,7 +6,7 @@ using multi-catalog cross-matching (NED, GLADE+, PanSTARRS, Gaia).
 """
 
 from pathlib import Path
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, List
 import numpy as np
 import warnings
 
@@ -792,40 +792,44 @@ class HostGalaxyFinder:
     
     def save_plotly_html(self, filename: Optional[str] = None) -> Path:
         """保存Plotly图为HTML"""
-        if self.plotly_fig is None:
-            print("⚠ Plotly图表未创建")
-            return None
-        
-        if filename is None:
-            filename = f"{self.source_name.replace(' ', '_')}_host_galaxies.html"
-        
-        output_path = self.output_dir / filename
-        try:
-            self.plotly_fig.write_html(str(output_path))
-            self.plotly_html_path = output_path
-            print(f"✓ Plotly图已保存: {output_path.resolve()}")
-            return output_path
-        except Exception as e:
-            print(f"✗ 保存Plotly图失败: {e}")
-            return None
-    
+        path = self._save_plotly(
+            filename,
+            suffix=".html",
+            writer=self.plotly_fig.write_html if self.plotly_fig is not None else None,
+            success="✓ Plotly图已保存",
+            failure="✗ 保存Plotly图失败",
+        )
+        if path is not None:
+            self.plotly_html_path = path
+        return path
+
     def save_plotly_png(self, filename: Optional[str] = None) -> Path:
         """保存Plotly图为PNG（需要kaleido）"""
-        if self.plotly_fig is None:
+        return self._save_plotly(
+            filename,
+            suffix=".png",
+            writer=self.plotly_fig.write_image if self.plotly_fig is not None else None,
+            success="✓ Plotly图(PNG)已保存",
+            failure="⚠ 保存PNG失败(通常需要kaleido包)",
+            failure_hint="  使用 `pip install kaleido` 来启用PNG导出",
+        )
+
+    def _save_plotly(self, filename: Optional[str], *, suffix: str, writer, success: str, failure: str, failure_hint: Optional[str] = None) -> Optional[Path]:
+        """Save the current Plotly figure with shared validation/error handling."""
+        if self.plotly_fig is None or writer is None:
             print("⚠ Plotly图表未创建")
             return None
-        
         if filename is None:
-            filename = f"{self.source_name.replace(' ', '_')}_host_galaxies.png"
-        
+            filename = f"{self.source_name.replace(' ', '_')}_host_galaxies{suffix}"
         output_path = self.output_dir / filename
         try:
-            self.plotly_fig.write_image(str(output_path))
-            print(f"✓ Plotly图(PNG)已保存: {output_path.resolve()}")
+            writer(str(output_path))
+            print(f"{success}: {output_path.resolve()}")
             return output_path
         except Exception as e:
-            print(f"⚠ 保存PNG失败(通常需要kaleido包): {e}")
-            print("  使用 `pip install kaleido` 来启用PNG导出")
+            print(f"{failure}: {e}")
+            if failure_hint:
+                print(failure_hint)
             return None
     
     def run(self, save_aladin: bool = True, save_plotly_html: bool = True,

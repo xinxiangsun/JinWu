@@ -380,11 +380,7 @@ class Teldef:
         y_rad = math.radians(y_deg)
         ra0 = math.radians(self.crval[0])
         dec0 = math.radians(self.crval[1])
-        denom = math.cos(dec0) - y_rad * math.sin(dec0)
-        if abs(denom) < 1e-15:
-            raise ValueError('Inverse gnomonic singular')
-        ra = ra0 + math.atan2(x_rad, denom)
-        dec = math.atan2(y_rad * math.cos(dec0) + math.sin(dec0), math.sqrt(denom * denom + x_rad * x_rad))
+        ra, dec = _th.inverse_gnomonic(x_rad, y_rad, ra0, dec0)
         return math.degrees(ra), math.degrees(dec)
 
     def sky_to_det_with_pointing(self, ra_deg: float, dec_deg: float, ra_pnt: float, dec_pnt: float) -> Tuple[float, float]:
@@ -465,11 +461,7 @@ class Teldef:
         # inverse gnomonic to RA/Dec using boresight
         ra0 = math.radians(ra_pnt)
         dec0 = math.radians(dec_pnt)
-        denom = math.cos(dec0) - y_rad * math.sin(dec0)
-        if abs(denom) < 1e-15:
-            raise ValueError('Inverse gnomonic singular')
-        ra = ra0 + math.atan2(x_rad, denom)
-        dec = math.atan2(y_rad * math.cos(dec0) + math.sin(dec0), math.sqrt(denom * denom + x_rad * x_rad))
+        ra, dec = _th.inverse_gnomonic(x_rad, y_rad, ra0, dec0)
         return math.degrees(ra), math.degrees(dec)
 
     def setSkyCoordCenterInTeldef(self, ra_deg: float, dec_deg: float, roll_deg: float = 0.0) -> None:

@@ -9,7 +9,11 @@ import math
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["GalacticAbsorptionResult", "resolve_galactic_absorption"]
+__all__ = [
+    "GalacticAbsorptionResult",
+    "load_galactic_absorption_cache",
+    "resolve_galactic_absorption",
+]
 
 
 _SCHEMA_VERSION = 1
@@ -142,6 +146,67 @@ def _write_cache(path: Path, result: GalacticAbsorptionResult, raw: dict[str, An
         encoding="utf-8",
     )
     temporary.replace(path)
+
+
+def load_galactic_absorption_cache(
+    path: str | Path,
+    *,
+    ra_deg: float,
+    dec_deg: float,
+    equinox: int = 2000,
+    service: str = _SERVICE,
+) -> GalacticAbsorptionResult:
+    """读取并校验既有缓存 / Load a validated Galactic absorption cache.
+
+    使用与 resolve_galactic_absorption 相同的身份判定：schema、服务、算法版本、
+    分点年份及坐标都必须匹配，总柱密度及其 TBabs 换算值必须有限且为正。
+    只读取，不联网、不写文件。
+    Uses the same identity checks as resolve_galactic_absorption: schema,
+    service, algorithm, equinox and coordinates must match, and both the total
+    column and its TBabs value must be finite and positive. Read-only; no
+    network or cache write.
+
+    Parameters
+    ----------
+    path : str or Path
+        缓存 JSON 路径 / Existing cache JSON path.
+    ra_deg, dec_deg : float
+        期望的视线坐标，单位度 / Expected sky coordinates in degrees.
+    equinox : int
+        期望的分点年份 / Expected equinox year.
+    service : str
+        期望的服务标识 / Expected service identifier.
+
+    Returns
+    -------
+    GalacticAbsorptionResult
+        校验通过的缓存结果，cache_hit=True / Validated cached result.
+
+    Raises
+    ------
+    FileNotFoundError
+        缓存文件不存在 / The cache file is missing.
+    ValueError
+        输入坐标或服务无效，或缓存身份不符、格式损坏、总柱密度非有限/非正。
+        Invalid inputs, or a cache that mismatches, is malformed, or has a
+        non-finite/non-positive total column or TBabs value.
+    """
+    ra, dec = _validate_coordinates(ra_deg, dec_deg)
+    service_name = str(service).strip()
+    if not service_name:
+        raise ValueError("service must be a non-empty identifier")
+    cache = Path(path).expanduser().resolve()
+    if not cache.is_file():
+        raise FileNotFoundError(f"Galactic absorption cache not found: {cache}")
+    result = _read_cache(cache, ra, dec, int(equinox), service_name)
+    if result is None or not math.isfinite(result.tbabs_nh_1e22) or result.tbabs_nh_1e22 <= 0:
+        raise ValueError(
+            f"Invalid Galactic absorption cache {cache} for ra_deg={ra}, dec_deg={dec}, "
+            f"equinox={int(equinox)}, service={service_name}: expected a matching "
+            "schema/service/algorithm/coordinate entry with a finite positive "
+            "total column and TBabs value"
+        )
+    return result
 
 
 def resolve_galactic_absorption(

@@ -11,15 +11,20 @@ from astropy.table import Table
 
 from ..core.config import InstrumentConfig, WXT
 from ..core.fit import fit_xray_models
-from ..core.instruments import DataFile, Manifest, SpectrumBundle
+from ..core.galactic import load_galactic_absorption_cache
 from ..core.plotstyle import apply_style, save_figure
 from ..core.products import collect_runtime_environment, write_json
 from ..core.spectrum_prep import prepare_spectra
 from ..core.time import Time
 from .fxt import FXTInput, FXTPipeline, FXTResult
 from .wxt import WXTPointingInput, WXTPointingPipeline, WXTPointingResult
+from .wxt.pipeline import build_wxt_spectrum_manifest
+from .constants import EP_FLUX_BAND_KEV
+from .fit_kwargs import model_fit_options
 
 __all__ = ["TAInput", "TAPipeline", "TAResult", "combine_ta_flux_rows", "save_ta_flux_curve"]
+
+TA_FLUX_BAND_KEV = EP_FLUX_BAND_KEV
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -67,7 +72,7 @@ def combine_ta_flux_rows(rows: Sequence[Mapping[str, Any]], *, trigger_time_utc:
         row = dict(source)
         band = np.asarray(row.get("flux_band_keV", (np.nan, np.nan)))
         if (row.get("flux_frame") != "observer" or row.get("flux_kind") != "unabsorbed"
-                or band.shape != (2,) or not np.allclose(band, (0.5, 4.0))):
+                or band.shape != (2,) or not np.allclose(band, TA_FLUX_BAND_KEV)):
             raise ValueError("TA requires observer-frame unabsorbed 0.5--4 keV flux")
         if row.get("flux_unit", "erg cm^-2 s^-1") != "erg cm^-2 s^-1":
             raise ValueError("TA flux_unit must be erg cm^-2 s^-1")
@@ -131,7 +136,7 @@ def save_ta_flux_curve(rows: Sequence[Mapping[str, Any]], output_root: Path | st
         table[key].unit = "s"
     for key in ("flux", "error_minus", "error_plus"):
         table[key].unit = "erg cm-2 s-1"
-    table.meta.update(flux_band_keV=[0.5, 4.0], flux_frame="observer", flux_kind="unabsorbed",
+    table.meta.update(flux_band_keV=list(TA_FLUX_BAND_KEV), flux_frame="observer", flux_kind="unabsorbed",
                       time_reference="seconds_since_t0")
     for extension, format_name in (("ecsv", "ascii.ecsv"), ("csv", "ascii.csv")):
         path = output / f"flux_rows.{extension}"
@@ -194,7 +199,6 @@ class TAPipeline:
 
     def _fit_all_wxt_bins(self, children, rows, output, redshift):
         """Link one absorption across observations, retaining each bin's response."""
-        import json
         selected, columns = [], []
         for child in children:
             if child.files is None:
@@ -213,20 +217,25 @@ class TAPipeline:
         destination, prepared, galactic = output / "wxt_shared_fit", [], []
         for index, (child, item) in enumerate(selected):
             label = f"bin{index:03d}"
-            identities = dict(obsid=child.files.obsid, detector=child.files.detector, source_id=label)
-            files = [DataFile(Path(item[key]), role, "TA WXT time bin", "EP", "WXT", **identities)
-                     for key, role in (("source_pha", "source_pha"), ("background_pha", "background_pha"),
-                                       ("arf", "arf"), ("rmf", "rmf"))]
-            bundle = SpectrumBundle(*files, module=None, **identities)
-            catalog = prepare_spectra(Manifest(root=Path(item["source_pha"]).parent, mission="EP",
-                instrument="WXT", layout="TA WXT bins", files=files, bundles=[bundle],
-                obsid=child.files.obsid, detector=child.files.detector),
-                outdir=destination / "prepared", group_min=self.wxt_config.spectrum.group_min_counts, overwrite=True)
+            manifest = build_wxt_spectrum_manifest(
+                source=Path(item["source_pha"]), background=Path(item["background_pha"]),
+                arf=Path(item["arf"]), rmf=Path(item["rmf"]),
+                obsid=child.files.obsid, detector=child.files.detector,
+                source_id=label, layout="TA WXT bins",
+                provenance="TA WXT time bin", datafile_detector=child.files.detector,
+            )
+            catalog = prepare_spectra(
+                manifest, outdir=destination / "prepared",
+                group_min=self.wxt_config.spectrum.group_min_counts, overwrite=True,
+            )
             if not catalog.spectra or not catalog.spectra[0].ready:
                 raise ValueError(f"WXT bin preparation failed: {catalog.diagnostics}")
             prepared.append(catalog.spectra[0])
-            cache = json.loads((child.workspace / "galactic_absorption" / "nhtot.json").read_text())
-            galactic.append(float(cache["result"]["tbabs_nh_1e22"]))
+            cache = child.workspace / "galactic_absorption" / "nhtot.json"
+            policy = self.wxt_config.galactic_absorption
+            galactic.append(float(load_galactic_absorption_cache(
+                cache, ra_deg=self.input.ra_deg, dec_deg=self.input.dec_deg,
+                equinox=policy.equinox, service=policy.service).tbabs_nh_1e22))
         if not np.allclose(galactic, galactic[0], rtol=1e-6, atol=1e-12):
             raise ValueError("WXT observations have inconsistent fixed Galactic NH")
         cfg = self.wxt_config.fitting
@@ -236,12 +245,10 @@ class TAPipeline:
         comparison = fit_xray_models(prepared, outdir=destination / "fit", candidate_keys=cfg.candidate_keys,
             model_class=cfg.model_class, absorption_mode=cfg.absorption_mode,
             emin=band[0], emax=band[1], selection_metric=cfg.selection_metric,
-            stat_method=cfg.statistic, abundance=cfg.abundance,
-            cross_section=cfg.cross_section, apec_root=cfg.apec_root, galactic_nh_1e22=galactic[0],
-            redshift=redshift, flux_band_keV=(0.5, 4.0), shared_absorption_only=True,
-            calculate_errors=cfg.calculate_errors, error_delta_stat=cfg.error_delta_stat,
+            galactic_nh_1e22=galactic[0],
+            redshift=redshift, flux_band_keV=TA_FLUX_BAND_KEV, shared_absorption_only=True,
             srcname=self.input.target_id, instname="WXT_all_bins",
-            plot_formats=self.wxt_config.plotting.formats if self.wxt_config.plotting.enabled else ())
+            **model_fit_options(self.wxt_config))
         groups = comparison.adopted_fit.get("per_group", ())
         if len(groups) != len(columns):
             raise ValueError("Joint WXT fit requires one independent flux/shape group per bin")
@@ -322,9 +329,13 @@ class TAPipeline:
         if result.fxt_result is not None:
             statuses.append(result.fxt_result.status)
         if result.flux_rows:
-            result.status = ("completed" if len(statuses) == len(inputs) and all(status == "completed" for status in statuses)
-                             else "needs_review" if len(statuses) == len(inputs) and all(status in {"completed", "needs_review"} for status in statuses)
-                             else "partial")
+            complete = len(statuses) == len(inputs)
+            if complete and all(status == "completed" for status in statuses):
+                result.status = "completed"
+            elif complete and all(status in {"completed", "needs_review"} for status in statuses):
+                result.status = "needs_review"
+            else:
+                result.status = "partial"
         else:
             result.status = "no_flux_measurements"
         if shared_fit_failed and result.flux_rows:

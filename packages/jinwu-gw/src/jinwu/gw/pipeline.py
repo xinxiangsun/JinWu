@@ -507,6 +507,21 @@ class GWPipeline(InstrumentPipeline[GWPipelineInput, GWRunResult]):
         self._context.output_paths.update(plots)
         return StageResult(outputs=plots, data=plots)
 
+    def _result_from_context(self) -> GWRunResult:
+        """Build the immutable run result from the hydrated context."""
+        assert self._context.event is not None
+        return GWRunResult(
+            self._context.event,
+            str(self._context.skymap_path) if self._context.skymap_path else None,
+            self._context.output_paths,
+            tuple(self._context.coverages),
+            self._context.probabilities,
+            warnings=tuple(self._context.warnings),
+            provenance=self._context.provenance,
+            credible_regions=self._context.credible_regions,
+            moc_refinement=self._context.moc_refinement,
+        )
+
     def _stage_report(self) -> StageResult:
         assert self._context.event is not None
         run_dir = self._run_directory(self._context.event)
@@ -528,17 +543,7 @@ class GWPipeline(InstrumentPipeline[GWPipelineInput, GWRunResult]):
             table.write(ecsv_path, format="ascii.ecsv", overwrite=True)
             self._context.output_paths["coverage_ecsv"] = str(ecsv_path)
         self._context.output_paths["coverage_json"] = str(json_path)
-        report = GWRunResult(
-            self._context.event,
-            str(self._context.skymap_path) if self._context.skymap_path else None,
-            self._context.output_paths,
-            tuple(self._context.coverages),
-            self._context.probabilities,
-            warnings=tuple(self._context.warnings),
-            provenance=self._context.provenance,
-            credible_regions=self._context.credible_regions,
-            moc_refinement=self._context.moc_refinement,
-        )
+        report = self._result_from_context()
         json_path.write_text(json.dumps(report.to_dict(), indent=2, default=str) + "\n", encoding="utf-8")
         self._archive_run(report)
         # Include every archived artifact, not only the tabular report: when
@@ -617,18 +622,7 @@ class GWPipeline(InstrumentPipeline[GWPipelineInput, GWRunResult]):
 
     def build_result(self, context: dict[str, StageResult]) -> GWRunResult:
         self._hydrate_context(context)
-        assert self._context.event is not None
-        return GWRunResult(
-            self._context.event,
-            str(self._context.skymap_path) if self._context.skymap_path else None,
-            self._context.output_paths,
-            tuple(self._context.coverages),
-            self._context.probabilities,
-            warnings=tuple(self._context.warnings),
-            provenance=self._context.provenance,
-            credible_regions=self._context.credible_regions,
-            moc_refinement=self._context.moc_refinement,
-        )
+        return self._result_from_context()
 
 
 def run_gw_pipeline(input_data: GWPipelineInput, *, config: GWConfig | None = None) -> GWRunResult:

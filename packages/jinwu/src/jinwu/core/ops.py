@@ -37,7 +37,7 @@ from .base import LightcurveDataBase, EventDataBase
 from ..ftools import xselect_mdb
 from pathlib import Path as _Path
 import warnings
-from .utils import li_ma_snr
+from .utils import li_ma_snr, positive_scalar_or_none as _alpha_scalar_or_none
 from astropy.stats import bayesian_blocks
 
 
@@ -87,6 +87,61 @@ def _effective_exposure_from_lc(lc: 'LightcurveData', width: np.ndarray) -> np.n
     if expo_arr.size == 0 or expo_arr.shape != width.shape:
         return width
     return np.where(np.isfinite(expo_arr) & (expo_arr > 0), expo_arr, width)
+
+
+def _lc_to_counts(
+    lc: 'LightcurveData',
+    *,
+    exposure_policy: Literal["effective", "raw"] = "effective",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return time, bin edges, counts, errors and exposure.
+
+    ``effective`` falls back to bin width for missing/nonpositive bin exposure;
+    ``raw`` preserves bin_exposure -> dt -> 1.0 exactly.
+    """
+    if lc.value is None:
+        raise ValueError("LightcurveData.value is None")
+    t = np.asarray(lc.time, dtype=float)
+    vals = np.asarray(lc.value, dtype=float)
+    errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
+    left, right, width = _infer_bin_geometry(lc)
+    if exposure_policy == "raw":
+        exposure = lc.bin_exposure if lc.bin_exposure is not None else (lc.dt if lc.dt is not None else 1.0)
+        eff_width = np.asarray(exposure, dtype=float)
+    else:
+        eff_width = _effective_exposure_from_lc(lc, width)
+    if lc.is_rate:
+        counts = vals * eff_width
+        errors = errs * eff_width if errs is not None else None
+    else:
+        counts = vals.copy()
+        errors = errs.copy() if errs is not None else None
+    if errors is None:
+        errors = np.sqrt(np.maximum(counts, 0.0))
+    return t, left, right, counts, errors, np.asarray(eff_width, dtype=float)
+
+
+def _project_by_overlap(
+    src_left: np.ndarray,
+    src_right: np.ndarray,
+    src_values: np.ndarray,
+    tgt_left: np.ndarray,
+    tgt_right: np.ndarray,
+    *,
+    power: float = 1.0,
+) -> np.ndarray:
+    """Project source-bin values onto target bins by overlap fraction."""
+    out = np.zeros(tgt_left.shape[0], dtype=float)
+    for i in range(tgt_left.shape[0]):
+        a = float(tgt_left[i])
+        b = float(tgt_right[i])
+        overlap = np.minimum(src_right, b) - np.maximum(src_left, a)
+        mask = overlap > 0.0
+        if not np.any(mask):
+            continue
+        width = np.maximum(src_right[mask] - src_left[mask], 1e-12)
+        out[i] = float(np.sum(src_values[mask] * ((overlap[mask] / width) ** power)))
+    return out
 
 
 def _infer_binning_kind(width: np.ndarray) -> Literal['uniform', 'variable', 'unknown']:
@@ -617,7 +672,10 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
     English
     Rebin PHA by grouping channels (fixed factor, min counts, or existing grouping); returns new instance.
     """
-    from ..ftools.grppha import compute_grouping_by_min_counts, fold_group_quality, min_counts_group_quality
+    from ..ftools.grppha import (
+        _group_flags_to_ids, _sum_group_columns,
+        compute_grouping_by_min_counts, fold_group_quality, min_counts_group_quality,
+    )
 
     ch = pha.channels
     cnt = pha.counts
@@ -667,44 +725,23 @@ def rebin_pha(pha: 'PhaData', *, factor: Optional[int] = None, min_counts: Optio
 
     # grouping 兼容：支持 OGIP 标志位(1/-1/0) 与历史组号编码(1,2,3...)
     g_arr = np.asarray(grouping, dtype=int)
-    nz = g_arr[g_arr != 0]
-    if not generated_group_ids and nz.size > 0 and np.all(np.isin(nz, [-1, 1])):
-        gid_arr = np.zeros_like(g_arr)
-        gid = 0
-        for i, val in enumerate(g_arr):
-            if val == 0:
-                gid_arr[i] = 0
-            elif val == 1:
-                gid += 1
-                gid_arr[i] = gid
-            else:  # -1
-                gid_arr[i] = gid if gid > 0 else 0
-    else:
+    if generated_group_ids:
+        # factor 路径的组号可能恰好全为 1（factor >= nch），不能按 OGIP 标志位解读
         gid_arr = np.where(g_arr > 0, g_arr, 0)
+    else:
+        gid_arr = _group_flags_to_ids(g_arr)
 
     # 按 grouping 数组聚合
     gids = np.unique(gid_arr[gid_arr > 0])
     if gids.size == 0:
         return pha
 
-    new_ch = []
-    new_counts = []
-    new_err = []
-    for gid in gids:
-        mask = gid_arr == int(gid)
-        if not np.any(mask):
-            continue
-        new_ch.append(int(ch[mask][0]))
-        s = float(np.sum(cnt[mask]))
-        new_counts.append(s)
-        if err is not None:
-            new_err.append(float(np.sqrt(np.sum(err[mask] ** 2))))
-        else:
-            new_err.append(float(np.sqrt(s)))
-
-    new_ch = np.asarray(new_ch, dtype=int)
-    new_counts = np.asarray(new_counts, dtype=float)
-    new_err = np.asarray(new_err, dtype=float) if new_err else None
+    new_ch, new_counts = _sum_group_columns(ch, cnt, gid_arr, gids)
+    if err is not None:
+        new_err = np.asarray([np.sqrt(np.sum(err[gid_arr == int(gid)] ** 2))
+                              for gid in gids], dtype=float)
+    else:
+        new_err = np.sqrt(new_counts)
     # 组质量折叠：组首质量起步、其后最后一个非零成员覆盖（HEASoft
     # pha::rebinChannels 的 "any bad quality in a bin makes the bin bad" 规则）
     new_quality = fold_group_quality(per_ch_quality, gid_arr, gids)
@@ -1340,59 +1377,8 @@ class BayesianBlocksBinner:
 
         lc_cls = type(lc_src)
 
-        # 统一到 counts 域
-        def lc_to_counts(lc: 'LightcurveData'):
-            t = np.asarray(lc.time, dtype=float)
-            vals = np.asarray(lc.value, dtype=float)
-            errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
-            left, right, width = _infer_bin_geometry(lc)
-            eff_width = _effective_exposure_from_lc(lc, width)
-            if lc.is_rate:
-                c = vals * eff_width
-                e = (errs * eff_width) if errs is not None else None
-            else:
-                c = vals.copy()
-                e = errs.copy() if errs is not None else None
-            if e is None:
-                e = np.sqrt(np.maximum(c, 0.0))
-            return t, left, right, c, e, np.asarray(eff_width, dtype=float)
-
-        def _project_by_overlap(
-            src_left: np.ndarray,
-            src_right: np.ndarray,
-            src_values: np.ndarray,
-            tgt_left: np.ndarray,
-            tgt_right: np.ndarray,
-            *,
-            power: float = 1.0,
-        ) -> np.ndarray:
-            """Project source-bin quantities onto target bins by overlap fractions.
-
-            power=1 uses linear scaling (counts/exposure), power=2 for variance split.
-            """
-            out = np.zeros(tgt_left.size, dtype=float)
-            if tgt_left.size == 0 or src_left.size == 0:
-                return out
-            for i in range(tgt_left.size):
-                a = float(tgt_left[i])
-                b = float(tgt_right[i])
-                acc = 0.0
-                for j in range(src_left.size):
-                    l = float(src_left[j])
-                    r = float(src_right[j])
-                    if r <= a or l >= b:
-                        continue
-                    width = max(r - l, 1e-12)
-                    ov = max(0.0, min(b, r) - max(a, l))
-                    if ov <= 0.0:
-                        continue
-                    frac = ov / width
-                    acc += float(src_values[j]) * (frac ** power)
-                out[i] = acc
-            return out
-
-        t_s, l_s, r_s, c_s, e_s, expo_s = lc_to_counts(lc_src)
-        t_b, l_b, r_b, c_b, e_b, expo_b = lc_to_counts(lc_bkg)
+        t_s, l_s, r_s, c_s, e_s, expo_s = _lc_to_counts(lc_src)
+        t_b, l_b, r_b, c_b, e_b, expo_b = _lc_to_counts(lc_bkg)
         if t_s.size == 0:
             empty_cols = _ensure_lc_columns(getattr(lc_src, 'columns', ()), is_rate=lc_src.is_rate)
             return lc_cls(
@@ -1616,22 +1602,6 @@ class BayesianBlocksBinner:
         )
 
 
-def _alpha_scalar_or_none(v: object) -> Optional[float]:
-    """将任意标量/数组输入规整为正有限标量；不可用则返回 None。"""
-    if v is None:
-        return None
-    try:
-        arr = np.asarray(v, dtype=float).reshape(-1)
-    except Exception:
-        return None
-    if arr.size == 0:
-        return None
-    val = float(np.nanmedian(arr))
-    if (not np.isfinite(val)) or val <= 0.0:
-        return None
-    return val
-
-
 def _resolve_alpha_for_src_bkg(
     alpha: Optional[float],
     lc_src: 'LightcurveData',
@@ -1826,44 +1796,6 @@ def autobin(
     """
 
     lc_cls = type(lc_src)
-
-    def _lc_to_counts(lc: 'LightcurveData'):
-        t = np.asarray(lc.time, dtype=float)
-        vals = np.asarray(lc.value, dtype=float)
-        errs = np.asarray(lc.error, dtype=float) if lc.error is not None else None
-        left, right, width = _infer_bin_geometry(lc)
-        eff_width = _effective_exposure_from_lc(lc, width)
-        if lc.is_rate:
-            counts = vals * eff_width
-            err_counts = (errs * eff_width) if errs is not None else None
-        else:
-            counts = vals.copy()
-            err_counts = errs.copy() if errs is not None else None
-        if err_counts is None:
-            err_counts = np.sqrt(np.maximum(counts, 0.0))
-        return t, left, right, counts, err_counts, eff_width
-
-    def _project_by_overlap(
-        src_left: np.ndarray,
-        src_right: np.ndarray,
-        src_values: np.ndarray,
-        tgt_left: np.ndarray,
-        tgt_right: np.ndarray,
-        *,
-        power: float = 1.0,
-    ) -> np.ndarray:
-        out = np.zeros(tgt_left.shape[0], dtype=float)
-        for i in range(tgt_left.shape[0]):
-            a = float(tgt_left[i])
-            b = float(tgt_right[i])
-            overlap = np.minimum(src_right, b) - np.maximum(src_left, a)
-            mask = overlap > 0.0
-            if not np.any(mask):
-                continue
-            width = np.maximum(src_right[mask] - src_left[mask], 1e-12)
-            frac = (overlap[mask] / width) ** power
-            out[i] = float(np.sum(src_values[mask] * frac))
-        return out
 
     t_s, l_s, r_s, c_s, e_s, expo_s = _lc_to_counts(lc_src)
     if t_s.size == 0:

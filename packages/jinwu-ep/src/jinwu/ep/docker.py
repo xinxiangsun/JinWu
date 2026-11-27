@@ -66,14 +66,18 @@ class _EPDockerRunner(DockerRunner):
             raise ValueError(f"Specify image/caldb or set {cls.instrument}DASIMG and {cls.instrument}CALDB")
         return cls(image, caldb, workspace, **kwargs)
 
+    def _host_path(self, path: str | os.PathLike) -> Path:
+        """Resolve a host path relative to workspace without container mapping."""
+        path = Path(path).expanduser()
+        return (self.workspace / path).resolve() if not path.is_absolute() else path.resolve()
+
     def container_path(self, path: str | os.PathLike) -> str:
         """Map a host path inside workspace to /work; relative paths use workspace.
 
         Symlinks are resolved, including existing parents of future output paths.
         Paths outside the mounted workspace are rejected.
         """
-        path = Path(path).expanduser()
-        path = (self.workspace / path).resolve() if not path.is_absolute() else path.resolve()
+        path = self._host_path(path)
         try:
             return str(PurePosixPath("/work") / path.relative_to(self.workspace).as_posix())
         except ValueError:
@@ -97,13 +101,12 @@ class _EPDockerRunner(DockerRunner):
         )
 
     def _task_command(self, task, indir, outdir, params) -> tuple[list[str], Path]:
-        input_path = Path(indir).expanduser()
-        input_path = (self.workspace / input_path).resolve() if not input_path.is_absolute() else input_path.resolve()
+        input_path = self._host_path(indir)
         if not input_path.is_dir():
             raise ValueError(f"indir must be an existing directory: {input_path}")
         output_path = (
             input_path.with_name(f"{input_path.name}_{task}") if outdir is None
-            else (self.workspace / Path(outdir).expanduser()).resolve()
+            else self._host_path(outdir)
         )
         source = self.container_path(input_path)
         destination = self.container_path(output_path)
@@ -122,6 +125,11 @@ class _EPDockerRunner(DockerRunner):
                 raise ValueError(f"Omit {key} instead of passing None")
             args.append(f"{key}={value}")
         return args, output_path
+
+    def _run_task(self, command, *, log_path=None, timeout=None,
+                  capture_output=True, check=True):
+        return self.run(command, log_path=log_path, timeout=timeout,
+                        capture_output=capture_output, check=check)
 
 
 class WXTDockerRunner(_EPDockerRunner):
@@ -148,8 +156,8 @@ class WXTDockerRunner(_EPDockerRunner):
         Omitted outdir is the resolved input's sibling named indir_wxtpipeline.
         The container creates outdir before starting the task in that directory.
         """
-        return self.run(self.pipeline_command(indir, outdir, **dict(params or {})),
-                        log_path=log_path, timeout=timeout, capture_output=capture_output, check=check)
+        return self._run_task(self.pipeline_command(indir, outdir, **dict(params or {})),
+                              log_path=log_path, timeout=timeout, capture_output=capture_output, check=check)
 
 
 class FXTDockerRunner(_EPDockerRunner):
@@ -178,5 +186,7 @@ class FXTDockerRunner(_EPDockerRunner):
 
         Explicitly opt in before reusing a nonempty outdir.
         """
-        return self.run(self.chain_command(indir, outdir, allow_existing=allow_existing, **dict(params or {})),
-                        log_path=log_path, timeout=timeout, capture_output=capture_output, check=check)
+        return self._run_task(
+            self.chain_command(indir, outdir, allow_existing=allow_existing, **dict(params or {})),
+            log_path=log_path, timeout=timeout, capture_output=capture_output, check=check,
+        )

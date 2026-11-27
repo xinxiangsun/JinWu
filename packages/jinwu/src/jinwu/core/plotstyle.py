@@ -242,14 +242,18 @@ def paper_style(
             _STYLE_APPLIED = previous
 
 
-def paper_figsize(default: tuple[float, float]) -> tuple[float, float]:
-    """取当前论文画布尺寸，否则返回 default / Active paper size, else default.
+def paper_figsize(
+    default: tuple[float, float], figsize: tuple[float, float] | None = None,
+) -> tuple[float, float]:
+    """解析最终画布尺寸 / Resolve the final canvas size.
 
-    供绘图接口在未收到显式 figsize 时解析内部默认尺寸；显式 figsize 或已创建
-    的 axes 仍优先。不修改 rcParams 或 figure。
-    Resolve an interface's internal default size without overriding an explicit
-    figsize or axes; does not modify rcParams or any figure.
+    显式 ``figsize`` 优先；否则在 ``paper_style`` 内取当前画布，否则用 default。
+    不修改 rcParams 或 figure。
+    An explicit figsize wins; otherwise use the active paper_style canvas, else
+    the caller's default. Does not modify rcParams or any figure.
     """
+    if figsize is not None:
+        return tuple(figsize)
     if _PAPER_STYLE_DEPTH:
         return tuple(mpl.rcParams["figure.figsize"])
     return default

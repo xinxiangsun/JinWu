@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import shutil
 import subprocess
-from typing import Iterable, Sequence
+from typing import Iterable
 
 __all__ = [
     "GBMResponseCommand",

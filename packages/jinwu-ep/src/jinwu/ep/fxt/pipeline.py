@@ -38,7 +38,16 @@ from jinwu.core.upperlimit import (
 )
 from jinwu.core.xselect import extract_products_with_xselect
 
+from ..constants import EP_FLUX_BAND_KEV
+from ..fit_kwargs import model_fit_options
+
 __all__ = ["FXTInput", "FXTPipeline", "FXTResult"]
+
+#: Conservative fit band used when no calibrated band is supplied. The FXT
+#: preset's 0.3--10 keV ``spectrum.fit_energy_range_keV`` is a nominal
+#: calibration envelope, not a fit decision for arbitrary L2/L3 products.
+_FXT_CONSERVATIVE_FIT_BAND_KEV = (0.5, 10.0)
+_FXT_PRESET_FIT_BAND_KEV = FXT().spectrum.fit_energy_range_keV or ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -165,10 +174,14 @@ def _count_observation(spectrum: PreparedSpectrum, band: tuple[float, float]):
 class FXTPipeline:
     """Fit local FXT epochs and return common-band measurements for TA.
 
-    Default candidates are PL with zero/free additional absorption. Galactic NH
-    is resolved through UKSSDC unless explicitly supplied (XSPEC 1e22 cm^-2).
-    The conservative default fit band is 0.5--10 keV; a calibrated 0.3-keV lower
-    bound can be explicitly supplied. Each epoch has its own NH/shape/flux.
+    Explicit constructor arguments take precedence. When omitted, candidates,
+    model class, absorption mode, selection metric, fit/flux bands and upper-limit
+    sigma come from the instrument config; a configured candidate set still wins
+    over model class/absorption mode. Galactic NH is resolved through UKSSDC
+    unless explicitly supplied (XSPEC 1e22 cm^-2). The conservative default fit
+    band is 0.5--10 keV: the preset's 0.3--10 keV is a nominal calibration
+    envelope, so a non-default configured band or explicit ``fit_energy_range``
+    is required to fit below 0.5 keV. Each epoch has its own NH/shape/flux.
     Non-detections require an explicit fixed ``upper_limit_shape`` (Gamma and
     additional NH); no spectrum from another epoch is silently inherited.
     """
@@ -177,32 +190,48 @@ class FXTPipeline:
         self, input_data: FXTInput, *, config: InstrumentConfig | None = None,
         galactic_nh_1e22: float | None = None,
         candidate_keys: Sequence[str] | None = None,
-        fit_energy_range: tuple[float, float] = (0.5, 10.0),
-        flux_band_keV: tuple[float, float] = (0.5, 4.0),
+        fit_energy_range: tuple[float, float] | None = None,
+        flux_band_keV: tuple[float, float] | None = None,
         upper_limit_shape: Mapping[str, float] | None = None,
-        upper_limit_sigma: float = 3.0, selection_metric: str = "aic",
+        upper_limit_sigma: float | None = None, selection_metric: str | None = None,
         fit_options: Mapping[str, Any] | None = None,
         xselect_env: Mapping[str, str] | None = None,
     ):
         self.input = input_data
         self.config = config or FXT()
-        self.galactic_nh = galactic_nh_1e22
-        self.candidates = tuple(candidate_keys or ("powerlaw_nh0", "powerlaw_free_nh"))
-        self.fit_band = tuple(map(float, fit_energy_range))
-        self.flux_band = tuple(map(float, flux_band_keV))
-        self.ul_shape = None if upper_limit_shape is None else dict(upper_limit_shape)
-        self.ul_sigma = float(upper_limit_sigma)
-        self.metric = selection_metric
         cfg = self.config.fitting
+        self.galactic_nh = galactic_nh_1e22
+        effective_candidates = candidate_keys if candidate_keys is not None else cfg.candidate_keys
+        if effective_candidates:
+            self.candidates = tuple(effective_candidates)
+        elif cfg.model_class != "auto" or cfg.absorption_mode != "auto":
+            # No configured candidate list: let model_class/absorption_mode select.
+            self.candidates = None
+        else:
+            self.candidates = ("powerlaw_nh0", "powerlaw_free_nh")
+        band = (fit_energy_range if fit_energy_range is not None
+                else self.config.spectrum.fit_energy_range_keV)
+        if fit_energy_range is None and (
+            band is None or tuple(map(float, band)) == tuple(map(float, _FXT_PRESET_FIT_BAND_KEV))
+        ):
+            band = _FXT_CONSERVATIVE_FIT_BAND_KEV
+        self.fit_band = tuple(map(float, band))
+        band = (flux_band_keV if flux_band_keV is not None
+                else self.config.flux_curve.energy_range_keV)
+        self.flux_band = tuple(map(float, band or EP_FLUX_BAND_KEV))
+        self.ul_shape = None if upper_limit_shape is None else dict(upper_limit_shape)
+        self.ul_sigma = float(
+            upper_limit_sigma if upper_limit_sigma is not None else self.config.upper_limit.default_sigma
+        )
+        self.metric = selection_metric if selection_metric is not None else cfg.selection_metric
         if cfg.method != "mle":
             raise NotImplementedError("FXT model comparison currently requires method='mle'")
-        self.fit_options = dict(stat_method=cfg.statistic, abundance=cfg.abundance,
-            cross_section=cfg.cross_section, apec_root=cfg.apec_root,
-            calculate_errors=cfg.calculate_errors, error_delta_stat=cfg.error_delta_stat,
-            plot_formats=self.config.plotting.formats if self.config.plotting.enabled else (),
-            plot_density=self.config.plotting.dpi,
-            plot_required=self.config.plotting.enabled and self.config.plotting.required)
-        self.fit_options.update(fit_options or {})
+        self.fit_options = {
+            **model_fit_options(self.config, plots=True),
+            "model_class": str(cfg.model_class),
+            "absorption_mode": str(cfg.absorption_mode),
+            **(fit_options or {}),
+        }
         self.xselect_env = dict(xselect_env or {})
         for band in (self.fit_band, self.flux_band):
             if not np.all(np.isfinite(band)) or len(band) != 2 or not 0 < band[0] < band[1]:
@@ -447,9 +476,20 @@ class FXTPipeline:
                     result.warnings.append(f"{obsid}/{segment}: {epoch['error']}")
                 write_json(destination / "epoch.json", epoch)
         if result.flux_rows:
-            products = save_flux_curve(FluxCurveResult(tuple(flux_points)), output / "flux_curve", formats=())
-            result.products.update({key: str(path) for key, path in products.items()})
-            result.products.update(self._plot_flux(result.flux_rows, output))
+            products = save_flux_curve(
+                FluxCurveResult(tuple(flux_points)), output / "flux_curve",
+                formats=("png", "pdf"), dpi=200, figsize=(7, 4.5),
+                title=f"{self.input.target_id} — FXT",
+                xlabel="Time since T0 [s]" if self.input.trigger_time_utc else "EP mission time [s]",
+                ylabel=(f"Unabsorbed {self.flux_band[0]:g}–{self.flux_band[1]:g} keV flux\n"
+                        "[erg cm$^{-2}$ s$^{-1}$]"),
+                xlog=all(row["t_start"] > 0 for row in result.flux_rows),
+                upper_limits=True, single_panel_without_quicklook=True,
+            )
+            result.products.update({
+                f"flux_plot_{key[5:]}" if key.startswith("plot_") else key: str(path)
+                for key, path in products.items()
+            })
             # Common TA fields are preserved without Flattening tuple/list metadata.
             write_json(output / "flux_rows.json", result.flux_rows)
             result.products["flux_rows"] = str(output / "flux_rows.json")
@@ -520,29 +560,3 @@ class FXTPipeline:
             products[f"plot_{path.suffix[1:]}"] = path
         for key, path in products.items():
             result.products[f"{row['obsid']}:{row['segment']}:{row['module']}:epoch_count_{key}"] = str(path)
-
-    def _plot_flux(self, rows, output):
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        for row in rows:
-            x, y = row["t_center"], row["flux"]
-            xerr = (row["t_stop"] - row["t_start"]) / 2
-            if row["is_upper_limit"]:
-                ax.errorbar(x, y, xerr=xerr, yerr=0.25 * y, uplims=True, fmt="v", color="tab:blue")
-            else:
-                errors = None if row["error_minus"] is None or row["error_plus"] is None else np.asarray([[row["error_minus"]], [row["error_plus"]]])
-                ax.errorbar(x, y, xerr=xerr, yerr=errors, fmt="o", color="tab:blue")
-        if all(row["t_start"] > 0 for row in rows):
-            ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlabel("Time since T0 [s]" if self.input.trigger_time_utc else "EP mission time [s]")
-        ax.set_ylabel(f"Unabsorbed {self.flux_band[0]:g}–{self.flux_band[1]:g} keV flux\n[erg cm$^{{-2}}$ s$^{{-1}}$]")
-        ax.set_title(f"{self.input.target_id} — FXT")
-        fig.tight_layout()
-        products = {}
-        for extension in ("png", "pdf"):
-            path = output / f"flux_curve.{extension}"
-            fig.savefig(path, dpi=200)
-            products[f"flux_plot_{extension}"] = str(path)
-        plt.close(fig)
-        return products

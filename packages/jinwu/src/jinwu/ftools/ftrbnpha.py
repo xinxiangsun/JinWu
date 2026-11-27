@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 from ..core.data import PhaData
+from .grppha import _derived_pha
 
 # 参考：HEASoft 6.37 heasptools/ftrbnpha/ftrbnpha.cxx（LINEAR: binInfo.load(
 #       nChanIn/nChanOut, nChanIn)，整除校验见其 msg 分支）；
@@ -71,8 +72,6 @@ def rebin_pha(pha: PhaData, nbins: int) -> PhaData:
                     if m != 0:  # 最后一个非零成员覆盖（HEASoft 折叠规则）
                         quality[g] = m
 
-    return PhaData(path=pha.path, channels=channels, counts=counts, stat_err=stat_err,
-                   exposure=pha.exposure, backscal=pha.backscal, areascal=pha.areascal,
-                   quality=quality, grouping=None,
-                   ebounds=(pha.ebounds if factor == 1 else None), header=pha.header,
-                   meta=pha.meta, headers_dump=pha.headers_dump, columns=pha.columns)
+    return _derived_pha(pha, channels=channels, counts=counts, stat_err=stat_err,
+                        quality=quality, grouping=None,
+                        ebounds=(pha.ebounds if factor == 1 else None))

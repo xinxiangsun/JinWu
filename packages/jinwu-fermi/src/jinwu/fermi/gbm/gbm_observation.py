@@ -15,13 +15,9 @@ import os
 from .response import contgbmrsp
 from gdt.core.data_primitives import Gti
 from glob import glob
-import shutil
 import matplotlib.pyplot as plt
 from gdt.core.plot.sky import EquatorialPlot
-from gdt.core.plot.plot import SkyCircle, SkyPoints
-from gdt.core import data_path
-from gdt.missions.fermi.gbm.localization import GbmHealPix
-import numpy as np
+from gdt.core.plot.plot import SkyPoints
 from gdt.missions.fermi.plot import FermiEarthPlot
 from gdt.missions.fermi.gbm.saa import GbmSaa
 
@@ -78,12 +74,8 @@ class GBMObservation:
         if not all([self._utc_TSTART is not None, self._ra, self._dec]):
             raise ValueError("UTC start time, RA, and DEC must be set before updating time and coordinates. "
                              "在更新时间和坐标之前，必须设置 UTC 起始时间、RA 和 DEC。")
-        # Support both string and Time object for utc_start
         # 支持字符串和 Time 对象作为 utc_start
-        if isinstance(self._utc_TSTART, Time):
-            self.srctime = Time(self._utc_TSTART, scale='utc', precision=9)
-        else:
-            self.srctime = Time(self._utc_TSTART, scale='utc', precision=9)
+        self.srctime = Time(self._utc_TSTART, scale='utc', precision=9)
         self.coord = SkyCoord(self._ra, self._dec, frame='icrs', unit='deg')
         self.isot = self.srctime.isot
 

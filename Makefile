@@ -86,7 +86,7 @@ publish: build rust-build sha256
 # 测试
 # -----------------------------------------------------------
 check:
-	$(PYTHON) -m pytest test/ packages/jinwu-ep/tests packages/jinwu-gecam/tests -x -q
+	$(PYTHON) -m pytest test/ packages/jinwu-ep/tests packages/jinwu-swift/tests packages/jinwu-gecam/tests -x -q
 
 # -----------------------------------------------------------
 # 从 packages/jinwu/pyproject.toml 读取版本号，同步到所有文件
@@ -117,7 +117,7 @@ release: sync
 	git add packages/jinwu/pyproject.toml packages/jinwu-ep/pyproject.toml \
 		packages/jinwu-swift/pyproject.toml packages/jinwu-fermi/pyproject.toml packages/jinwu-gw/pyproject.toml packages/jinwu-gecam/pyproject.toml \
 		packages/jinwurs/Cargo.toml packages/jinwurs/pyproject.toml packages/jinwurs/README.md \
-		recipe/meta.yaml
+		recipe/meta.yaml packages/jinwurs/conda-recipe/meta.yaml
 	git diff --cached --stat
 	@echo ""
 	git commit -m "release: jinwu v$(_VERSION)"

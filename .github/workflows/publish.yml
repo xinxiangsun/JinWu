@@ -37,7 +37,17 @@ jobs:
           actual = tomllib.loads(path.read_text())["package"]["version"]
           if actual != expected:
               raise SystemExit(f"{path}: {actual} does not match tag version {expected}")
-          print(f"All seven packages match v{expected}")
+          for path in (Path("recipe/meta.yaml"), Path("packages/jinwurs/conda-recipe/meta.yaml")):
+              text = path.read_text()
+              jinja_version = re.search(r'{%\s*set\s+version\s*=\s*"([^"]+)"\s*%}', text)
+              package_version = re.search(r'^  version:\s*"([^"]+)"', text, re.MULTILINE)
+              actuals = [
+                  match.group(1) if match else None
+                  for match in (jinja_version, package_version)
+              ]
+              if actuals != [expected, expected]:
+                  raise SystemExit(f"{path}: {actuals} does not match tag version {expected}")
+          print(f"All seven packages and both conda recipes match v{expected}")
           PY
 
   # ── Python (jinwu, jinwu-ep, jinwu-swift, jinwu-fermi, jinwu-gw, jinwu-gecam) ──
@@ -148,7 +158,7 @@ jobs:
       - name: Run offline gate tests against installed wheels
         run: |
           wheel-env/bin/python -m pytest \
-            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py packages/jinwu-ep/tests packages/jinwu-gecam/tests \
+            test/test_quickstart_examples.py test/test_stage_code_deps.py test/test_gr.py packages/jinwu-ep/tests packages/jinwu-swift/tests packages/jinwu-gecam/tests \
             -p no:cacheprovider -m 'not network and not heasoft and not real_data' -ra
 
   # ── Publish + Release ──────────────────────────────

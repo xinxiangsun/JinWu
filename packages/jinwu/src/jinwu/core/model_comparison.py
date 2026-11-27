@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from statistics import NormalDist
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 from scipy.stats import beta

@@ -17,7 +17,6 @@ from __future__ import annotations
 import ast
 import operator
 import re
-from typing import Optional
 import numpy as np
 
 

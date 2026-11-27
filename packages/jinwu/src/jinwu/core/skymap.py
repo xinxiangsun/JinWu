@@ -20,13 +20,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 import astropy.units as u
 import numpy as np
 from astropy.io import fits
+from astropy.table import Table
 
-__all__ = ["SkyMapData", "load_skymap", "sky_map_pixel_vectors"]
+__all__ = ["SkyMapData", "load_skymap", "load_skymap_with_table", "sky_map_pixel_vectors"]
 
 #: HEALPix order up to which a coarse native cell is subdivided with constant
 #: density when a caller needs unit vectors per pixel (matches the GBM
@@ -146,49 +147,34 @@ def _finish(uniq, levels, ipix, density, area, *, ordering, source, normalize) -
     )
 
 
-def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
-    """读取本地 HEALPix 概率 FITS / Read a local HEALPix probability FITS.
-
-    Parameters
-    ----------
-    path : str or Path
-        本地文件，支持 UNIQ/PROBDENSITY 多阶图，或含 PROB、PROBABILITY、
-        PROBDENSITY 的平面图；URL 获取由 jinwu.gw 的告警层负责。
-        Local multi-order UNIQ/PROBDENSITY or flat PROB/PROBABILITY/PROBDENSITY
-        file. Remote fetching belongs to the jinwu.gw alert layer.
-    normalize : bool
-        默认 True，将正的总概率缩放到 1，并同步密度。
-        Default True: scale a positive total mass to 1 and update density.
-
-    Returns
-    -------
-    SkyMapData
-        统一为 nested UNIQ，密度单位 sr^-1、面积单位 sr，像素概率无量纲。
-        ordering 保留原平面图排序信息；source 为绝对路径。
-        Nested UNIQ representation with density in sr^-1, area in sr and
-        dimensionless pixel mass. Retain original flat ordering and source path.
-
-    Raises
-    ------
-    FileNotFoundError, ValueError
-        文件缺失、列/NSIDE/排序不兼容或概率字段无效；FITS 读取异常也上抛。
-        Missing file or invalid columns, NSIDE, ordering or probabilities.
-        FITS read errors propagate. Requires optional astropy-healpix at call time.
-    """
+def _load_skymap(
+    source: str | Path | BinaryIO,
+    *,
+    normalize: bool,
+    source_name: str | None = None,
+    include_table: bool = False,
+) -> tuple[SkyMapData, Table | None]:
     import astropy_healpix as ah
 
-    local_path = Path(path).expanduser().resolve()
-    if not local_path.is_file():
-        raise FileNotFoundError(local_path)
-    with fits.open(local_path, memmap=False) as hdul:
+    if hasattr(source, "read"):
+        fileobj = source
+        label = source_name or str(getattr(source, "name", "<stream>"))
+    else:
+        local_path = Path(source).expanduser().resolve()
+        if not local_path.is_file():
+            raise FileNotFoundError(local_path)
+        fileobj = local_path
+        label = source_name or str(local_path)
+    with fits.open(fileobj, memmap=False) as hdul:
         table_hdu = next(
             (hdu for hdu in hdul[1:] if getattr(hdu, "data", None) is not None), None
         )
         if table_hdu is None:
-            raise ValueError(f"no HEALPix table found in {path}")
+            raise ValueError(f"no HEALPix table found in {label}")
         names = {str(n).upper(): n for n in table_hdu.columns.names}
         header = table_hdu.header
         primary_header = hdul[0].header
+        raw_table = Table(table_hdu.data, copy=True) if include_table else None
 
         # ---- Multi-order map (NUNIQ / PROBDENSITY) ----
         if "UNIQ" in names and "PROBDENSITY" in names:
@@ -204,8 +190,8 @@ def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
             area = ah.nside_to_pixel_area(ah.level_to_nside(levels)).to_value(u.sr)
             return _finish(
                 uniq_raw, levels, ipix, density, area,
-                ordering="NUNIQ", source=str(local_path), normalize=normalize,
-            )
+                ordering="NUNIQ", source=label, normalize=normalize,
+            ), raw_table
 
         # ---- Flat map (PROB or PROBDENSITY) ----
         prob_name = names.get("PROB") or names.get("PROBABILITY")
@@ -238,8 +224,60 @@ def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
             density = _density_column(table_hdu, density_name)
         return _finish(
             uniq, levels, ipix, density, area,
-            ordering=ordering, source=str(local_path), normalize=normalize,
-        )
+            ordering=ordering, source=label, normalize=normalize,
+        ), raw_table
+
+
+def load_skymap_with_table(
+    source: str | Path | BinaryIO,
+    *,
+    normalize: bool = True,
+    source_name: str | None = None,
+) -> tuple[SkyMapData, Table]:
+    """Read a HEALPix FITS map and retain its raw table for provenance.
+
+    ``source`` may be a local path or a binary file object (for URL bytes
+    already validated by the alert layer). ``source_name`` overrides the
+    recorded origin, which is useful when a stream came from a redirect.
+    Returns the parsed :class:`SkyMapData` plus a copy of the FITS table.
+    """
+    data, table = _load_skymap(
+        source, normalize=normalize, source_name=source_name, include_table=True,
+    )
+    assert table is not None
+    return data, table
+
+
+def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMapData:
+    """读取本地 HEALPix 概率 FITS / Read a local HEALPix probability FITS.
+
+    Parameters
+    ----------
+    path : str or Path
+        本地文件，支持 UNIQ/PROBDENSITY 多阶图，或含 PROB、PROBABILITY、
+        PROBDENSITY 的平面图；URL 获取由 jinwu.gw 的告警层负责。
+        Local multi-order UNIQ/PROBDENSITY or flat PROB/PROBABILITY/PROBDENSITY
+        file. Remote fetching belongs to the jinwu.gw alert layer.
+    normalize : bool
+        默认 True，将正的总概率缩放到 1，并同步密度。
+        Default True: scale a positive total mass to 1 and update density.
+
+    Returns
+    -------
+    SkyMapData
+        统一为 nested UNIQ，密度单位 sr^-1、面积单位 sr，像素概率无量纲。
+        ordering 保留原平面图排序信息；source 为绝对路径。
+        Nested UNIQ representation with density in sr^-1, area in sr and
+        dimensionless pixel mass. Retain original flat ordering and source path.
+
+    Raises
+    ------
+    FileNotFoundError, ValueError
+        文件缺失、列/NSIDE/排序不兼容或概率字段无效；FITS 读取异常也上抛。
+        Missing file or invalid columns, NSIDE, ordering or probabilities.
+        FITS read errors propagate. Requires optional astropy-healpix at call time.
+    """
+    return _load_skymap(path, normalize=normalize)[0]
 
 
 def sky_map_pixel_vectors(

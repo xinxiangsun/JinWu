@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import importlib.metadata
-import json
 from pathlib import Path
 
 import astropy.units as u

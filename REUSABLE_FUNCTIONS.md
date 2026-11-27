@@ -153,3 +153,30 @@ from jinwu.core.fit import fit_prepared, fit_xray_models
 | `prepare_gecam_spectra` / `gecam_lightcurve_products` | `packages/jinwu-gecam/src/jinwu/gecam/analysis.py` | 将 GECAM 原生 Type-II 谱与光变转换为共享分析输入 | 是 |
 | `DockerMount` / `DockerRunner` | `packages/jinwu/src/jinwu/core/docker.py` | 显式 Docker context、bind mount、容器环境与安全 argv 的命令预览、同步/异步执行、日志和镜像归档载入 | 是 |
 | `WXTDockerRunner` / `FXTDockerRunner` | `packages/jinwu-ep/src/jinwu/ep/docker.py` | 官方 wxtpipeline/fxtchain 容器入口，显式/调用时环境配置、只读 CALDB、独立 PFILES 与 workspace 路径映射 | 是 |
+| `module_source_path` | `packages/jinwu/src/jinwu/core/pipeline.py` | 从模块对象解析真实源码路径并明确失败，供流水线代码依赖指纹复用 | 是 |
+| `needs_sci` / `format_math_label` | `packages/jinwu/src/jinwu/core/utils.py` | 统一科学计数法判定与带上下误差的 mathtext 标签格式，供绘图和拟合共用 | 是 |
+| `_read_gti_table` | `packages/jinwu/src/jinwu/core/ogip.py` | 统一 GTI START/STOP 或 TSTART/TSTOP 表解析，保留空扩展继续扫描与返回 None 的调用方差异 | 是 |
+| `_prepare_profile_context` | `packages/jinwu/src/jinwu/core/upperlimit.py` | 为上限与幅度 profile 入口统一 policy、区间、观测名和准备逻辑，保留各自标签与禁用原因 | 是 |
+| `_draw_plot_errorbar` | `packages/jinwu/src/jinwu/core/plot.py` | 统一 plotfit 数据/残差面板误差棒绘制与样式回退 | 是 |
+| `_lc_to_counts` | `packages/jinwu/src/jinwu/core/ops.py` | 统一光变 rate→counts、有效曝光和零/NaN 曝光回退策略，供拟合、自动分箱和数据集复用 | 是 |
+| `_project_by_overlap` | `packages/jinwu/src/jinwu/core/ops.py` | 向量化重叠投影，供源/背景拟合与自动分箱按目标箱汇总源箱计数 | 是 |
+| `_masked_event_columns` | `packages/jinwu/src/jinwu/core/xselect.py` | 从掩膜提取 EventData 列并保留 PI/channel 整数语义，供筛选、GTI 裁剪和区域过滤复用 | 是 |
+| `HostGalaxyFinder._save_plotly` | `packages/jinwu/src/jinwu/core/host.py` | 统一 Plotly HTML/PNG 保存的空图守卫、默认文件名、输出目录和失败提示 | 是 |
+| `_load_min_groups` / `_sum_group_columns` / `_group_flags_to_ids` | `packages/jinwu/src/jinwu/ftools/grppha.py` | 统一 loadMin 贪心分组、物理合并首通道/计数求和以及 OGIP/旧组号转换；误差、EBOUNDS 与尾 QUALITY 策略由调用方保留 | 是 |
+| `model_fit_options` | `packages/jinwu-ep/src/jinwu/ep/fit_kwargs.py` | 从 EP FitConfig/PlotConfig 生成共享 `fit_xray_models` 关键字，保留 TA 非致命绘图与 FXT 用户覆盖语义 | 是 |
+| `EventData._clear_source` / `_current_time_bounds` / `_current_pi_bounds` | `packages/jinwu/src/jinwu/core/data.py` | 统一 clear_region/time/energy 的原始事件来源与当前时间/PI 边界推断 | 是 |
+| `xselect._clear_source` / `_infer_time_bounds` / `_infer_pi_bounds` | `packages/jinwu/src/jinwu/core/xselect.py` | 统一模块级 clear_region/time/energy 的路径解析与可选当前筛选边界保留 | 是 |
+| `_k_config_kwargs` / `_k_for_config` | `packages/jinwu/src/jinwu/lf/lcfake.py` | 将 `XspecConfig` 显式映射为 XSPEC factory 参数，并统一单配置 `K` 查询，供 NPZ 模拟与红移光变共用 | 是 |
+| `_flux_on_target_grid` | `packages/jinwu/src/jinwu/lf/lcfake.py` | 统一 NPZ 模板读取、输入背景扣除、`K_ref→flux`、红移时间伸缩/线性重采样及 `K_tgt` 准备；采样与目标背景策略由公共入口保留 | 是 |
+| `estimate_exposure_from_eventdata` | `packages/jinwu/src/jinwu/core/gti.py` | 从合并 GTI、`OgipMeta` TSTART/TSTOP 或事件跨度估算曝光，可选 `tmin/tmax` 裁剪；供 xselect 与 fextract 共用 | 是 |
+| `positive_scalar_or_none` | `packages/jinwu/src/jinwu/core/utils.py` | 将任意标量/数组规整为正有限中位数，否则返回 `None`；供 alpha 与 txx 计算共用 | 是 |
+| `load_skymap_with_table` | `packages/jinwu/src/jinwu/core/skymap.py` | 解析本地路径或二进制流中的 HEALPix FITS，返回 `SkyMapData` 与原始表副本；GW 层仅保留 URL 获取与 `SkyMap` 包装 | 是 |
+| `inverse_gnomonic` | `packages/jinwu/src/jinwu/ftools/teldef_helpers.py` | 将弧度切平面坐标反投影为弧度 RA/Dec；可传入预计算 `sin_dec0/cos_dec0`，供 Teldef 直接路径与 `Det2Sky` 缓存路径共用 | 是 |
+| `PipelineInput.resolve_path` | `packages/jinwu/src/jinwu/core/pipeline.py` | 将绝对路径原样解析，否则相对输入根目录解析；供 source-analysis 与 GECAM 输入依赖复用 | 是 |
+| `_attach_magnitude_error` | `packages/jinwu/src/jinwu/core/units.py` | 将星等误差按一阶相对误差 `flux * ln(10)/2.5 * error` 附到通量 `Quantity.error`，供 fnu/flam/band flux 共用 | 是 |
+| `jsonable` | `packages/jinwu/src/jinwu/core/products.py` | 全库统一 JSON 规范化（dataclass/Path/Enum/set/ndarray/NaN→None）；`stringify_unknown=True` 仅用于必须保证任意对象可序列化的 BXA 结果 | 是 |
+| `_derived_pha` | `packages/jinwu/src/jinwu/ftools/grppha.py` | 复制物理分组/重采样路径保留的 PHA 元数据（path/exposure/backscal/areascal/header/meta/headers_dump/columns），rate、响应文件与通道键保持默认 | 是 |
+| `validate_selection` / `validate_time_bin` | `packages/jinwu-gecam/src/jinwu/gecam/backend.py` | 统一 GECAM 时间范围、时间 bin、能段与 gain 校验，返回规范化 Quantity 数组；供事件光变、谱生成与 pipeline 输入校验复用 | 是 |
+| `load_galactic_absorption_cache` | `packages/jinwu/src/jinwu/core/galactic.py` | 只读加载并按 schema/service/算法/equinox/坐标校验既有银河吸收缓存，要求总柱密度与 TBabs 值有限为正；供 TA 共享拟合复用 | 是 |
+| `save_flux_curve` | `packages/jinwu/src/jinwu/core/products.py` | 统一通量曲线数据与科学/quicklook 绘图；`upper_limits`、`single_panel_without_quicklook`、`xlabel`/`ylabel`/`xlog` 为 opt-in，默认保持 WXT 旧双面板与普通点样式 | 是 |
+| `build_wxt_spectrum_manifest` | `packages/jinwu-ep/src/jinwu/ep/wxt/pipeline.py` | 构造 WXT 单 bundle 的 DataFile/SpectrumBundle/Manifest，供 WXT pipeline 与 TA 共享拟合复用；DataFile detector 元数据显式控制 | 是 |

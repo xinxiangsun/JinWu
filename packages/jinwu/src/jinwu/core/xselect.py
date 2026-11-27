@@ -27,7 +27,6 @@ import warnings
 import numpy as np
 from astropy.io import fits
 
-from .base import OgipMeta
 from .data import EventData, PhaData, LightcurveData
 from .io import read_evt
 from ..ftools import region as regionmod
@@ -812,6 +811,22 @@ def extract_spectrum_with_xselect(
     return result.spectrum
 
 
+def _masked_event_columns(ev: EventData, mask: np.ndarray, *, integer_pi: bool = False) -> dict[str, Any]:
+    """Return the masked column payload shared by EventData filters."""
+    def column(name: str, dtype: Any = None):
+        values = getattr(ev, name, None)
+        return None if values is None else np.asarray(values, dtype=dtype)[mask]
+
+    return {
+        "time": np.asarray(ev.time, dtype=float)[mask],
+        "pi": column("pi", int if integer_pi else None),
+        "channel": column("channel", int if integer_pi else None),
+        "x": column("x"),
+        "y": column("y"),
+        "energy": column("energy"),
+    }
+
+
 def _new_event_like(ev: EventData, **updates: Any) -> EventData:
     payload: dict[str, Any] = {
         'path': ev.path,
@@ -1116,7 +1131,6 @@ def _get_mdb_tree(use_cache: bool = True):
     # fallback: try to locate via package import path
     try:
         import importlib.resources as _ir
-        import io
         # attempt to read resource if installed as package
         with _ir.open_text('jinwu.data', 'xselect.mdb') as f:
             lines = f.readlines()
@@ -1158,21 +1172,9 @@ def select_events(path: str | Path | EventData, *, tmin: Optional[float] = None,
     # optional ftselect-like expression filtering (applies after energy filter)
     if expr is not None and str(expr).strip() != '':
         mask = exprmod.expression_to_mask(ev2, expr)
-        t = np.asarray(ev2.time, dtype=float)
-        new_time = t[mask]
-        new_pi = None if ev2.pi is None else np.asarray(ev2.pi, dtype=int)[mask]
-        new_ch = None if ev2.channel is None else np.asarray(ev2.channel, dtype=int)[mask]
-        new_x = None if ev2.x is None else np.asarray(ev2.x)[mask]
-        new_y = None if ev2.y is None else np.asarray(ev2.y)[mask]
-        new_energy = None if ev2.energy is None else np.asarray(ev2.energy)[mask]
         ev2 = _new_event_like(
             ev2,
-            time=new_time,
-            pi=new_pi,
-            channel=new_ch,
-            x=new_x,
-            y=new_y,
-            energy=new_energy,
+            **_masked_event_columns(ev2, mask, integer_pi=True),
             raw_columns=None,
         )
 
@@ -1342,21 +1344,9 @@ def filter_time(ev: EventData, *, tmin: Optional[float] = None, tmax: Optional[f
     if tmax_f is not None:
         mask &= (t <= tmax_f)
     
-    new_time = t[mask]
-    new_pi = None if ev.pi is None else np.asarray(ev.pi)[mask]
-    new_ch = None if ev.channel is None else np.asarray(ev.channel)[mask]
-    new_x = None if ev.x is None else np.asarray(ev.x)[mask]
-    new_y = None if ev.y is None else np.asarray(ev.y)[mask]
-    new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
-    
     return _new_event_like(
         ev,
-        time=new_time,
-        pi=new_pi,
-        channel=new_ch,
-        x=new_x,
-        y=new_y,
-        energy=new_energy,
+        **_masked_event_columns(ev, mask),
         raw_columns=None,
     )
 
@@ -1378,20 +1368,9 @@ def filter_energy(ev: EventData, *, pi_min: Optional[int] = None, pi_max: Option
         mask &= (arr >= int(pi_min))
     if pi_max is not None:
         mask &= (arr <= int(pi_max))
-    new_time = np.asarray(ev.time, dtype=float)[mask]
-    new_pi = None if ev.pi is None else np.asarray(ev.pi, dtype=int)[mask]
-    new_ch = None if ev.channel is None else np.asarray(ev.channel, dtype=int)[mask]
-    new_x = None if ev.x is None else np.asarray(ev.x)[mask]
-    new_y = None if ev.y is None else np.asarray(ev.y)[mask]
-    new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
     return _new_event_like(
         ev,
-        time=new_time,
-        pi=new_pi,
-        channel=new_ch,
-        x=new_x,
-        y=new_y,
-        energy=new_energy,
+        **_masked_event_columns(ev, mask, integer_pi=True),
         raw_columns=None,
     )
 
@@ -1442,26 +1421,14 @@ def trim_events_to_gti(ev: EventData, *, tol: float = 1e-9) -> EventData:
     for s, e in zip(ms, me):
         mask |= (t >= float(s)) & (t <= float(e))
 
-    new_time = t[mask]
-    new_pi = None if ev.pi is None else np.asarray(ev.pi)[mask]
-    new_ch = None if ev.channel is None else np.asarray(ev.channel)[mask]
-    new_x = None if ev.x is None else np.asarray(ev.x)[mask]
-    new_y = None if ev.y is None else np.asarray(ev.y)[mask]
-    new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
-
     return _new_event_like(
         ev,
-        time=new_time,
-        pi=new_pi,
-        channel=new_ch,
-        x=new_x,
-        y=new_y,
+        **_masked_event_columns(ev, mask),
         gti_start=ms,
         gti_stop=me,
         gti_start_obj=gti_start_obj_new,
         gti_stop_obj=gti_stop_obj_new,
         gti=[(float(s), float(e)) for s, e in zip(ms, me)],
-        energy=new_energy,
         raw_columns=None,
     )
 
@@ -1489,6 +1456,52 @@ def _read_column_from_evt(path: str | Path, colname: str):
         return None
     return None
 
+def _clear_source(ev_or_path: EventData | str | Path, operation: str) -> tuple[EventData | None, Path]:
+    """Resolve the original event path for a ``clear_*`` operation."""
+    ev = ev_or_path if isinstance(ev_or_path, EventData) else None
+    if ev is not None:
+        path = ev.path
+    elif isinstance(ev_or_path, (str, Path)):
+        path = Path(ev_or_path)
+    else:
+        path = None
+    if path is None:
+        raise ValueError(f'{operation} requires a file path (pass EventData with .path or a file path)')
+    return ev, path
+
+
+def _infer_time_bounds(
+    ev: EventData | None,
+    tmin: Optional[float],
+    tmax: Optional[float],
+) -> tuple[Optional[float], Optional[float]]:
+    """Keep the current time window when bounds were not supplied."""
+    if ev is None or tmin is not None:
+        return tmin, tmax
+    time = getattr(ev, 'time', None)
+    if time is None or len(time) == 0:
+        return tmin, tmax
+    t = np.asarray(time, dtype=float)
+    return float(t.min()), float(t.max()) if tmax is None else tmax
+
+
+def _infer_pi_bounds(
+    ev: EventData | None,
+    pi_min: Optional[int],
+    pi_max: Optional[int],
+) -> tuple[Optional[int], Optional[int]]:
+    """Keep the current PI bounds when bounds were not supplied."""
+    if ev is None or pi_min is not None:
+        return pi_min, pi_max
+    pi = getattr(ev, 'pi', None)
+    if pi is None:
+        return pi_min, pi_max
+    arr = np.asarray(pi, dtype=int)
+    if arr.size == 0:
+        return pi_min, pi_max
+    return int(arr.min()), int(arr.max()) if pi_max is None else pi_max
+
+
 def clear_region(ev_or_path: EventData | str | Path, *, tmin: Optional[float] = None, tmax: Optional[float] = None,
                  pi_min: Optional[int] = None, pi_max: Optional[int] = None) -> EventData:
     """Remove any region selection by re-reading the original event file and
@@ -1505,31 +1518,10 @@ def clear_region(ev_or_path: EventData | str | Path, *, tmin: Optional[float] = 
       `path`), a `ValueError` is raised because we cannot recover events
       excluded by the region filter.
     """
-    # determine source path and optional current EventData
-    ev = ev_or_path if isinstance(ev_or_path, EventData) else None
-    if ev is not None:
-        path = ev.path
-    elif isinstance(ev_or_path, (str, Path)):
-        path = Path(ev_or_path)
-    else:
-        path = None
-    if path is None:
-        raise ValueError('clear_region requires a file path (pass EventData with .path or a file path)')
-
-    # infer filters from provided EventData when arguments absent
-    if ev is not None:
-        if tmin is None and getattr(ev, 'time', None) is not None and len(ev.time) > 0:
-            tmin = float(np.min(ev.time))
-            tmax = float(np.max(ev.time)) if tmax is None else tmax
-        if pi_min is None and getattr(ev, 'pi', None) is not None:
-            arr = np.asarray(ev.pi, dtype=int)
-            if arr.size > 0:
-                pi_min = int(arr.min())
-                pi_max = int(arr.max()) if pi_max is None else pi_max
-
-    # re-read full event file and apply time/energy filters
-    full = read_evt(path)
-    return select_events(full, tmin=tmin, tmax=tmax, pi_min=pi_min, pi_max=pi_max)
+    ev, path = _clear_source(ev_or_path, 'clear_region')
+    tmin, tmax = _infer_time_bounds(ev, tmin, tmax)
+    pi_min, pi_max = _infer_pi_bounds(ev, pi_min, pi_max)
+    return select_events(read_evt(path), tmin=tmin, tmax=tmax, pi_min=pi_min, pi_max=pi_max)
 
 
 def clear_time(ev_or_path: EventData | str | Path, *, region: Optional[dict | str | Path] = None,
@@ -1541,25 +1533,9 @@ def clear_time(ev_or_path: EventData | str | Path, *, region: Optional[dict | st
     filtered `EventData` — in that case the returned EventData will have no
     region applied (only energy filters if provided or inferred).
     """
-    ev = ev_or_path if isinstance(ev_or_path, EventData) else None
-    if ev is not None:
-        path = ev.path
-    elif isinstance(ev_or_path, (str, Path)):
-        path = Path(ev_or_path)
-    else:
-        path = None
-    if path is None:
-        raise ValueError('clear_time requires a file path (pass EventData with .path or a file path)')
-
-    # infer energy bounds from EventData if not supplied
-    if ev is not None and pi_min is None and getattr(ev, 'pi', None) is not None:
-        arr = np.asarray(ev.pi, dtype=int)
-        if arr.size > 0:
-            pi_min = int(arr.min())
-            pi_max = int(arr.max()) if pi_max is None else pi_max
-
-    full = read_evt(path)
-    return select_events(full, region=region, pi_min=pi_min, pi_max=pi_max)
+    ev, path = _clear_source(ev_or_path, 'clear_time')
+    pi_min, pi_max = _infer_pi_bounds(ev, pi_min, pi_max)
+    return select_events(read_evt(path), region=region, pi_min=pi_min, pi_max=pi_max)
 
 
 def clear_energy(ev_or_path: EventData | str | Path, *, region: Optional[dict | str | Path] = None,
@@ -1567,23 +1543,9 @@ def clear_energy(ev_or_path: EventData | str | Path, *, region: Optional[dict | 
     """Remove any energy selection by re-reading the original event file and
     re-applying only region/time filters.
     """
-    ev = ev_or_path if isinstance(ev_or_path, EventData) else None
-    if ev is not None:
-        path = ev.path
-    elif isinstance(ev_or_path, (str, Path)):
-        path = Path(ev_or_path)
-    else:
-        path = None
-    if path is None:
-        raise ValueError('clear_energy requires a file path (pass EventData with .path or a file path)')
-
-    # infer time window from EventData if not supplied
-    if ev is not None and (tmin is None and getattr(ev, 'time', None) is not None and len(ev.time) > 0):
-        tmin = float(np.min(ev.time))
-        tmax = float(np.max(ev.time)) if tmax is None else tmax
-
-    full = read_evt(path)
-    return select_events(full, tmin=tmin, tmax=tmax, region=region)
+    ev, path = _clear_source(ev_or_path, 'clear_energy')
+    tmin, tmax = _infer_time_bounds(ev, tmin, tmax)
+    return select_events(read_evt(path), tmin=tmin, tmax=tmax, region=region)
 
 
 def clear_all(ev_or_path: EventData | str | Path) -> EventData:
@@ -1720,22 +1682,9 @@ def filter_region(ev_or_path: EventData | str | Path, region: dict) -> EventData
         raise ValueError(f'Unsupported region type: {typ}')
 
     # apply mask to build new EventData
-    t = np.asarray(ev.time, dtype=float)
-    new_time = t[mask]
-    new_pi = None if ev.pi is None else np.asarray(ev.pi)[mask]
-    new_ch = None if ev.channel is None else np.asarray(ev.channel)[mask]
-    new_x = None if ev.x is None else np.asarray(ev.x)[mask]
-    new_y = None if ev.y is None else np.asarray(ev.y)[mask]
-    new_energy = None if ev.energy is None else np.asarray(ev.energy)[mask]
-
     return _new_event_like(
         ev,
-        time=new_time,
-        pi=new_pi,
-        channel=new_ch,
-        x=new_x,
-        y=new_y,
-        energy=new_energy,
+        **_masked_event_columns(ev, mask),
         raw_columns=None,
     )
 
@@ -1965,24 +1914,6 @@ def extract_image(ev_or_path: EventData | str | Path, *, xcol: str | None = None
     return img, xedges, yedges
 
 
-def _estimate_exposure_from_eventdata(ev: EventData) -> float:
-    """尝试从 EventData 中估算曝光：优先使用合并后的 GTI 累计时长，其次使用 meta 中的 TSTART/TSTOP，最后用事件跨度。
-
-    该函数会调用 `merge_gti` 来规范化 GTI 区间。
-    """
-    if ev.gti_start is not None and ev.gti_stop is not None:
-        ms, me = merge_gti(ev.gti_start, ev.gti_stop)
-        if ms is not None and me is not None and ms.size > 0:
-            return float(np.sum(me - ms))
-    if ev.meta is not None and isinstance(ev.meta, OgipMeta):
-        if ev.meta.tstart is not None and ev.meta.tstop is not None:
-            return float(ev.meta.tstop - ev.meta.tstart)
-    # fallback: use span of events
-    if ev.time.size:
-        return float(ev.time.max() - ev.time.min())
-    return 0.0
-
-
 def accumulate_spectrum_from_events(ev: EventData, *, channel_col: str = 'pi',
                                     ch_min: Optional[int] = None, ch_max: Optional[int] = None,
                                     nbins: Optional[int] = None) -> PhaData:
@@ -2018,7 +1949,7 @@ def accumulate_spectrum_from_events(ev: EventData, *, channel_col: str = 'pi',
         # empty spectrum
         channels = np.array([], dtype=int)
         counts = np.array([], dtype=float)
-        exposure = _estimate_exposure_from_eventdata(ev)
+        exposure = gtimod.estimate_exposure_from_eventdata(ev)
         return PhaData(path=ev.path, channels=channels, counts=counts,
                    stat_err=None, exposure=exposure, backscal=None, areascal=None,
                    quality=None, grouping=None, ebounds=None, header=ev.header, meta=ev.meta,
@@ -2046,7 +1977,7 @@ def accumulate_spectrum_from_events(ev: EventData, *, channel_col: str = 'pi',
 
     # poisson stat error (sqrt) as default
     stat_err = np.sqrt(counts.astype(float))
-    exposure = _estimate_exposure_from_eventdata(ev)
+    exposure = gtimod.estimate_exposure_from_eventdata(ev)
 
     pha = PhaData(
         path=ev.path,

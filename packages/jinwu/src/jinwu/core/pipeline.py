@@ -31,6 +31,7 @@ __all__ = [
     "StageResult",
     "pipeline",
     "register_pipeline",
+    "module_source_path",
 ]
 
 
@@ -74,6 +75,11 @@ class PipelineInput:
         不创建或校验目录存在性；调用者仍需 validate_input。
         Do not create the directory or validate existence; validate_input is separate."""
         return Path(self.root).expanduser().resolve()
+
+    def resolve_path(self, path: str | Path) -> Path:
+        """将绝对路径原样解析，否则相对输入根目录解析。"""
+        candidate = Path(path).expanduser()
+        return (candidate if candidate.is_absolute() else self.resolved_root() / candidate).resolve()
 
     def resolved_output_root(self) -> Path:
         """解析独立输出目录 / Resolve an explicit or target-derived output root.
@@ -242,6 +248,14 @@ def _file_fingerprint(path: Path) -> str:
     from .products import sha256_file
 
     return sha256_file(path)
+
+
+def module_source_path(module: Any) -> Path:
+    """Return the loaded source file for a module or raise a clear error."""
+    path = inspect.getsourcefile(module)
+    if not path:
+        raise RuntimeError(f"Cannot locate module source: {module!r}")
+    return Path(path)
 
 
 def _output_fingerprints(outputs: Mapping[str, str]) -> dict[str, str]:

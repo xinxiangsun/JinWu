@@ -56,6 +56,54 @@ def test_lightcurve_rejects_ambiguous_selections(change, error):
         extract_lightcurve(None, **(args | change))
 
 
+def test_spectra_stage_maps_single_digit_detector_keys(tmp_path, monkeypatch):
+    source = tmp_path / "input"; source.mkdir()
+    event_file = source / "event.fits"
+    fits.PrimaryHDU(header=fits.Header({"MJDREFI": 58484, "MJDREFF": .00080074074,
+                                       "TIMESYS": "TT", "TIMEUNIT": "s", "TIMEZERO": 2.})).writeto(event_file)
+    info = SimpleNamespace(obs_met_range=(0, 100), satellite_full_name="GECAM-B",
+                           instrument="GRD", trig_id="test", trig_met=12)
+    monkeypatch.setattr(backend, "open_event", lambda p: SimpleNamespace(info=info))
+    monkeypatch.setattr(backend, "_backend", lambda: SimpleNamespace(
+        __file__=backend.__file__, get_software_version=lambda: "20240514"))
+    module = import_module("jinwu.gecam.pipeline")
+    real_version = module.version
+    monkeypatch.setattr(module, "version", lambda name: "test" if name == "lmfit" else real_version(name))
+    monkeypatch.setattr(backend, "extract_lightcurve", lambda *args, **kwargs: SimpleNamespace(
+        get_data=lambda **kw: (np.array([10, 20]), np.array([[3.]]), np.array([[np.sqrt(3)]])),
+        energy_bins=np.array([39., 101.]), channel_bins=np.array([3, 10]), dead_time_on_bins=np.array([0.]),
+    ))
+    full, background, net = source / "full.pha", source / "background.pha", source / "net.pha"
+    for path in (full, background, net):
+        path.write_text("x")
+    spectrum = SimpleNamespace(exposure=1.0, counts=np.array([1.]), counts_err=np.array([1.]))
+    def extract_spectra(*args, **kwargs):
+        kwargs["outdir"].mkdir(parents=True, exist_ok=True)
+        return {"bg7H": {"src_spec_list": [[None, spectrum]],
+                          "spec_path_list": [str(full), str(background), str(net)]}}
+    monkeypatch.setattr(backend, "extract_spectra", extract_spectra)
+    monkeypatch.setattr(module, "gecam_lightcurve_products", lambda *args, **kwargs: ())
+    captured = {}
+    def prepare(spectra, backgrounds, responses, **kwargs):
+        captured.update(spectra=dict(spectra), backgrounds=dict(backgrounds))
+        return ()
+    monkeypatch.setattr(module, "prepare_gecam_spectra", prepare)
+    response = source / "response.rmf"; response.write_text("x")
+    cfg = GECAMConfig(
+        detectors=(7,), gain="high", time_range=[0, 100] * u.s, time_bin=1 * u.s,
+        energy_edges=[40, 100] * u.keV,
+        source_intervals=[[10, 20]] * u.s, background_intervals=[[30, 40]] * u.s,
+        responses={7: response},
+    )
+    inp = GECAMInput("test", source, output_root=tmp_path / "output", event_file="event.fits")
+    result = GECAMPipeline(inp, config=cfg).run()
+    assert captured["spectra"] == {7: str(full.resolve())}
+    assert captured["backgrounds"] == {7: str(background.resolve())}
+    data = result["stages"]["spectra"]["data"]
+    assert data["source_spectra"] == {7: str(full.resolve())}
+    assert data["background_spectra"] == {7: str(background.resolve())}
+
+
 def test_resume_partial_and_changed_input(tmp_path, monkeypatch):
     source = tmp_path / "input"; source.mkdir()
     event_file = source / "event.fits"

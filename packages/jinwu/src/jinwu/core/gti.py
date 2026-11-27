@@ -34,6 +34,48 @@ except ImportError:
         return decorator
 
 
+def estimate_exposure_from_eventdata(
+    ev: object,
+    *,
+    tmin: Optional[float] = None,
+    tmax: Optional[float] = None,
+) -> float:
+    """Estimate EventData exposure, optionally clipped to ``[tmin, tmax]``.
+
+    Uses the merged GTI total first, then ``OgipMeta`` TSTART/TSTOP, then the
+    event time span. Clipping keeps only the overlapping part of each interval
+    and never counts negative widths.
+    """
+    def clipped_width(starts: object, stops: object) -> float:
+        start_arr = np.asarray(starts, dtype=float)
+        stop_arr = np.asarray(stops, dtype=float)
+        if tmin is not None:
+            start_arr = np.maximum(start_arr, float(tmin))
+        if tmax is not None:
+            stop_arr = np.minimum(stop_arr, float(tmax))
+        return float(np.maximum(stop_arr - start_arr, 0.0).sum())
+
+    gti_start = getattr(ev, "gti_start", None)
+    gti_stop = getattr(ev, "gti_stop", None)
+    if gti_start is not None and gti_stop is not None:
+        merged_start, merged_stop = merge_gti(gti_start, gti_stop)
+        if merged_start is not None and merged_stop is not None and merged_start.size > 0:
+            return clipped_width(merged_start, merged_stop)
+    meta = getattr(ev, "meta", None)
+    if meta is not None:
+        from .base import OgipMeta
+
+        if isinstance(meta, OgipMeta):
+            tstart = getattr(meta, "tstart", None)
+            tstop = getattr(meta, "tstop", None)
+            if tstart is not None and tstop is not None:
+                return clipped_width([tstart], [tstop])
+    time = getattr(ev, "time", None)
+    if time is not None and getattr(time, "size", 0) > 0:
+        return clipped_width([np.min(time)], [np.max(time)])
+    return 0.0
+
+
 def merge_gti(starts: Optional[np.ndarray], stops: Optional[np.ndarray], *, tol: float = 1e-9) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     """合并 GTI 并按起点排序 / Merge and sort good-time intervals.
 

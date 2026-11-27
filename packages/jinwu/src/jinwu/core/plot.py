@@ -35,6 +35,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .plotstyle import PALETTE, SERIES_COLORS, apply_style, format_log_axis, paper_figsize, save_figure
+from .utils import format_math_label
 
 """在运行期尝试导入实际数据类；若失败，则使用哑类以便 isinstance 不抛错。"""
 try:  # runtime import; avoids typing.Any isinstance crash
@@ -46,12 +47,10 @@ except Exception:  # pragma: no cover
     LightcurveData = _Dummy  # type: ignore
 
 try:
-    from .io import readfits, guess_ogip_kind  # type: ignore
+    from .io import readfits  # type: ignore
 except Exception:  # 允许在未安装上游模块时静态检查通过
     def readfits(path: Union[str, Path], kind: Optional[str] = None) -> Any:  # type: ignore
         return path
-    def guess_ogip_kind(path: Union[str, Path]) -> str:  # type: ignore
-        return "unknown"
 
 PathLike = Union[str, Path]
 
@@ -281,27 +280,7 @@ def _place_lightcurve_fit_labels(
 
     # 内部 mathtext 格式化（不含外层 $...$，用单反斜杠）
     def _fmt(name_math_inner: str, val: float, lo: float | None, up: float | None) -> str:
-        def _needs_sci(x: float) -> bool:
-            ax = abs(x)
-            if ax == 0 or not np.isfinite(ax):
-                return False
-            e = int(np.floor(np.log10(ax)))
-            return (e <= -3) or (e >= 4)
-        use_sci = _needs_sci(val)
-        if (lo is not None and up is not None and np.isfinite(lo) and np.isfinite(up) and (lo>0 or up>0)):
-            if use_sci:
-                e = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
-                scale = 10.0 ** e
-                m, um, lm = val/scale, up/scale, lo/scale
-                return f"${name_math_inner} = {m:.3g}^{{+{um:.2g}}}_{{-{lm:.2g}}} \\times 10^{{{e}}}$"
-            else:
-                return f"${name_math_inner} = {val:.3g}^{{+{up:.2g}}}_{{-{lo:.2g}}}$"
-        else:
-            if use_sci and val != 0:
-                e = int(np.floor(np.log10(abs(val))))
-                m = val / (10.0**e)
-                return f"${name_math_inner} = {m:.3g} \\times 10^{{{e}}}$"
-            return f"${name_math_inner} = {val:.3g}$"
+        return format_math_label(name_math_inner, val, lo, up)
 
     def _alpha_label(idx_name, subscript: str | None = None):
         # 构造 mathtext：单反斜杠在最终字符串中
@@ -1762,6 +1741,47 @@ def _same_length_mask(*arrays: np.ndarray) -> np.ndarray:
     return np.ones(size, dtype=bool)
 
 
+def _finite_xy_mask(item: dict[str, np.ndarray], *, include_model: bool = False, positive_y: bool = False) -> tuple[np.ndarray, int]:
+    """Return a finite, positive-x plot mask for one XSPEC plot item."""
+    model = item.get("model", np.asarray([], dtype=float)) if include_model else None
+    arrays = [item["x"], item["y"], item["xerr"], item["yerr"]]
+    if model is not None:
+        arrays.append(model)
+    mask = _same_length_mask(*arrays)
+    size = mask.size
+    if size == 0:
+        return mask, size
+    mask &= (
+        np.isfinite(item["x"][:size])
+        & np.isfinite(item["y"][:size])
+        & np.isfinite(item["xerr"][:size])
+        & np.isfinite(item["yerr"][:size])
+        & (item["x"][:size] > 0)
+    )
+    if model is not None:
+        mask &= np.isfinite(model[:size])
+        if positive_y:
+            mask &= (item["y"][:size] > 0) & (model[:size] > 0)
+    return mask, size
+
+
+def _draw_plot_errorbar(ax, item: dict[str, np.ndarray], mask: np.ndarray, *, color: str, label: str | None) -> None:
+    """Draw one XSPEC data point series with the shared error-bar style."""
+    size = mask.size
+    ax.errorbar(
+        item["x"][:size][mask],
+        item["y"][:size][mask],
+        xerr=item["xerr"][:size][mask],
+        yerr=item["yerr"][:size][mask],
+        fmt="o",
+        markersize=3.5,
+        capsize=2,
+        elinewidth=0.9,
+        color=color,
+        label=label,
+    )
+
+
 #: plottype 支持的面板令牌 -> (XSPEC/绘图命令, Y 轴标签, 是否含模型曲线)
 _PLOT_PANELS: dict[str, tuple[str, str, bool]] = {
     "ldata": ("ldata", r"|data| [ct s$^{-1}$ keV$^{-1}$]", True),
@@ -1925,35 +1945,14 @@ def plotfit(
     def plot_data_model(ax, items: list[dict[str, np.ndarray]], *, positive_y: bool, with_legend: bool) -> None:
         for i, item in enumerate(items):
             x_vals = item["x"]
-            y_vals = item["y"]
-            x_errs = item["xerr"]
-            y_errs = item["yerr"]
             model_y = item.get("model", np.asarray([], dtype=float))
-            mask = _same_length_mask(x_vals, y_vals, x_errs, y_errs, model_y)
-            size = mask.size
-            if size == 0:
+            mask, size = _finite_xy_mask(item, include_model=True, positive_y=positive_y)
+            if size == 0 or not np.any(mask):
                 continue
-            mask &= (
-                np.isfinite(x_vals[:size])
-                & np.isfinite(y_vals[:size])
-                & np.isfinite(x_errs[:size])
-                & np.isfinite(y_errs[:size])
-                & np.isfinite(model_y[:size])
-                & (x_vals[:size] > 0)
-            )
-            if positive_y:
-                mask &= (y_vals[:size] > 0) & (model_y[:size] > 0)
-            if not np.any(mask):
-                continue
-            ax.errorbar(
-                x_vals[:size][mask],
-                y_vals[:size][mask],
-                xerr=x_errs[:size][mask],
-                yerr=y_errs[:size][mask],
-                fmt="o",
-                markersize=3.5,
-                capsize=2,
-                elinewidth=0.9,
+            _draw_plot_errorbar(
+                ax,
+                item,
+                mask,
                 color=colors[i] if colors is not None else PALETTE["data"],
                 label=(spectrum_labels[i] if spectrum_labels is not None else "Data") if with_legend else None,
             )
@@ -1967,32 +1966,13 @@ def plotfit(
 
     def plot_residual(ax, items: list[dict[str, np.ndarray]], *, with_legend: bool) -> None:
         for i, item in enumerate(items):
-            x_vals = item["x"]
-            y_vals = item["y"]
-            x_errs = item["xerr"]
-            y_errs = item["yerr"]
-            mask = _same_length_mask(x_vals, y_vals, x_errs, y_errs)
-            size = mask.size
-            if size == 0:
+            mask, size = _finite_xy_mask(item)
+            if size == 0 or not np.any(mask):
                 continue
-            mask &= (
-                np.isfinite(x_vals[:size])
-                & np.isfinite(y_vals[:size])
-                & np.isfinite(x_errs[:size])
-                & np.isfinite(y_errs[:size])
-                & (x_vals[:size] > 0)
-            )
-            if not np.any(mask):
-                continue
-            ax.errorbar(
-                x_vals[:size][mask],
-                y_vals[:size][mask],
-                xerr=x_errs[:size][mask],
-                yerr=y_errs[:size][mask],
-                fmt="o",
-                markersize=3.5,
-                capsize=2,
-                elinewidth=0.9,
+            _draw_plot_errorbar(
+                ax,
+                item,
+                mask,
                 color=colors[i] if colors is not None else PALETTE["residual"],
                 label=spectrum_labels[i] if spectrum_labels is not None and with_legend else None,
             )

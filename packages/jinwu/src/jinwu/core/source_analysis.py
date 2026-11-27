@@ -114,8 +114,7 @@ class SourceAnalysisPipeline(InstrumentPipeline[SourceAnalysisInput, dict]):
         super().__init__(input_data, config=config or SourceAnalysisConfig())
 
     def _path(self, path):
-        path = Path(path).expanduser()
-        return (path if path.is_absolute() else self.input.resolved_root() / path).resolve()
+        return self.input.resolve_path(path)
 
     def stage_input_dependencies(self, stage):
         paths = [self._path(item.path) for item in self.input.lightcurves]

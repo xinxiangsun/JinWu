@@ -5,28 +5,54 @@ LastEditTime: 2025-11-07 14:35:02
 LastEditTime: 2025-09-25 20:34:19
 FilePath: /research/jinwu/src/jinwu/core/utils.py
 '''
-import math
 import numpy as np
-from typing import Union
+from typing import Optional, Union
 import os
 import gzip
 import shutil
 from pathlib import Path
 
 
-def _require_xspec():
-    """延迟检查 PyXspec 可导入 / Require an importable PyXspec module lazily.
-
-    成功返回 None；ModuleNotFoundError 被包装为带环境提示的同类异常。
-    不安装软件、不初始化 HEASoft，也不保证谱/模型已经加载。
-    Return None on success; wrap ModuleNotFoundError with an environment hint.
-    No installation/HEASoft setup occurs, and loaded spectra/models are not verified."""
+def positive_scalar_or_none(v: object) -> Optional[float]:
+    """Return the finite positive median of a scalar/array, else ``None``."""
+    if v is None:
+        return None
     try:
-        import xspec  # noqa: F401
-    except ModuleNotFoundError as exc:
-        raise ModuleNotFoundError(
-            "xspec is required for this functionality. Please install HEASOFT/pyxspec and ensure 'xspec' is importable."
-        ) from exc
+        arr = np.asarray(v, dtype=float).reshape(-1)
+    except Exception:
+        return None
+    if arr.size == 0:
+        return None
+    val = float(np.nanmedian(arr))
+    if (not np.isfinite(val)) or val <= 0.0:
+        return None
+    return val
+
+
+def needs_sci(x: float) -> bool:
+    """Return True when a label value is better shown with scientific notation."""
+    ax = abs(x)
+    if ax == 0 or not np.isfinite(ax):
+        return False
+    exponent = int(np.floor(np.log10(ax)))
+    return exponent <= -3 or exponent >= 4
+
+
+def format_math_label(name_math: str, val: float, lo: float | None, up: float | None) -> str:
+    """Format a Matplotlib mathtext value with optional asymmetric errors."""
+    use_sci = needs_sci(val)
+    if lo is not None and up is not None and np.isfinite(lo) and np.isfinite(up) and (lo > 0 or up > 0):
+        if use_sci:
+            exponent = int(np.floor(np.log10(abs(val)))) if val != 0 else 0
+            scale = 10.0 ** exponent
+            value, upper, lower = val / scale, up / scale, lo / scale
+            return f"${name_math} = {value:.3g}^{{+{upper:.2g}}}_{{-{lower:.2g}}} \\times 10^{{{exponent}}}$"
+        return f"${name_math} = {val:.3g}^{{+{up:.2g}}}_{{-{lo:.2g}}}$"
+    if use_sci and val != 0:
+        exponent = int(np.floor(np.log10(abs(val))))
+        value = val / (10.0 ** exponent)
+        return f"${name_math} = {value:.3g} \\times 10^{{{exponent}}}$"
+    return f"${name_math} = {val:.3g}$"
 
 
 def generate_download_url(isot_time):

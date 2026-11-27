@@ -26,23 +26,11 @@ import astropy.units as u
 from astropy.table import QTable
 import numpy as np
 
+from jinwu.core.products import jsonable as _json_safe
+
 __all__ = ['absorption_budget', 'AbsorptionBudget']
 ELEMENTS = ('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn').split()
 SUPPORTED = ('H He C N O Ne Na Mg Al Si S Cl Ar Ca Cr Fe Co Ni').split()
-
-
-def _json_safe(value):
-    if isinstance(value, dict):
-        return {k: _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, np.ndarray)):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, (np.bool_,)):
-        return bool(value)
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (float, np.floating)):
-        return float(value) if np.isfinite(value) else None
-    return value
 
 
 def _table_payload(table):

@@ -13,7 +13,7 @@ from astropy.table import QTable, Table
 from jinwu.background.backprior import BackgroundSpectralPrior
 from jinwu.core.config import BATSurvey, GECAM, GBM, SwiftBATSurveyConfig, UpperLimitConfig, instrument
 from jinwu.core.data import EventData, LightcurveData, PhaData, RmfData
-from jinwu.core.io import read_evt, write_evt, write_pha, write_rmf
+from jinwu.core.io import read_evt, read_pha, write_evt, write_pha, write_rmf
 from jinwu.core.ops import BayesianBlocksBinner, bayesian_blocks_exposure, rebin_pha, slice_pha
 from jinwu.core.products import load_net_lightcurve
 from jinwu.core.spectrum_prep import _stage_ancillary_file
@@ -23,6 +23,7 @@ from jinwu.core.xselect import extract_image
 from jinwu.gw.gracedb import normalize_superevent_id
 from jinwu.gw.models import scalar_time
 from jinwu.fermi.gbm.pipeline import _as_scalar_time
+from jinwu.ftools.ftgrouppha import group_min_counts
 from jinwu.fermi.gbm.subthreshold import GBMTargetedSearchConfig, GBMTargetedSearchInput, GBMTargetedSearchPipeline
 
 
@@ -39,7 +40,7 @@ def test_prepare_spectrum_replaces_stale_ancillary_link(tmp_path):
     staged.symlink_to(old_source)
 
     result = _stage_ancillary_file(
-        staged_dir, current_source, name="response.rmf", overwrite=False
+        staged_dir, current_source, name="response.rmf"
     )
 
     assert result == staged
@@ -208,6 +209,106 @@ def test_rebin_pha_factor_arguments_are_explicit():
         rebin_pha(pha, factor=2, min_counts=4)
 
 
+def _min_counts_pha() -> PhaData:
+    channels = np.arange(1, 7)
+    counts = np.array([2.0, 3.0, 4.0, 1.0, 1.0, 1.0])
+    return PhaData(
+        path=Path("min-counts.pha"), channels=channels, counts=counts,
+        stat_err=np.arange(1.0, 7.0), quality=np.array([0, 1, 0, 0, 3, 0]),
+        exposure=20.0, ebounds=(channels, channels.astype(float), channels + 1.0),
+        header={}, meta={"source": "synthetic"}, headers_dump={},
+        columns=("CHANNEL", "COUNTS"),
+    )
+
+
+def test_ftgrouppha_preserves_loadmin_tail_and_quality_semantics():
+    pha = _min_counts_pha()
+
+    grouped = group_min_counts(pha, min_counts=5)
+
+    np.testing.assert_array_equal(grouped.channels, [1, 3, 5, 6])
+    np.testing.assert_allclose(grouped.counts, [5.0, 5.0, 1.0, 1.0])
+    np.testing.assert_allclose(grouped.stat_err, np.sqrt([5.0, 5.0, 1.0, 1.0]))
+    np.testing.assert_array_equal(grouped.quality, [1, 0, 2, 2])
+    assert grouped.ebounds is pha.ebounds
+    assert grouped.meta is pha.meta
+
+
+def test_ftgrouppha_keeps_incomplete_tail_channels_separate():
+    pha = _min_counts_pha()
+
+    grouped = group_min_counts(pha, min_counts=100)
+
+    np.testing.assert_array_equal(grouped.channels, pha.channels)
+    np.testing.assert_allclose(grouped.counts, pha.counts)
+    np.testing.assert_array_equal(grouped.quality, [2, 2, 2, 2, 2, 2])
+
+
+def test_rebin_pha_min_counts_preserves_error_and_ebounds_aggregation():
+    pha = _min_counts_pha()
+
+    grouped = rebin_pha(pha, min_counts=5)
+
+    np.testing.assert_array_equal(grouped.channels, [1, 3, 5, 6])
+    np.testing.assert_allclose(grouped.counts, [5.0, 5.0, 1.0, 1.0])
+    np.testing.assert_allclose(grouped.stat_err, [np.sqrt(1.0**2 + 2.0**2), np.sqrt(3.0**2 + 4.0**2), 5.0, 6.0])
+    np.testing.assert_array_equal(grouped.quality, [1, 0, 3, 2])
+    np.testing.assert_array_equal(grouped.ebounds[0], [1, 3, 5, 6])
+    np.testing.assert_allclose(grouped.ebounds[1], [1.0, 3.0, 5.0, 6.0])
+    np.testing.assert_allclose(grouped.ebounds[2], [3.0, 5.0, 6.0, 7.0])
+
+
+_REAL_PHA_PATHS = (
+    "local_private/ta_pipeline/validation/ta_ep260119a_20261017/wxt/obs000/spectra/t90/ep11900560514_wxtCMOS48_EP260119a_t90_full_src_spec.pha",
+    "local_private/ta_pipeline/validation/ta_ep260119a_20261017/wxt/obs000/spectra/t90/ep11900560514_wxtCMOS48_EP260119a_t90_full_bkg_spec.pha",
+    "local_private/docker_validation/fxt_input_fxtchain/fxt_a_06800001128_ff_01_po_src_3cc.pha",
+    "local_private/docker_validation/fxt_input_fxtchain/fxt_a_06800001128_ff_01_po_bkg_3cc.pha",
+    "local_private/gecam_analysis_20261104/spectral_core_validation_20261110/GRD17_high/source.pha",
+    "local_private/gecam_analysis_20261104/spectral_core_validation_20261110/GRD17_high/background.pha",
+)
+
+
+@pytest.mark.real_data
+@pytest.mark.parametrize("relative_path", _REAL_PHA_PATHS)
+@pytest.mark.parametrize("min_counts", (1, 3, 5, 20, 100))
+def test_rebin_pha_min_counts_matches_ftgrouppha_on_real_spectra(relative_path, min_counts):
+    path = Path(__file__).resolve().parents[1] / relative_path
+    if not path.is_file():
+        pytest.skip(f"real PHA fixture unavailable: {relative_path}")
+    pha = read_pha(path)
+
+    expected = group_min_counts(pha, min_counts=min_counts)
+    actual = rebin_pha(pha, min_counts=min_counts)
+
+    np.testing.assert_array_equal(actual.channels, expected.channels)
+    np.testing.assert_array_equal(actual.counts, expected.counts)
+    np.testing.assert_array_equal(actual.quality, expected.quality)
+    np.testing.assert_allclose(expected.stat_err, np.sqrt(expected.counts), rtol=0, atol=0)
+
+    from jinwu.ftools.grppha import compute_grouping_by_min_counts, _group_flags_to_ids
+
+    gid_arr = _group_flags_to_ids(compute_grouping_by_min_counts(pha.counts, min_counts))
+    gids = np.unique(gid_arr[gid_arr > 0])
+    if pha.stat_err is None:
+        expected_error = np.sqrt(expected.counts)
+    else:
+        input_error = np.asarray(pha.stat_err, dtype=float)
+        expected_error = np.asarray([
+            np.sqrt(np.sum(input_error[gid_arr == gid] ** 2)) for gid in gids
+        ])
+    np.testing.assert_allclose(actual.stat_err, expected_error, rtol=0, atol=0)
+
+    if pha.ebounds is None:
+        assert expected.ebounds is None
+        assert actual.ebounds is None
+    else:
+        assert expected.ebounds is pha.ebounds
+        _eb_channels, e_lo, e_hi = pha.ebounds
+        np.testing.assert_array_equal(actual.ebounds[0], expected.channels)
+        np.testing.assert_allclose(actual.ebounds[1], [np.min(e_lo[gid_arr == gid]) for gid in gids], rtol=0, atol=0)
+        np.testing.assert_allclose(actual.ebounds[2], [np.max(e_hi[gid_arr == gid]) for gid in gids], rtol=0, atol=0)
+
+
 def test_gbm_effective_time_uses_full_windows(tmp_path, monkeypatch):
     import jinwu.fermi.gbm.subthreshold.pipeline as pipeline_module
     import jinwu.fermi.gbm.subthreshold.search as search_module
@@ -337,7 +438,7 @@ def test_xspec_error_delta_is_always_a_real_literal(delta):
         parameterNames=['PhoIndex', 'norm'],
         PhoIndex=SimpleNamespace(index=1, frozen=False, link=''),
         norm=SimpleNamespace(index=2, frozen=False, link='')))
-    command = _prepared_error_parameters(model, 'powerlaw', intrinsic_nh_mode='zero', delta_stat=delta)
+    command = _prepared_error_parameters(model, delta_stat=delta)
     token = command.split()[0]
     assert '.' in token
     assert float(token) == delta
@@ -559,7 +660,7 @@ def test_galactic_absorption_is_shared_across_model_groups():
     from jinwu.core.fit import _link_default_prepared_model_groups
     ref = SimpleNamespace(componentNames=['TBabs'], TBabs=SimpleNamespace(nH=SimpleNamespace(index=1, frozen=False)))
     second = SimpleNamespace(componentNames=['TBabs'], TBabs=SimpleNamespace(nH=SimpleNamespace(index=4, frozen=False)))
-    _link_default_prepared_model_groups([ref, second], 'tbabs*powerlaw')
+    _link_default_prepared_model_groups([ref, second])
     assert second.TBabs.nH.link is ref.TBabs.nH
 
 

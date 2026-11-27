@@ -206,13 +206,10 @@ class XspecKFactory:
 		xspec_cosmo: str,
 		allow_prompting: bool = False,
 	) -> float:
-		arf = str(arf)
-		rmf = str(rmf)
-		background_str: Optional[str] = None if background is None else str(background)
-		cfg = KConfig(
+		return self.get_K_with_values(
 			arf=arf,
 			rmf=rmf,
-			background=background_str,
+			background=background,
 			model=model,
 			params=params,
 			band=band,
@@ -222,14 +219,7 @@ class XspecKFactory:
 			xspec_xsect=xspec_xsect,
 			xspec_cosmo=xspec_cosmo,
 			allow_prompting=allow_prompting,
-		)
-		key = cfg.key()
-		if key in self._cache:
-			return self._cache[key][0]  # 只返回 K
-		session = self._ensure_session()
-		K, rate, flux = session.compute_K(cfg)
-		self._cache[key] = (float(K), float(rate), float(flux))
-		return float(K)
+		)[0]
 
 	def get_K_with_values(
 		self,

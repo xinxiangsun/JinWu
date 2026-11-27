@@ -18,6 +18,7 @@ from jinwu.core.upperlimit import (
     DEFAULT_ONE_SIDED_CHAIN_LEVELS,
     CountTemplateModel,
     DetectionSensitivity,
+    OneSidedLevel,
     UpperLimit,
     UpperLimitObservation,
     estimate_upper_limit,
@@ -76,6 +77,24 @@ def test_legacy_and_explicit_one_sided_chain_levels_are_distinct(tmp_path):
     assert point["confidence_convention"] == "posterior_quantile"
     assert point["central_coverage"] is None
     assert point["one_sided_probability"] == pytest.approx(NormalDist().cdf(3.0))
+
+
+def test_one_sided_level_confidence_delegates_sigma_conversion():
+    level = OneSidedLevel.from_confidence(0.9)
+    sigma_level = OneSidedLevel.from_sigma(level.sigma)
+
+    assert level.confidence == 0.9
+    assert level.sigma == sigma_level.sigma
+    assert level.delta_stat == sigma_level.delta_stat
+    assert level.label == "one-sided 90%"
+
+
+@pytest.mark.parametrize(
+    "confidence", (0.5, 1.0, 0.0, 1.1, float("nan"), float("inf"))
+)
+def test_one_sided_level_rejects_invalid_confidence(confidence):
+    with pytest.raises(ValueError, match="one-sided confidence must be between 0.5 and 1"):
+        OneSidedLevel.from_confidence(confidence)
 
 
 def test_profile_error_probability_metadata():

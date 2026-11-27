@@ -35,12 +35,10 @@ import numpy as np
 import dataclasses
 from typing import List, Dict, Optional, Tuple, Any
 from pathlib import Path
-import os
 
 from jinwu.lf.specfake import XspecKFactory
 from jinwu.core.config import XSPEC_COSMO_PLANCK18
 from jinwu.core.utils import TriggerDecider, BackgroundSimple
-from jinwu.core.utils import LightcurveSNREvaluator
 from jinwu.background.backprior import BackgroundPrior, BackgroundCountsPosterior
 from astropy.cosmology import Planck18 as cosmo
 

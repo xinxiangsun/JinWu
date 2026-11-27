@@ -1160,22 +1160,6 @@ def _background_channel_count(phaii: Any, fitter: Any) -> int:
     return 1
 
 
-def _background_holdout_score(
-    phaii: Any,
-    ranges: tuple[tuple[float, float], ...],
-    *,
-    order: int,
-) -> float | None:
-    """Return the mean held-out Poisson deviance for one order.
-
-    The public helper keeps its historical scalar return value.  The
-    selection stage uses the detailed helper as well so model-set
-    qualification can account for score uncertainty.
-    """
-    statistics = _background_holdout_statistics(phaii, ranges, order=order)
-    return None if statistics is None else statistics[0]
-
-
 def _background_holdout_statistics(
     phaii: Any,
     ranges: tuple[tuple[float, float], ...],
@@ -1873,6 +1857,7 @@ def gti_intervals_for_paths(
     from gdt.missions.fermi.gbm.tte import GbmTte
 
     records = []
+    selected = []
     for path in paths:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -1894,16 +1879,14 @@ def gti_intervals_for_paths(
                 raise ValueError(f"Cannot validate GDT event merging for empty TTE {path}")
             records.append((float(tte.time_range[0]) + offset, float(tte.time_range[1]) + offset, overlaps))
         else:
-            records.append((0.0, 0.0, overlaps))
-    selected = []
+            selected.extend(overlaps)
     if merge_compatible:
+        selected = []
         cutoff = -math.inf
         for index in np.argsort([record[0] for record in records]):
             _, last_event, overlaps = records[index]
             selected.extend((max(left, cutoff), right) for left, right in overlaps if right > max(left, cutoff))
             cutoff = max(cutoff, last_event)
-    else:
-        selected = [window for _, _, overlaps in records for window in overlaps]
     return tuple(_merge_intervals(selected))
 
 
@@ -1937,6 +1920,27 @@ def _tte_gti_coverage(
         "covered_intervals_met": covered,
         "missing_intervals_met": missing,
     }
+
+
+def _coverage_blockers(
+    *,
+    has_tte: bool,
+    has_cspec: bool,
+    coverage: Mapping[str, Any],
+) -> list[str]:
+    """Return the reasons a detector's downloaded coverage is unusable."""
+    blockers: list[str] = []
+    if not has_tte:
+        blockers.append("tte_missing")
+    if not has_cspec:
+        blockers.append("cspec_missing")
+    if coverage.get("error"):
+        blockers.append("coverage_error")
+    if coverage.get("background_window_error"):
+        blockers.append("background_window_error")
+    if coverage.get("missing_intervals_met"):
+        blockers.append("missing_intervals_met")
+    return blockers
 
 
 def background_windows(
@@ -3236,9 +3240,13 @@ class GBMPipeline(InstrumentPipeline["GBMPipelineInput", GBMPipelineResult]):
                 except (OSError, ValueError, KeyError, IndexError) as exc:
                     coverage[det] = {"required_intervals_met": required,
                                      "error": f"{type(exc).__name__}: {exc}"}
-            missing = [det for det in detectors if not tte[det] or not cspec[det]
-                       or coverage[det].get("error") or coverage[det].get("background_window_error")
-                       or coverage[det]["missing_intervals_met"]]
+            missing = [
+                det for det in detectors
+                if _coverage_blockers(
+                    has_tte=bool(tte[det]), has_cspec=bool(cspec[det]),
+                    coverage=coverage[det],
+                )
+            ]
             return tte, cspec, coverage, missing
 
         tte, cspec, coverage, missing = scan()

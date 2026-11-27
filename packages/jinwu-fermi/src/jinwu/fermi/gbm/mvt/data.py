@@ -111,10 +111,15 @@ def select_detectors(events, backgrounds, source, width, *, max_bins=10_000_000)
     applied to observed counts and fitted real background instead of simulated
     source/background TTE. Return selected names and every ranking/prefix.
     """
-    ranked = sorted(events, key=lambda d: peak_snr(events[d], source, width,
-                    backgrounds[d]["source_average_rate_cps"], max_bins=max_bins), reverse=True)
-    individual = [{"detector": d, "snr": peak_snr(events[d], source, width,
-                  backgrounds[d]["source_average_rate_cps"], max_bins=max_bins)} for d in ranked]
+    snrs = {
+        detector: peak_snr(
+            events[detector], source, width,
+            backgrounds[detector]["source_average_rate_cps"], max_bins=max_bins,
+        )
+        for detector in events
+    }
+    ranked = sorted(events, key=snrs.__getitem__, reverse=True)
+    individual = [{"detector": detector, "snr": snrs[detector]} for detector in ranked]
     prefixes = []
     for k in range(1, len(ranked) + 1):
         dets = ranked[:k]

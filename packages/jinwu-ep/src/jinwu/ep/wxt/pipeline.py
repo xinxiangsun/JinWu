@@ -7,7 +7,6 @@ from importlib.resources import files as resource_files
 import json
 import logging
 import math
-import os
 from pathlib import Path
 import re
 import shutil
@@ -23,18 +22,20 @@ from ...core.config import InstrumentConfig
 from ...core.galactic import resolve_galactic_absorption
 from ...core.instruments import Catalog, DataFile, Manifest, SpectrumBundle, scan
 from ...core.time import mission_time_format, time_from_mission_seconds
+from ..constants import EP_FLUX_BAND_KEV
+from ..fit_kwargs import model_fit_options
 from ...core.pipeline import (
     InstrumentPipeline,
     PipelineInput,
     PipelineStage,
     PipelineStatus,
     StageResult,
+    module_source_path,
     register_pipeline,
 )
 from ...core.utils import li_ma_snr
 from ...core.products import (
     FluxCurveResult,
-    NetLightcurve,
     build_flux_curve,
     build_artifact_index,
     build_net_lightcurve,
@@ -641,19 +642,6 @@ def _combined_region_geometry(
         in_map_area_pixels=float(image_mask.sum()),
         skipped_degenerate_exclusions=skipped_degenerate_exclusions,
     )
-
-
-def _combined_region_mask(
-    region_paths: Sequence[Path],
-    wcs: WCS,
-    header: fits.Header,
-    shape: tuple[int, int],
-    *,
-    mode: str,
-) -> np.ndarray:
-    return _combined_region_geometry(
-        region_paths, wcs, header, shape, mode=mode
-    ).mask
 
 
 def _physical_region_to_image(text: str, header: fits.Header) -> str:
@@ -1362,6 +1350,36 @@ def _time_reference_provenance(
 
 
 @register_pipeline("ep.wxt.pointing")
+def build_wxt_spectrum_manifest(
+    *,
+    source: Path,
+    background: Path,
+    arf: Path,
+    rmf: Path,
+    obsid: str | None,
+    detector: str,
+    source_id: str,
+    layout: str,
+    provenance: str,
+    datafile_detector: str | None = None,
+) -> Manifest:
+    """Build the single-bundle WXT manifest shared by pipeline and TA prep."""
+    identities = dict(obsid=obsid, detector=datafile_detector, source_id=source_id)
+    files = [
+        DataFile(Path(source), "source_pha", provenance, "EP", "WXT", **identities),
+        DataFile(Path(background), "background_pha", provenance, "EP", "WXT", **identities),
+        DataFile(Path(arf), "arf", provenance, "EP", "WXT", **identities),
+        DataFile(Path(rmf), "rmf", provenance, "EP", "WXT", **identities),
+    ]
+    bundle = SpectrumBundle(
+        *files, module=None, obsid=obsid, detector=detector, source_id=source_id,
+    )
+    return Manifest(
+        root=Path(source).parent, mission="EP", instrument="WXT", layout=layout,
+        obsid=obsid, detector=detector, files=files, bundles=[bundle],
+    )
+
+
 class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult]):
     """Normal-pointing WXT workflow with explicit region review."""
 
@@ -1471,8 +1489,6 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
         - fit 经 ``_fit_one`` 使用 fit/spectrum_prep，method 为 ``"bxa"`` 时
           再经 bxa_fit。
         """
-        import inspect
-
         from ...core import (
             bxa_fit,
             config as _config,
@@ -1492,31 +1508,25 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             pipeline as _core_pipeline,
         )
 
-        def _src(module) -> Path:
-            path = inspect.getsourcefile(module)
-            if not path:
-                raise RuntimeError(f"无法定位模块源文件: {module!r}")
-            return Path(path)
-
         core = {
-            "config.py": _src(_config),
-            "data.py": _src(_data),
-            "fit.py": _src(_fit),
-            "galactic.py": _src(_galactic),
-            "instruments.py": _src(_instruments),
-            "io.py": _src(_io),
-            "ops.py": _src(_ops),
-            "pipeline.py": _src(_core_pipeline),
-            "plot.py": _src(_plot),
-            "products.py": _src(_products),
-            "spectrum_prep.py": _src(_spectrum_prep),
-            "time.py": _src(_time),
-            "timescale.py": _src(_timescale),
-            "utils.py": _src(_utils),
-            "xselect.py": _src(_xselect),
+            "config.py": module_source_path(_config),
+            "data.py": module_source_path(_data),
+            "fit.py": module_source_path(_fit),
+            "galactic.py": module_source_path(_galactic),
+            "instruments.py": module_source_path(_instruments),
+            "io.py": module_source_path(_io),
+            "ops.py": module_source_path(_ops),
+            "pipeline.py": module_source_path(_core_pipeline),
+            "plot.py": module_source_path(_plot),
+            "products.py": module_source_path(_products),
+            "spectrum_prep.py": module_source_path(_spectrum_prep),
+            "time.py": module_source_path(_time),
+            "timescale.py": module_source_path(_timescale),
+            "utils.py": module_source_path(_utils),
+            "xselect.py": module_source_path(_xselect),
         }
         # bxa_fit 单独定位：模块本身可安全导入（bxa/ultranest 在函数内惰性导入）
-        core["bxa_fit.py"] = _src(bxa_fit)
+        core["bxa_fit.py"] = module_source_path(bxa_fit)
 
         dependencies = {
             "discover": (core["instruments.py"],),
@@ -2534,42 +2544,13 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
     def _prepare_one(self, label: str, source: Path, background: Path, rmf: Path, arf: Path):
         from ...core.spectrum_prep import prepare_spectra
 
-        source_file = DataFile(
-            source, "source_pha", "jinwu_pipeline", "EP", "WXT",
-            obsid=self.input.obsid, source_id=label,
-        )
-        background_file = DataFile(
-            background, "background_pha", "jinwu_pipeline", "EP", "WXT",
-            obsid=self.input.obsid, source_id=label,
-        )
-        arf_file = DataFile(
-            arf, "arf", "jinwu_pipeline", "EP", "WXT",
-            obsid=self.input.obsid, source_id=label,
-        )
-        rmf_file = DataFile(
-            rmf, "rmf", "jinwu_pipeline", "EP", "WXT",
-            obsid=self.input.obsid, source_id=label,
-        )
-        bundle = SpectrumBundle(
-            source_file, background_file, arf_file, rmf_file,
-            None, self.input.obsid, detector="WXT", source_id=label,
+        manifest = build_wxt_spectrum_manifest(
+            source=source, background=background, arf=arf, rmf=rmf,
+            obsid=self.input.obsid, detector="WXT", source_id=label,
+            layout="jinwu_wxt_pipeline", provenance="jinwu_pipeline",
         )
         fit_dir = self.workspace / "fit" / label
-        catalog = Catalog(
-            root=source.parent,
-            manifests=[
-                Manifest(
-                    root=source.parent,
-                    mission="EP",
-                    instrument="WXT",
-                    layout="jinwu_wxt_pipeline",
-                    detector="WXT",
-                    obsid=self.input.obsid,
-                    files=[source_file, background_file, arf_file, rmf_file],
-                    bundles=[bundle],
-                )
-            ],
-        )
+        catalog = Catalog(root=manifest.root, manifests=[manifest])
         prepared_catalog = prepare_spectra(
             catalog,
             outdir=fit_dir / "prepared",
@@ -2642,22 +2623,12 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             absorption_mode=self.config.fitting.absorption_mode,
             candidate_keys=effective_candidate_keys,
             selection_metric=self.config.fitting.selection_metric,
-            stat_method=self.config.fitting.statistic,
-            abundance=self.config.fitting.abundance,
-            cross_section=self.config.fitting.cross_section,
-            apec_root=self.config.fitting.apec_root,
             galactic_nh_1e22=galactic_nh_1e22,
             redshift=self.input.redshift,
-            flux_band_keV=self.config.flux_curve.energy_range_keV or (0.5, 4.0),
-            calculate_errors=self.config.fitting.calculate_errors,
-            error_delta_stat=self.config.fitting.error_delta_stat,
+            flux_band_keV=self.config.flux_curve.energy_range_keV or EP_FLUX_BAND_KEV,
             srcname=self.input.target_id,
             instname=f"WXT_{label}",
-            plot_formats=(
-                self.config.plotting.formats if self.config.plotting.enabled else ()
-            ),
-            plot_density=self.config.plotting.dpi,
-            plot_required=self.config.plotting.enabled and self.config.plotting.required,
+            **model_fit_options(self.config, plots=True),
         )
 
         if method == "chain":
@@ -2714,16 +2685,10 @@ class WXTPointingPipeline(InstrumentPipeline[WXTPointingInput, WXTPointingResult
             candidate_keys=self.config.fitting.candidate_keys,
             selection_metric=self.config.fitting.selection_metric,
             galactic_nh_1e22=galactic_nh_1e22, redshift=self.input.redshift,
-            flux_band_keV=self.config.flux_curve.energy_range_keV or (0.5, 4.0),
-            shared_absorption_only=True, stat_method=self.config.fitting.statistic,
-            abundance=self.config.fitting.abundance, cross_section=self.config.fitting.cross_section,
-            apec_root=self.config.fitting.apec_root,
-            calculate_errors=self.config.fitting.calculate_errors,
-            error_delta_stat=self.config.fitting.error_delta_stat,
+            flux_band_keV=self.config.flux_curve.energy_range_keV or EP_FLUX_BAND_KEV,
+            shared_absorption_only=True,
             srcname=self.input.target_id, instname="WXT_bins_joint",
-            plot_formats=self.config.plotting.formats if self.config.plotting.enabled else (),
-            plot_density=self.config.plotting.dpi,
-            plot_required=self.config.plotting.enabled and self.config.plotting.required)
+            **model_fit_options(self.config, plots=True))
 
     def _stage_fit(self, context) -> StageResult:
         summary_path = self.workspace / "fit" / "fit_summary.json"

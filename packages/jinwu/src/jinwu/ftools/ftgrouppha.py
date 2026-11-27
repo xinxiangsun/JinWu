@@ -12,12 +12,14 @@
   本实现因 PhaData 是物理合并模型，等价处理为：每个尾通道保持独立一箱，
   quality 强制 >= 2。
 - 组质量：HEASoft `pha::rebinChannels` 的折叠规则是"组内任一通道质量非零，
-  整组即坏"；这里取组内成员 quality 的最大值（最坏者），无 quality 输入时为 0。
+  整组即坏"；这里先对尾通道强制 2，再按组首质量起步、其后最后一个非零成员
+  覆盖的规则折叠，无 quality 输入时为 0。
 """
 from __future__ import annotations
 
 import numpy as np
 from ..core.data import PhaData
+from .grppha import _derived_pha, _load_min_groups
 
 # 参考：HEASoft 6.37 heasptools/ftgrouppha/ftgrouppha.cxx（getMinCountsGrouping
 #       → grouping::loadMin；setGrouping 应用分组并把坏通道强制自成组）；
@@ -39,39 +41,22 @@ def group_min_counts(pha: PhaData, min_counts: int) -> PhaData:
     if qual_arr.size != ch.size:  # 输入 quality 长度异常时按无质量处理
         qual_arr = np.zeros(ch.size, dtype=int)
 
-    # 贪心分组：组内和 >= min_counts 即封组（loadMin 语义）
-    member_groups: list[list[int]] = []
-    cur: list[int] = []
-    acc = 0.0
-    for i, v in enumerate(cnt):
-        cur.append(i)
-        acc += float(v)
-        if acc >= float(min_counts):
-            member_groups.append(cur)
-            cur = []
-            acc = 0.0
-    # 尾组：未达阈值的剩余通道各自单列一组（HEASoft: GROUPING=1 + QUALITY=2）
-    tail_members = cur
-    if tail_members:
-        member_groups.extend([i] for i in tail_members)
-    tail_set = set(tail_members)
+    # 贪心分组：组内和 >= min_counts 即封组；尾通道各自单列一组（loadMin 语义）
+    groups, tail_start = _load_min_groups(cnt, min_counts)
+    qual_arr = qual_arr.copy()
+    qual_arr[tail_start:] = 2
+    new_channels = np.empty(len(groups), dtype=int)
+    new_counts = np.empty(len(groups), dtype=float)
+    new_quality = np.empty(len(groups), dtype=int)
+    for row, members in enumerate(groups):
+        first, stop = members[0], members[-1] + 1
+        new_channels[row] = ch[first]
+        new_counts[row] = cnt[first:stop].sum()
+        quality = qual_arr[first:stop]
+        flagged = np.flatnonzero(quality)
+        new_quality[row] = quality[flagged[-1]] if flagged.size else 0
 
-    new_channels = []
-    new_counts = []
-    new_stat_err = []
-    new_quality = []
-    for members in member_groups:
-        idx = np.asarray(members, dtype=int)
-        new_channels.append(int(ch[idx[0]]))
-        s = float(cnt[idx].sum())
-        new_counts.append(s)
-        new_stat_err.append(float(np.sqrt(s)))  # Poisson: var ~ counts
-        member_quality = [2 if int(i) in tail_set else int(qual_arr[i]) for i in idx]
-        q = next((value for value in reversed(member_quality) if value != 0), member_quality[0])
-        new_quality.append(q)
-
-    return PhaData(path=pha.path, channels=np.array(new_channels, dtype=int),
-                   counts=np.array(new_counts, dtype=float), stat_err=np.array(new_stat_err, dtype=float),
-                   exposure=pha.exposure, backscal=pha.backscal, areascal=pha.areascal,
-                   quality=np.array(new_quality, dtype=int), grouping=None, ebounds=pha.ebounds, header=pha.header,
-                   meta=pha.meta, headers_dump=pha.headers_dump, columns=pha.columns)
+    new_stat_err = np.sqrt(new_counts)  # Poisson: var ~ counts
+    return _derived_pha(pha, channels=new_channels, counts=new_counts,
+                        stat_err=new_stat_err, quality=new_quality, grouping=None,
+                        ebounds=pha.ebounds)

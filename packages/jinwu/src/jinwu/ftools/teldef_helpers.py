@@ -153,6 +153,36 @@ def build_focal_to_pixel_xform(inv_align: np.ndarray, focal_length: float, det_x
     return XFORM2D(matrix=M, offset=off)
 
 
+def inverse_gnomonic(
+    x_rad: float,
+    y_rad: float,
+    ra0: float,
+    dec0: float,
+    *,
+    sin_dec0: float | None = None,
+    cos_dec0: float | None = None,
+) -> tuple[float, float]:
+    """Invert a gnomonic tangent-plane coordinate to RA/Dec in radians.
+
+    ``x_rad``/``y_rad`` are measured from the tangent point ``(ra0, dec0)``.
+    Callers with a fixed pointing may pass precomputed ``sin_dec0`` and
+    ``cos_dec0`` to retain the cached-trigonometry fast path.
+    """
+    if sin_dec0 is None:
+        sin_dec0 = math.sin(dec0)
+    if cos_dec0 is None:
+        cos_dec0 = math.cos(dec0)
+    denom = cos_dec0 - y_rad * sin_dec0
+    if abs(denom) < 1e-15:
+        raise ValueError('Inverse gnomonic singular')
+    ra = ra0 + math.atan2(x_rad, denom)
+    dec = math.atan2(
+        y_rad * cos_dec0 + sin_dec0,
+        math.sqrt(denom * denom + x_rad * x_rad),
+    )
+    return ra, dec
+
+
 class Det2Sky:
     """Class representing a detector->sky mapping for a fixed pointing.
 
@@ -199,11 +229,10 @@ class Det2Sky:
         vec_foc = self.inv_align @ vec_det
         x_rad = vec_foc[0] / vec_foc[2]
         y_rad = vec_foc[1] / vec_foc[2]
-        denom = self._cos_dec0 - y_rad * self._sin_dec0
-        if abs(denom) < 1e-15:
-            raise ValueError('Inverse gnomonic singular')
-        ra = self._ra0 + math.atan2(x_rad, denom)
-        dec = math.atan2(y_rad * self._cos_dec0 + self._sin_dec0, math.sqrt(denom * denom + x_rad * x_rad))
+        ra, dec = inverse_gnomonic(
+            x_rad, y_rad, self._ra0, self._dec0,
+            sin_dec0=self._sin_dec0, cos_dec0=self._cos_dec0,
+        )
         ra_deg = math.degrees(ra)
         dec_deg = math.degrees(dec)
         # apply aberration correction if requested

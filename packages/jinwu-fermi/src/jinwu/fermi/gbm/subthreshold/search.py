@@ -10,9 +10,7 @@ from astropy.table import QTable
 from scipy.special import logsumexp
 from scipy.spatial import cKDTree
 
-from jinwu.core.time import Time
 from .models import seconds, TEMPLATES
-from .data import interval_exposure
 
 
 def make_search_windows(config, gti):

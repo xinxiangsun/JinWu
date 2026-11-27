@@ -29,7 +29,7 @@ Example Usage
 """
 
 from dataclasses import dataclass
-from typing import Union, Literal, Dict
+from typing import Union, Literal, Dict, Optional
 import numpy as np
 
 import astropy.units as u
@@ -299,6 +299,13 @@ class DotAccessor:
         return self.__mul__(other)
 
 
+def _attach_magnitude_error(value: Quantity, magnitude_error: Optional[float]) -> Quantity:
+    """Attach the first-order flux uncertainty from a magnitude error."""
+    if magnitude_error is not None:
+        value.error = value * (np.log(10) / 2.5) * magnitude_error
+    return value
+
+
 class Magnitude:
     """
     A quantity class for astronomical magnitudes with filter and system information.
@@ -400,11 +407,7 @@ class Magnitude:
         fnu = fnu_jy.to(unit)
         
         # Store error for later access
-        if self.error is not None:
-            fnu_err = fnu * (np.log(10) / 2.5) * self.error
-            fnu.error = fnu_err
-        
-        return fnu
+        return _attach_magnitude_error(fnu, self.error)
     
     def to_flam(self, unit: Union[str, u.Unit] = 'erg/(cm2 s Angstrom)') -> Quantity:
         """转为波长通量密度 / Convert to wavelength flux density at the pivot.
@@ -426,11 +429,7 @@ class Magnitude:
         flam = (fnu * const.c / lambda_pivot**2).to(unit)
         
         # Propagate error
-        if self.error is not None:
-            flam_err = flam * (np.log(10) / 2.5) * self.error
-            flam.error = flam_err
-        
-        return flam
+        return _attach_magnitude_error(flam, self.error)
     
     def to_flux(self, unit: Union[str, u.Unit] = 'erg/(cm2 s)') -> Quantity:
         """以有效带宽估算带内通量 / Estimate band flux using effective width.
@@ -451,11 +450,7 @@ class Magnitude:
         flux = (flam * self.filter_info.weff).to(unit)
         
         # Propagate error
-        if self.error is not None:
-            flux_err = flux * (np.log(10) / 2.5) * self.error
-            flux.error = flux_err
-        
-        return flux
+        return _attach_magnitude_error(flux, self.error)
     
     def to_Jy(self) -> Quantity:
         """返回 Jy 频率通量密度 / Return to_fnu(unit='Jy') with the same error convention."""

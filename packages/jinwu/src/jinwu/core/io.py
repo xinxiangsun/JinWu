@@ -8,7 +8,7 @@ from astropy.io import fits
 
 from .base import ChannelBand, EnergyBand, FitsHeaderDump, HduHeader, OgipMeta, RegionArea
 from .data import ArfData, EventData, LightcurveData, PhaData, RmfData
-from .ogip import ValidationReport
+from .ogip import ValidationReport, _read_gti_table
 
 
 def band_from_arf_bins(arf_path: str | Path, bin_lo: int = 81, bin_hi: int = 780) -> EnergyBand:
@@ -245,38 +245,11 @@ def _extract_gti(hdul: fits.HDUList) -> Optional[list[tuple[float, float]]]:
     匹配 GTI 扩展名，START/STOP 优先于 TSTART/TSTOP；返回 float 起止
     元组列表。无合适扩展返回 None；数值转换失败也返回 None。不排序、
     合并、校验区间或施加 TIMEZERO，结果保留表内时间参考与单位。
+    空 GTI 扩展会被跳过，继续寻找后续有效表。
     Match GTI name and prefer START/STOP over TSTART/TSTOP. Return float boundary
-    tuples or None for absent/unparseable data. No sorting, merging, interval
-    validation or TIMEZERO shift; preserve table time reference/unit."""
-    if hdul is None:
-        return None
-    for hdu in hdul:
-        hdr = getattr(hdu, 'header', {})
-        name = (hdr.get('EXTNAME') or '').upper() if hdr else ''
-        if name == 'GTI' or getattr(hdu, 'name', '').upper() == 'GTI':
-            data = getattr(hdu, 'data', None)
-            if data is None:
-                continue
-            cols = getattr(data, 'columns', None)
-            colnames = [n.upper() for n in (cols.names if cols is not None else [])]
-            start_col = None
-            stop_col = None
-            for n in ['START', 'TSTART']:
-                if n in colnames:
-                    start_col = n
-                    break
-            for n in ['STOP', 'TSTOP']:
-                if n in colnames:
-                    stop_col = n
-                    break
-            if start_col and stop_col:
-                arr_start = data[start_col]
-                arr_stop = data[stop_col]
-                try:
-                    return [(float(s), float(e)) for s, e in zip(arr_start, arr_stop)]
-                except (TypeError, ValueError):
-                    return None
-    return None
+    tuples or None for absent/unparseable data. Empty GTI extensions are skipped
+    to keep scanning. No sorting, merging, interval validation or TIMEZERO shift."""
+    return _read_gti_table(hdul, continue_on_empty=True)
 
 
 def _load_regions(hdul: fits.HDUList) -> Optional[RegionArea]:
@@ -468,9 +441,11 @@ def _infer_rmf_tlmin(header: Mapping[str, Any], f_chan: Optional[np.ndarray]) ->
     return None
 
 
-class OgipArfReader:
+class _OgipReader:
+    """Shared lazy-read/cache/validate scaffolding for OGIP readers."""
+
     def __init__(self, path: str | Path):
-        """保存 ARF 读取路径 / Initialize a ARF reader with a local path.
+        """保存读取路径 / Initialize a reader with a local path.
 
         只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
         Check path existence only, raising FileNotFoundError. No tilde expansion,
@@ -478,7 +453,23 @@ class OgipArfReader:
         self.path = Path(path)
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
-        self._data: Optional[ArfData] = None
+        self._data = None
+
+    def validate(self) -> ValidationReport:
+        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
+
+        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
+        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
+        Reuse cached data if present without rereading disk. Return ValidationReport
+        from the data class; passing its checks is not general scientific certification."""
+        if self._data is None:
+            self.read()
+        assert self._data is not None
+        return self._data.validate()
+
+
+class OgipArfReader(_OgipReader):
+    """Lazy OGIP ARF reader; see read() for field semantics."""
 
     def read(self) -> ArfData:
         """读取 ARF 并缓存数据对象 / Read the SPECRESP ARF and cache ArfData.
@@ -512,30 +503,9 @@ class OgipArfReader:
         )
         return self._data
 
-    def validate(self) -> ValidationReport:
-        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
 
-        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
-        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
-        Reuse cached data if present without rereading disk. Return ValidationReport
-        from the data class; passing its checks is not general scientific certification."""
-        if self._data is None:
-            self.read()
-        assert self._data is not None
-        return self._data.validate()
-
-
-class OgipRmfReader:
-    def __init__(self, path: str | Path):
-        """保存 RMF 读取路径 / Initialize a RMF reader with a local path.
-
-        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
-        Check path existence only, raising FileNotFoundError. No tilde expansion,
-        table reading or product-type validation; initialize the cached data as None."""
-        self.path = Path(path)
-        if not self.path.exists():
-            raise FileNotFoundError(str(self.path))
-        self._data: Optional[RmfData] = None
+class OgipRmfReader(_OgipReader):
+    """Lazy OGIP RMF/RSP reader; see read() for matrix semantics."""
 
     def read(self) -> RmfData:
         """读取 RMF/RSP 矩阵及可选 EBOUNDS / Read a response matrix and optional EBOUNDS.
@@ -626,30 +596,9 @@ class OgipRmfReader:
         )
         return self._data
 
-    def validate(self) -> ValidationReport:
-        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
 
-        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
-        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
-        Reuse cached data if present without rereading disk. Return ValidationReport
-        from the data class; passing its checks is not general scientific certification."""
-        if self._data is None:
-            self.read()
-        assert self._data is not None
-        return self._data.validate()
-
-
-class OgipPhaReader:
-    def __init__(self, path: str | Path):
-        """保存 PHA 读取路径 / Initialize a PHA reader with a local path.
-
-        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
-        Check path existence only, raising FileNotFoundError. No tilde expansion,
-        table reading or product-type validation; initialize the cached data as None."""
-        self.path = Path(path)
-        if not self.path.exists():
-            raise FileNotFoundError(str(self.path))
-        self._data: Optional[PhaData] = None
+class OgipPhaReader(_OgipReader):
+    """Lazy OGIP PHA reader; see read() for count/rate semantics."""
 
     def read(self) -> PhaData:
         """读取 PHA 通道谱 / Read and cache a PHA channel spectrum.
@@ -760,17 +709,6 @@ class OgipPhaReader:
         )
         return self._data
 
-    def validate(self) -> ValidationReport:
-        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
-
-        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
-        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
-        Reuse cached data if present without rereading disk. Return ValidationReport
-        from the data class; passing its checks is not general scientific certification."""
-        if self._data is None:
-            self.read()
-        assert self._data is not None
-        return self._data.validate()
 
     def select_by_band(
         self,
@@ -803,17 +741,8 @@ class OgipPhaReader:
         return d.channels[mask], d.counts[mask]
 
 
-class OgipLightcurveReader:
-    def __init__(self, path: str | Path):
-        """保存 lightcurve 读取路径 / Initialize a lightcurve reader with a local path.
-
-        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
-        Check path existence only, raising FileNotFoundError. No tilde expansion,
-        table reading or product-type validation; initialize the cached data as None."""
-        self.path = Path(path)
-        if not self.path.exists():
-            raise FileNotFoundError(str(self.path))
-        self._data: Optional[LightcurveData] = None
+class OgipLightcurveReader(_OgipReader):
+    """Lazy OGIP lightcurve reader; see read() for time semantics."""
 
     def read(self) -> LightcurveData:
         """读取光变并构造相对时间 / Read a lightcurve with relative-time fields.
@@ -1018,30 +947,9 @@ class OgipLightcurveReader:
             )
         return self._data
 
-    def validate(self) -> ValidationReport:
-        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
 
-        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
-        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
-        Reuse cached data if present without rereading disk. Return ValidationReport
-        from the data class; passing its checks is not general scientific certification."""
-        if self._data is None:
-            self.read()
-        assert self._data is not None
-        return self._data.validate()
-
-
-class OgipEventReader:
-    def __init__(self, path: str | Path):
-        """保存 event 读取路径 / Initialize a event reader with a local path.
-
-        只检查路径存在，否则 FileNotFoundError；不展开 ~、读取表或验证类型。
-        Check path existence only, raising FileNotFoundError. No tilde expansion,
-        table reading or product-type validation; initialize the cached data as None."""
-        self.path = Path(path)
-        if not self.path.exists():
-            raise FileNotFoundError(str(self.path))
-        self._data: Optional[EventData] = None
+class OgipEventReader(_OgipReader):
+    """Lazy OGIP event reader; see read() for event/GTI semantics."""
 
     def read(self) -> EventData:
         """读取事件及原始列 / Read events, raw columns and relative-time GTI.
@@ -1201,18 +1109,6 @@ class OgipEventReader:
         )
         return self._data
 
-    def validate(self) -> ValidationReport:
-        """读取后委托对象校验 / Read if needed, then delegate to the data object's validate.
-
-        已有 _data 时不重新读取文件；返回 ValidationReport，具体检查由数据类
-        定义。校验通过不证明响应、时间系统或科学结果普遍有效。
-        Reuse cached data if present without rereading disk. Return ValidationReport
-        from the data class; passing its checks is not general scientific certification."""
-        if self._data is None:
-            self.read()
-        assert self._data is not None
-        return self._data.validate()
-
 
 class ArfReader(OgipArfReader):
     pass
@@ -1265,15 +1161,25 @@ def _normalize_grouping_to_flags(grouping: np.ndarray) -> np.ndarray:
     return out
 
 
-class PhaWriter:
-    def __init__(self, data: PhaData, outpath: str | Path):
-        """保存 PHA 对象与输出路径 / Initialize a PHA writer by reference.
+class _OgipWriter:
+    """Shared output-path scaffolding for OGIP writers."""
+
+    def __init__(self, data, outpath: str | Path):
+        """保存数据对象与输出路径 / Initialize a writer by reference.
 
         不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
         Store data by reference and outpath as Path. No copying, validation, directory
         creation or file write; write() handles overwrite policy."""
         self.data = data
         self.outpath = Path(outpath)
+
+    def _reject_existing(self, overwrite: bool) -> None:
+        if self.outpath.exists() and not overwrite:
+            raise FileExistsError(str(self.outpath))
+
+
+class PhaWriter(_OgipWriter):
+    """OGIP PHA writer; see write() for retained fields."""
 
     def write(self, *, overwrite: bool = False) -> Path:
         """将结构化 PHA 写为 FITS / Write selected PHA fields to a FITS spectrum.
@@ -1292,8 +1198,7 @@ class PhaWriter:
         copy; not all raw columns/cards/extensions are retained. No count regrouping,
         fit or response validation. Callers ensure field units and scientific consistency."""
         outp = self.outpath
-        if outp.exists() and not overwrite:
-            raise FileExistsError(str(outp))
+        self._reject_existing(overwrite)
 
         pha = self.data
         cols: list[fits.Column] = []
@@ -1407,15 +1312,8 @@ class PhaWriter:
         return outp
 
 
-class ArfWriter:
-    def __init__(self, data: ArfData, outpath: str | Path):
-        """保存 ARF 对象与输出路径 / Initialize a ARF writer by reference.
-
-        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
-        Store data by reference and outpath as Path. No copying, validation, directory
-        creation or file write; write() handles overwrite policy."""
-        self.data = data
-        self.outpath = Path(outpath)
+class ArfWriter(_OgipWriter):
+    """OGIP ARF writer; see write() for retained fields."""
 
     def write(self, *, overwrite: bool = False) -> Path:
         """写 ARF 的选定响应字段 / Write selected ARF fields to SPECRESP FITS.
@@ -1427,8 +1325,7 @@ class ArfWriter:
         without unit conversion/integration/rebinning. Parents must exist; default
         rejects overwrite. Return Path, not a lossless copy of every original card/HDU."""
         outp = self.outpath
-        if outp.exists() and not overwrite:
-            raise FileExistsError(str(outp))
+        self._reject_existing(overwrite)
         arf = self.data
         cols = [
             fits.Column(name='ENERG_LO', format='E', array=np.asarray(arf.energ_lo, dtype=float)),
@@ -1461,15 +1358,8 @@ class ArfWriter:
         return outp
 
 
-class RmfWriter:
-    def __init__(self, data: RmfData, outpath: str | Path):
-        """保存 RMF 对象与输出路径 / Initialize a RMF writer by reference.
-
-        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
-        Store data by reference and outpath as Path. No copying, validation, directory
-        creation or file write; write() handles overwrite policy."""
-        self.data = data
-        self.outpath = Path(outpath)
+class RmfWriter(_OgipWriter):
+    """OGIP RMF writer; see write() for matrix semantics."""
 
     def write(self, *, overwrite: bool = False) -> Path:
         """写 RMF 的稀疏分组结构 / Write response groups and matrix rows to FITS.
@@ -1486,8 +1376,7 @@ class RmfWriter:
         Parents are not created, overwrite=False rejects existing targets. Return Path;
         I/O/shape errors propagate and float storage can reduce precision to 32-bit."""
         outp = self.outpath
-        if outp.exists() and not overwrite:
-            raise FileExistsError(str(outp))
+        self._reject_existing(overwrite)
         rmf = self.data
 
         def _vla_array(values: np.ndarray | list[Any] | tuple[Any, ...] | None, dtype: Any) -> np.ndarray:
@@ -1608,15 +1497,8 @@ class RmfWriter:
         return outp
 
 
-class LightcurveWriter:
-    def __init__(self, data: LightcurveData, outpath: str | Path):
-        """保存 lightcurve 对象与输出路径 / Initialize a lightcurve writer by reference.
-
-        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
-        Store data by reference and outpath as Path. No copying, validation, directory
-        creation or file write; write() handles overwrite policy."""
-        self.data = data
-        self.outpath = Path(outpath)
+class LightcurveWriter(_OgipWriter):
+    """OGIP lightcurve writer; see write() for retained fields."""
 
     def write(self, *, overwrite: bool = False) -> Path:
         """写选定光变列及 GTI / Write selected lightcurve columns and optional GTI.
@@ -1633,8 +1515,7 @@ class LightcurveWriter:
         Return Path; require existing parents and default no overwrite. Do not infer
         counts/rate fields from value. FITS errors propagate; no scientific reanalysis."""
         outp = self.outpath
-        if outp.exists() and not overwrite:
-            raise FileExistsError(str(outp))
+        self._reject_existing(overwrite)
         lc = self.data
         t = np.asarray(lc.time if lc.time is not None else np.asarray([], dtype=float), dtype=float)
         cols = [fits.Column(name='TIME', format='D', array=t)]
@@ -1674,15 +1555,8 @@ class LightcurveWriter:
         return outp
 
 
-class EventWriter:
-    def __init__(self, data: EventData, outpath: str | Path):
-        """保存 event 对象与输出路径 / Initialize a event writer by reference.
-
-        不复制或校验 data，不创建目录、不写文件；覆盖策略在 write 中应用。
-        Store data by reference and outpath as Path. No copying, validation, directory
-        creation or file write; write() handles overwrite policy."""
-        self.data = data
-        self.outpath = Path(outpath)
+class EventWriter(_OgipWriter):
+    """OGIP event writer; see write() for retained fields."""
 
     def write(self, *, overwrite: bool = False) -> Path:
         """写选定事件列与 GTI / Write selected event fields and optional GTI.
@@ -1698,8 +1572,7 @@ class EventWriter:
         Require existing parents, default no overwrite, return Path. No validate is run;
         FITS/shape errors propagate and selected float fields use reduced precision."""
         outp = self.outpath
-        if outp.exists() and not overwrite:
-            raise FileExistsError(str(outp))
+        self._reject_existing(overwrite)
         ev = self.data
         cols: list[fits.Column] = [fits.Column(name='TIME', format='D', array=np.asarray(ev.time, dtype=float))]
         if ev.pi is not None:

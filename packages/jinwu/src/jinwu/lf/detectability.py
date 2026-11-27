@@ -17,7 +17,7 @@ Li&Ma, take the median SNR per z, and find the largest redshift with SNR>=7.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, Tuple, Sequence
+from typing import Callable, Optional, Tuple, Sequence
 
 import numpy as np
 

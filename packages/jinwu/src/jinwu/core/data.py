@@ -512,32 +512,10 @@ class LightcurveData(LightcurveDataBase):
     def _resolve_bin_geometry(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         if self.time is None:
             return np.asarray([], float), np.asarray([], float), np.asarray([], float)
-        t = np.asarray(self.time, dtype=float)
-        n = t.size
-        if n == 0:
-            return np.asarray([], float), np.asarray([], float), np.asarray([], float)
-        if self.bin_lo is not None and self.bin_hi is not None:
-            lo = np.asarray(self.bin_lo, dtype=float)
-            hi = np.asarray(self.bin_hi, dtype=float)
-            if lo.shape == hi.shape == t.shape:
-                return lo, hi, hi - lo
-        if self.bin_width is not None:
-            bw = np.asarray(self.bin_width, dtype=float)
-            if bw.shape == t.shape:
-                return t - 0.5 * bw, t + 0.5 * bw, bw
-        if self.dt is not None:
-            dt_arr = np.asarray(self.dt, dtype=float)
-            if dt_arr.ndim == 0:
-                dt_val = float(dt_arr)
-                if np.isfinite(dt_val) and dt_val > 0:
-                    bw = np.full_like(t, dt_val, dtype=float)
-                    return t - 0.5 * bw, t + 0.5 * bw, bw
-            elif dt_arr.shape == t.shape:
-                bw = dt_arr
-                return t - 0.5 * bw, t + 0.5 * bw, bw
-        est = float(np.median(np.diff(t))) if n >= 2 else 1.0
-        bw = np.full_like(t, est, dtype=float)
-        return t - 0.5 * bw, t + 0.5 * bw, bw
+        # Local import avoids the data <-> ops import cycle.
+        from .ops import _infer_bin_geometry
+
+        return _infer_bin_geometry(self)
 
     @property
     def mean_rate(self) -> Optional[float]:
@@ -1162,39 +1140,44 @@ class EventData(EventDataBase):
             return xselect.write_image(img, xedges, yedges, outp, overwrite=overwrite)
         raise ValueError('unknown kind: ' + str(kind))
 
+    def _clear_source(self, use_original: bool, operation: str) -> 'EventData':
+        """Return the pre-filter events backing a ``clear_*`` operation."""
+        if use_original and getattr(self, '_original_events', None) is not None:
+            return getattr(self, '_original_events')
+        if getattr(self, 'path', None) is not None:
+            from .io import read_evt
+
+            return read_evt(self.path)
+        raise ValueError(f'No original events available to clear {operation}')
+
+    def _current_time_bounds(self) -> Tuple[Optional[float], Optional[float]]:
+        """Infer the current time window from the event array, if present."""
+        time_arr = getattr(self, 'time', None)
+        if time_arr is not None and isinstance(time_arr, np.ndarray) and time_arr.size:
+            t = np.asarray(time_arr, dtype=float)
+            return float(t.min()), float(t.max())
+        return None, None
+
+    def _current_pi_bounds(self) -> Tuple[Optional[int], Optional[int]]:
+        """Infer the current PI (or channel) bounds from the event array."""
+        arr = getattr(self, 'pi', None)
+        if arr is None:
+            arr = getattr(self, 'channel', None)
+        if arr is None:
+            return None, None
+        values = np.asarray(arr, dtype=int)
+        if not values.size:
+            return None, None
+        return int(values.min()), int(values.max())
+
     def clear_region(self, *, use_original: bool = True) -> 'EventData':
         sess = getattr(self, '_xselect_session', None)
         if sess is not None:
             sess.clear_region()
             return self._current_for_products()
-        src = None
-        if use_original and getattr(self, '_original_events', None) is not None:
-            src = getattr(self, '_original_events')
-        elif getattr(self, 'path', None) is not None:
-            from .io import read_evt
-
-            src = read_evt(self.path)
-        else:
-            raise ValueError('No original events available to clear region')
-        tmin = None
-        tmax = None
-        time_arr = getattr(self, 'time', None)
-        if time_arr is not None and isinstance(time_arr, np.ndarray) and time_arr.size:
-            t = np.asarray(time_arr, dtype=float)
-            tmin = float(t.min())
-            tmax = float(t.max())
-        pi_min = None
-        pi_max = None
-        if getattr(self, 'pi', None) is not None:
-            arr = np.asarray(self.pi, dtype=int)
-            if arr.size:
-                pi_min = int(arr.min())
-                pi_max = int(arr.max())
-        elif getattr(self, 'channel', None) is not None:
-            arr = np.asarray(self.channel, dtype=int)
-            if arr.size:
-                pi_min = int(arr.min())
-                pi_max = int(arr.max())
+        src = self._clear_source(use_original, 'region')
+        tmin, tmax = self._current_time_bounds()
+        pi_min, pi_max = self._current_pi_bounds()
         from . import xselect as _xsel
 
         return cast(EventData, _xsel.select_events(cast(Any, src), tmin=tmin, tmax=tmax, pi_min=pi_min, pi_max=pi_max))
@@ -1204,27 +1187,8 @@ class EventData(EventDataBase):
         if sess is not None:
             sess.clear_time()
             return self._current_for_products()
-        src = None
-        if use_original and getattr(self, '_original_events', None) is not None:
-            src = getattr(self, '_original_events')
-        elif getattr(self, 'path', None) is not None:
-            from .io import read_evt
-
-            src = read_evt(self.path)
-        else:
-            raise ValueError('No original events available to clear time')
-        pi_min = None
-        pi_max = None
-        if getattr(self, 'pi', None) is not None:
-            arr = np.asarray(self.pi, dtype=int)
-            if arr.size:
-                pi_min = int(arr.min())
-                pi_max = int(arr.max())
-        elif getattr(self, 'channel', None) is not None:
-            arr = np.asarray(self.channel, dtype=int)
-            if arr.size:
-                pi_min = int(arr.min())
-                pi_max = int(arr.max())
+        src = self._clear_source(use_original, 'time')
+        pi_min, pi_max = self._current_pi_bounds()
         from . import xselect as _xsel
 
         return cast(EventData, _xsel.select_events(cast(Any, src), region=None, pi_min=pi_min, pi_max=pi_max))
@@ -1234,22 +1198,8 @@ class EventData(EventDataBase):
         if sess is not None:
             sess.clear_energy()
             return self._current_for_products()
-        src = None
-        if use_original and getattr(self, '_original_events', None) is not None:
-            src = getattr(self, '_original_events')
-        elif getattr(self, 'path', None) is not None:
-            from .io import read_evt
-
-            src = read_evt(self.path)
-        else:
-            raise ValueError('No original events available to clear energy')
-        tmin = None
-        tmax = None
-        time_arr = getattr(self, 'time', None)
-        if time_arr is not None and isinstance(time_arr, np.ndarray) and time_arr.size:
-            t = np.asarray(time_arr, dtype=float)
-            tmin = float(t.min())
-            tmax = float(t.max())
+        src = self._clear_source(use_original, 'energy')
+        tmin, tmax = self._current_time_bounds()
         from . import xselect as _xsel
 
         return cast(EventData, _xsel.select_events(cast(Any, src), tmin=tmin, tmax=tmax, region=None))

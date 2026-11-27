@@ -102,7 +102,6 @@ def _subprocess_grppha(
     infile: Path,
     outfile: Path,
     command: str,
-    clobber: bool,
     timeout: int,
 ) -> dict[str, Any]:
     executable = shutil.which("grppha")
@@ -244,7 +243,6 @@ def grppha_hsp(
                 infile=source,
                 outfile=target,
                 command=command,
-                clobber=clobber,
                 timeout=timeout,
             )
             fallback.setdefault("heasoftpy_error", str(exc))
@@ -254,6 +252,5 @@ def grppha_hsp(
         infile=source,
         outfile=target,
         command=command,
-        clobber=clobber,
         timeout=timeout,
     )

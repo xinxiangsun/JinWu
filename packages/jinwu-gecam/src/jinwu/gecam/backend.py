@@ -45,6 +45,36 @@ def _intervals(value, name):
     return result
 
 
+def validate_time_bin(time_bin):
+    """Validate a positive scalar GECAM time bin and return seconds."""
+    step = _values(time_bin, u.s, "time_bin")
+    if step.ndim != 0 or step <= 0:
+        raise ValueError("time_bin must be a positive scalar")
+    return step
+
+
+def validate_selection(*, time_range, time_bin, energy_edges, gain=None,
+                       gain_message="gain must be high or low"):
+    """Validate GECAM time/energy selection and return normalized values.
+
+    Order matches the public entry points: time range, time bin, energy edges,
+    then gain when supplied. ``gain_message`` lets pipeline callers keep their
+    more specific aggregation hint.
+    """
+    bounds = _values(time_range, u.s, "time_range")
+    step = _values(time_bin, u.s, "time_bin")
+    edges = _values(energy_edges, u.keV, "energy_edges")
+    if bounds.shape != (2,) or bounds[1] <= bounds[0]:
+        raise ValueError("time_range must be increasing [start, stop] MET")
+    if step.ndim != 0 or step <= 0:
+        raise ValueError("time_bin must be a positive scalar")
+    if edges.ndim != 1 or len(edges) < 2 or np.any(edges <= 0) or np.any(np.diff(edges) <= 0):
+        raise ValueError("energy_edges must be positive and increasing")
+    if gain is not None and gain not in {"high", "low"}:
+        raise ValueError(gain_message)
+    return bounds, step, edges
+
+
 def open_event(path: str | Path):
     """Return the native GECAMTools Evt for a GECAM A/B/C GRD event FITS.
 
@@ -76,17 +106,9 @@ def extract_lightcurve(event, *, detector: int, gain: str, time_range: u.Quantit
     to calibrated channels; inspect returned ``energy_bins`` / ``channel_bins``.
     Both raw and corrected counts are available through native ``get_data``.
     """
-    bounds = _values(time_range, u.s, "time_range")
-    step = _values(time_bin, u.s, "time_bin")
-    edges = _values(energy_edges, u.keV, "energy_edges")
-    if bounds.shape != (2,) or bounds[1] <= bounds[0]:
-        raise ValueError("time_range must be increasing [start, stop] MET")
-    if step.ndim != 0 or step <= 0:
-        raise ValueError("time_bin must be a positive scalar")
-    if edges.ndim != 1 or len(edges) < 2 or np.any(edges <= 0) or np.any(np.diff(edges) <= 0):
-        raise ValueError("energy_edges must be positive and increasing")
-    if gain not in {"high", "low"}:
-        raise ValueError("gain must be high or low")
+    bounds, step, edges = validate_selection(
+        time_range=time_range, time_bin=time_bin, energy_edges=energy_edges, gain=gain,
+    )
     # Keep original events for dead-time calculation, as required by upstream.
     events = event.select_detector(detector).slice(
         gain_type=gain, time_range=bounds.tolist(), only_recommend=only_recommend,
@@ -116,9 +138,7 @@ def extract_spectra(event, *, detector: int, gain: str, source_intervals: u.Quan
 
     src = _intervals(source_intervals, "source_intervals")
     bg = _intervals(background_intervals, "background_intervals")
-    step = _values(time_bin, u.s, "time_bin")
-    if step.ndim != 0 or step <= 0:
-        raise ValueError("time_bin must be a positive scalar")
+    step = validate_time_bin(time_bin)
     if gain not in {"high", "low"}:
         raise ValueError("gain must be high or low")
     if not isinstance(channel_bin, int) or isinstance(channel_bin, bool) or channel_bin < 1:

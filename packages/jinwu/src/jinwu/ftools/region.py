@@ -40,13 +40,6 @@ try:
 except Exception:
     _HAVE_SHAPELY = False
 
-try:
-    from matplotlib.path import Path as MplPath
-    _HAVE_MPL = True
-except Exception:
-    _HAVE_MPL = False
-
-
 def _parse_ds9_region_shape(line: str) -> Optional[Dict[str, Any]]:
     """解析 DS9 region 文件中的一行，返回 shape dict 或 None（注释/空行）。
 
@@ -253,15 +246,6 @@ def parse_ds9_region_file(path: str | Path) -> List[Dict[str, Any]]:
                     r = parse_ds9_region_line(f'{coordsys};{line}')
                 shapes.append(r)
     return shapes
-
-
-def _points_in_polygon_mpl(xs: np.ndarray, ys: np.ndarray, poly: List[Tuple[float, float]]) -> np.ndarray:
-    pts = np.vstack([xs, ys]).T
-    if not _HAVE_MPL:
-        # fallback to ray-casting implementation
-        return _points_in_polygon_numpy(xs, ys, poly)
-    path = MplPath(np.array(poly))
-    return path.contains_points(pts)
 
 
 if _HAVE_NUMBA:
@@ -720,14 +704,11 @@ def apply_region_mask_to_events(ev, shapes: List[Dict[str, Any]], invert: bool =
         mask = ~mask
 
     # build new EventData
-    t = np.asarray(ev.time, dtype=float)
-    new_time = t[mask]
-    new_pi = None if ev.pi is None else np.asarray(ev.pi)[mask]
-    new_ch = None if ev.channel is None else np.asarray(ev.channel)[mask]
-    from ..core.xselect import _new_event_like
-    raw = getattr(ev, 'raw_columns', None)
-    raw = None if raw is None else {key: np.asarray(value)[mask] for key, value in raw.items()}
-    energy = getattr(ev, 'energy', None)
-    return _new_event_like(ev, time=new_time, pi=new_pi, channel=new_ch,
-                           x=xs[mask], y=ys[mask], raw_columns=raw,
-                           energy=None if energy is None else np.asarray(energy)[mask])
+    from ..core.xselect import _masked_event_columns, _new_event_like
+
+    payload = _masked_event_columns(ev, mask)
+    payload["x"] = xs[mask]
+    payload["y"] = ys[mask]
+    raw = getattr(ev, "raw_columns", None)
+    payload["raw_columns"] = None if raw is None else {key: np.asarray(value)[mask] for key, value in raw.items()}
+    return _new_event_like(ev, **payload)

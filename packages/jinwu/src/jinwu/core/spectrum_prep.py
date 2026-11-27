@@ -168,16 +168,14 @@ def _stage_ancillary_file(
     source: Path,
     *,
     name: str,
-    overwrite: bool,
 ) -> Path:
     """在准备目录链接或复制辅助文件 / Stage one ancillary link or copy.
 
     同名目标已指向 source 时复用；否则移除旧目标再建立符号链接，链接
     失败则 copy2。directory 必须已存在。返回 staged 路径并修改磁盘。
-    当前实现未使用 overwrite 参数；它不会保护不匹配的已有目标。
     Reuse a same-source target, otherwise replace it with a symlink or copy2
     fallback. The directory must already exist. Return the staged path and
-    modify disk. overwrite is currently unused and does not protect stale targets.
+    modify disk.
     """
     staged = directory / name
     if staged.exists() or staged.is_symlink():
@@ -201,7 +199,6 @@ def _stage_ancillary_files(
     background: Path,
     arf: Path,
     rmf: Path,
-    overwrite: bool,
 ) -> dict[str, Path]:
     """将辅助谱文件放到分组谱旁 / Stage ancillary files beside grouped PHA.
 
@@ -215,19 +212,16 @@ def _stage_ancillary_files(
             directory,
             background,
             name=background.name,
-            overwrite=overwrite,
         ),
         "ANCRFILE": _stage_ancillary_file(
             directory,
             arf,
             name=arf.name,
-            overwrite=overwrite,
         ),
         "RESPFILE": _stage_ancillary_file(
             directory,
             rmf,
             name=rmf.name,
-            overwrite=overwrite,
         ),
     }
 
@@ -315,7 +309,6 @@ def _prepared_from_bundle(
         background=background,
         arf=arf,
         rmf=rmf,
-        overwrite=overwrite,
     )
     # 方法：采用 HEASoft grppha 标准 "group min N" 最小计数分组（N 由仪器配置给出，WXT=1/FXT=3），原 PHA 的 EXPOSURE/BACKSCAL/AREASCAL 关键词保持原值、由 XSPEC 按其标准语义解释面积/背景标度；轻分组适配 Poisson 似然（cstat/wstat）拟合
     # 参考：OGIP CAL/GEN/92-002 "The Calibration Requirements for Spectral Analysis"（EXPOSURE/BACKSCAL/AREASCAL 语义，George, Arnaud, Pence et al., HEASARC）；分组工具语义见 HEASoft ftools/grppha

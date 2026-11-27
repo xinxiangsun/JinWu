@@ -63,31 +63,52 @@ def safe_filename_token(value: Any) -> str:
     return token or "unnamed"
 
 
-def jsonable(value: Any) -> Any:
+def jsonable(value: Any, *, stringify_unknown: bool = False) -> Any:
     """递归转为 JSON 安全结构（dataclass/Path/Enum/set/ndarray/NaN→None）。
 
     这是全库唯一的序列化规范化实现：core.pipeline 与各 instrument
-    pipeline 的落盘 payload 都应经由它（或 :func:`write_json`）。
+    pipeline 的落盘 payload 都应经由它（或 :func:`write_json`）。默认保留
+    未知对象原样以暴露序列化错误；``stringify_unknown=True`` 时改为
+    ``str(value)``，供必须保证任意对象可序列化的调用点（BXA 结果）使用。
     """
     if is_dataclass(value):
-        return jsonable(asdict(value))
+        return jsonable(asdict(value), stringify_unknown=stringify_unknown)
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Mapping):
-        return {str(key): jsonable(item) for key, item in value.items()}
+        return {
+            str(key): jsonable(item, stringify_unknown=stringify_unknown)
+            for key, item in value.items()
+        }
     if isinstance(value, (tuple, list, set, frozenset)):
-        return [jsonable(item) for item in value]
+        return [
+            jsonable(item, stringify_unknown=stringify_unknown) for item in value
+        ]
     if isinstance(value, np.ndarray):
-        return jsonable(value.tolist())
+        return jsonable(value.tolist(), stringify_unknown=stringify_unknown)
     if isinstance(value, np.generic):
-        return jsonable(value.item())
+        # Extended-precision floats keep their numpy type after ``item()``;
+        # float() also matches the conversion the absorption serializer used.
+        item = float(value) if isinstance(value, np.floating) else value.item()
+        if isinstance(item, np.generic):
+            return str(item) if stringify_unknown else item
+        return jsonable(item, stringify_unknown=stringify_unknown)
     if hasattr(value, "tolist"):
-        return jsonable(value.tolist())
+        try:
+            return jsonable(value.tolist(), stringify_unknown=stringify_unknown)
+        except Exception:
+            # BXA payloads must never fail ``json.dumps``; other callers keep
+            # the error so broken ``tolist`` implementations stay visible.
+            if stringify_unknown:
+                return str(value)
+            raise
     if isinstance(value, float) and not math.isfinite(value):
         return None
-    return value
+    if isinstance(value, (str, bool, int, float)) or value is None:
+        return value
+    return str(value) if stringify_unknown else value
 
 
 def write_json(path: str | Path, payload: Any) -> Path:
@@ -453,7 +474,7 @@ def plot_net_lightcurve(
     from .plotstyle import PALETTE, apply_style, paper_figsize, save_figure
 
     apply_style()
-    figsize = paper_figsize((10, 7)) if figsize is None else tuple(figsize)
+    figsize = paper_figsize((10, 7), figsize)
     fig, (top, bottom) = plt.subplots(2, 1, figsize=figsize, sharex=True)
     mission_time = curve.time + curve.timezero
     if timezero is None:
@@ -643,10 +664,20 @@ def save_flux_curve(
     dpi: int = 300,
     title: str = "Flux curve",
     figsize: tuple[float, float] | None = None,
+    xlabel: str = "Mission time [s]",
+    ylabel: str = "Unabsorbed flux\n[erg cm$^{-2}$ s$^{-1}$]",
+    xlog: bool = False,
+    upper_limits: bool = False,
+    single_panel_without_quicklook: bool = False,
 ) -> dict[str, Path]:
     """Save machine-readable points and science/quicklook plots.
 
     ``figsize`` defaults to the active :func:`paper_style` canvas, else (10, 8).
+    ``upper_limits`` draws non-detection science points as upper-limit arrows;
+    otherwise all science points stay in one ``fmt='o'`` series. The quicklook
+    panel is omitted only when ``single_panel_without_quicklook`` is true and
+    there are no quicklook points. ``xlabel``/``ylabel`` and ``xlog`` control
+    the axis labels and logarithmic time axis.
     """
 
     import matplotlib.pyplot as plt
@@ -695,33 +726,53 @@ def save_flux_curve(
     from .plotstyle import PALETTE, apply_style, paper_figsize, save_figure
 
     apply_style()
-    figsize = paper_figsize((10, 8)) if figsize is None else tuple(figsize)
-    fig, (science_ax, quicklook_ax) = plt.subplots(
-        2, 1, figsize=figsize, sharex=True,
-    )
+    figsize = paper_figsize((10, 8), figsize)
+    quick = result.quicklook_points
+    if quick or not single_panel_without_quicklook:
+        fig, (science_ax, quicklook_ax) = plt.subplots(
+            2, 1, figsize=figsize, sharex=True,
+        )
+    else:
+        fig, science_ax = plt.subplots(figsize=figsize)
+        quicklook_ax = None
     science = result.science_points or result.aggregate_points
-    if science:
-        x = np.asarray([point.time for point in science])
-        y = np.asarray([point.flux for point in science])
-        lo = np.asarray([np.nan if point.error_low is None else point.error_low for point in science])
-        hi = np.asarray([np.nan if point.error_high is None else point.error_high for point in science])
+    detections = [point for point in science if point.is_detection] if upper_limits else science
+    if detections:
+        x = np.asarray([point.time for point in detections])
+        y = np.asarray([point.flux for point in detections])
+        lo = np.asarray([np.nan if point.error_low is None else point.error_low for point in detections])
+        hi = np.asarray([np.nan if point.error_high is None else point.error_high for point in detections])
         science_ax.errorbar(
-            x, y, xerr=[point.time_error for point in science], yerr=(lo, hi),
+            x, y, xerr=[point.time_error for point in detections], yerr=(lo, hi),
             fmt="o", color=PALETTE["data"], markersize=3.5,
         )
+    if upper_limits:
+        limits = [point for point in science if not point.is_detection]
+        if limits:
+            science_ax.errorbar(
+                [point.time for point in limits], [point.flux for point in limits],
+                xerr=[point.time_error for point in limits],
+                yerr=[0.25 * point.flux for point in limits], uplims=True,
+                fmt="v", color=PALETTE["data"], markersize=3.5,
+            )
+    if science:
         science_ax.set_yscale("log")
-    science_ax.set_ylabel("Unabsorbed flux\n[erg cm$^{-2}$ s$^{-1}$]")
-    quick = result.quicklook_points
-    if quick:
-        quicklook_ax.errorbar(
-            [point.time for point in quick], [point.flux for point in quick],
-            xerr=[point.time_error for point in quick],
-            yerr=[point.error_high for point in quick], fmt=".",
-            color=PALETTE["background"],
-        )
-        quicklook_ax.axhline(0.0, color="0.5", lw=1)
-    quicklook_ax.set_ylabel("Fixed-shape quicklook flux")
-    quicklook_ax.set_xlabel("Mission time [s]")
+        if xlog:
+            science_ax.set_xscale("log")
+    science_ax.set_ylabel(ylabel)
+    if quicklook_ax is not None:
+        if quick:
+            quicklook_ax.errorbar(
+                [point.time for point in quick], [point.flux for point in quick],
+                xerr=[point.time_error for point in quick],
+                yerr=[point.error_high for point in quick], fmt=".",
+                color=PALETTE["background"],
+            )
+            quicklook_ax.axhline(0.0, color="0.5", lw=1)
+        quicklook_ax.set_ylabel("Fixed-shape quicklook flux")
+        quicklook_ax.set_xlabel(xlabel)
+    else:
+        science_ax.set_xlabel(xlabel)
     fig.suptitle(title)
     plot_outputs = save_figure(fig, base, formats=formats, dpi=dpi)
     outputs.update({f"plot_{extension}": path for extension, path in plot_outputs.items()})
@@ -1280,14 +1331,6 @@ def render_observation_summary(payload: Mapping[str, Any]) -> str:
     intervals = payload.get("fit_intervals") or {}
     model_comparisons = payload.get("model_comparisons") or {}
 
-    def duration_text(key: str) -> str:
-        value = duration.get(key)
-        if value is None:
-            return "N/A"
-        error = np.asarray(duration.get(f"{key}_err", []), dtype=float).reshape(-1)
-        if error.size >= 2 and np.all(np.isfinite(error[:2])):
-            return f"{float(value):.4g} (-{abs(error[0]):.3g}/+{abs(error[1]):.3g}) s"
-        return f"{float(value):.4g} s"
     target_id = str(payload.get("target_id") or "未命名暂现源")
     candidate_id = str(payload.get("candidate_id") or target_id)
     detector = payload.get("detector", "N/A")
@@ -1307,8 +1350,8 @@ def render_observation_summary(payload: Mapping[str, Any]) -> str:
                 f"MET {t0.get('mission_time_s', 'N/A')} s；T0 来源：{t0.get('source', 'N/A')}）。"
             ),
             (
-                f"自动时标分析得到 T100={duration_text('t100')}，"
-                f"T90={duration_text('t90')}，T50={duration_text('t50')}。"
+                f"自动时标分析得到 T100={_wechat_duration_text(duration, 't100')}，"
+                f"T90={_wechat_duration_text(duration, 't90')}，T50={_wechat_duration_text(duration, 't50')}。"
             ),
             (
                 f"T90 内 N_on={counts.get('n_on', 'N/A')}，N_off={counts.get('n_off', 'N/A')}，"

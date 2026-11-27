@@ -15,73 +15,24 @@ import io
 from pathlib import Path
 from typing import Any, Callable
 
-import astropy.units as u
-from astropy.io import fits
 from astropy.table import Table
 import numpy as np
 
 from .models import SkyMap
 
 
-def _unit_density(values: Any) -> np.ndarray:
-    unit = getattr(values, "unit", None)
-    if unit is None:
-        return np.asarray(values, dtype=float)
-    quantity = u.Quantity(values)
-    if quantity.unit.is_equivalent(u.sr**-1):
-        return quantity.to_value(u.sr**-1)
-    if quantity.unit.is_equivalent(u.deg**-2):
-        return quantity.to_value(u.sr**-1)
-    raise ValueError(f"unsupported sky-map density unit: {quantity.unit}")
-
-
-def _density_column(table_hdu: Any, name: Any) -> np.ndarray:
-    """Read a FITS density column while honoring its optional TUNIT card."""
-    values = np.asarray(table_hdu.data[name], dtype=float)
-    unit = getattr(table_hdu.columns[name], "unit", None)
-    if unit:
-        values = _unit_density(values * u.Unit(str(unit)))
-    return values
-
-
-def _uniq_columns(uniq: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    import astropy_healpix as ah
-
-    levels, ipix = ah.uniq_to_level_ipix(np.asarray(uniq, dtype=np.uint64))
-    return np.asarray(uniq, dtype=np.uint64), np.asarray(levels, dtype=np.int64), np.asarray(ipix, dtype=np.int64)
-
-
-def _make_map(
-    uniq: np.ndarray,
-    levels: np.ndarray,
-    ipix: np.ndarray,
-    density: np.ndarray,
-    area: np.ndarray,
-    *,
-    source: str | None,
-    normalize: bool,
-    ordering: str = "NUNIQ",
-    raw_table: Table | None = None,
-) -> SkyMap:
-    probability = np.asarray(density, dtype=float) * np.asarray(area, dtype=float)
-    table = Table({"UNIQ": np.asarray(uniq, dtype=np.uint64), "PROBDENSITY": np.asarray(density, dtype=float)})
-    result = SkyMap(
-        uniq, levels, ipix, density, area, probability, table,
-        source=source, ordering=ordering, raw_table=raw_table,
-    )
-    if normalize:
-        result = result.normalized()
-    return result
-
-
 def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMap:
     """Read an LVK multi-order or ordinary HEALPix FITS sky map.
 
-    The returned density is always in sr^-1 and the HEALPix indices are
-    nested UNIQ values.  A map with negative, non-finite, or zero probability
-    is rejected before any plotting is attempted.
+    File parsing is delegated to :func:`jinwu.core.skymap.load_skymap_with_table`,
+    which also returns the raw FITS table for provenance.  The returned density
+    is always in sr^-1 and the HEALPix indices are nested UNIQ values.  A map
+    with negative, non-finite, or zero probability is rejected before plotting.
     """
+    from jinwu.core.skymap import load_skymap_with_table
+
     raw_path = str(path)
+    source_name = None
     if raw_path.lower().startswith(("http://", "https://")):
         # Sky-map URLs occur in untrusted notices, so use the alert HTTP
         # helper which validates every redirect target as well.
@@ -89,73 +40,22 @@ def load_skymap(path: str | Path, *, normalize: bool = True) -> SkyMap:
 
         content, final_url = fetch_http_bytes(raw_path)
         fileobj: Any = io.BytesIO(content)
-        source = final_url
+        source_name = final_url
     else:
-        local_path = Path(path).expanduser().resolve()
-        if not local_path.is_file():
-            raise FileNotFoundError(local_path)
-        fileobj = local_path
-        source = str(local_path)
-    with fits.open(fileobj, memmap=False) as hdul:
-        table_hdu = next((hdu for hdu in hdul[1:] if getattr(hdu, "data", None) is not None), None)
-        if table_hdu is None:
-            raise ValueError(f"no HEALPix table found in {path}")
-        names = {str(name).upper(): name for name in table_hdu.columns.names}
-        header = table_hdu.header
-        primary_header = hdul[0].header
-        data = table_hdu.data
-        raw_table = Table(data, copy=True)
-        if "UNIQ" in names and "PROBDENSITY" in names:
-            uniq = np.asarray(data[names["UNIQ"]], dtype=np.uint64)
-            uniq, levels, ipix = _uniq_columns(uniq)
-            density = _density_column(table_hdu, names["PROBDENSITY"])
-            import astropy_healpix as ah
-
-            area = ah.nside_to_pixel_area(ah.level_to_nside(levels)).to_value(u.sr)
-            return _make_map(
-                uniq, levels, ipix, density, area,
-                source=source, normalize=normalize, ordering="NUNIQ",
-                raw_table=raw_table,
-            )
-
-        prob_name = names.get("PROB") or names.get("PROBABILITY")
-        density_name = names.get("PROBDENSITY")
-        if prob_name is None and density_name is None:
-            raise ValueError("HEALPix table must contain PROB or PROBDENSITY")
-        values = np.asarray(data[density_name or prob_name], dtype=float)
-        nside = int(header.get("NSIDE", primary_header.get("NSIDE", 0)))
-        if nside <= 0:
-            nside_float = np.sqrt(values.size / 12.0)
-            nside = int(round(nside_float))
-            if 12 * nside * nside != values.size:
-                raise ValueError("cannot infer NSIDE from flat HEALPix map")
-        if 12 * nside * nside != values.size:
-            raise ValueError("NSIDE does not match flat HEALPix map length")
-        if nside & (nside - 1):
-            raise ValueError("HEALPix NSIDE must be a power of two")
-        ordering = str(header.get("ORDERING", primary_header.get("ORDERING", "RING"))).upper()
-        if not (ordering.startswith("RING") or ordering.startswith("NEST")):
-            raise ValueError(f"unsupported HEALPix ordering: {ordering}")
-        ipix = np.arange(values.size, dtype=np.int64)
-        import astropy_healpix as ah
-
-        hp = ah.HEALPix(nside=nside, order="nested", frame="icrs")
-        if ordering.startswith("RING"):
-            ipix = np.asarray(hp.ring_to_nested(ipix), dtype=np.int64)
-        level = int(round(np.log2(nside)))
-        levels = np.full(values.size, level, dtype=np.int64)
-        uniq = (4 * nside * nside + ipix).astype(np.uint64)
-        area_value = 4.0 * np.pi / values.size
-        area = np.full(values.size, area_value, dtype=float)
-        if prob_name is not None:
-            density = values / area_value
-        else:
-            density = _density_column(table_hdu, density_name)
-        return _make_map(
-            uniq, levels, ipix, density, area,
-            source=source, normalize=normalize, ordering=ordering,
-            raw_table=raw_table,
-        )
+        fileobj = Path(path).expanduser().resolve()
+    data, raw_table = load_skymap_with_table(
+        fileobj, normalize=False, source_name=source_name,
+    )
+    table = Table({
+        "UNIQ": np.asarray(data.uniq, dtype=np.uint64),
+        "PROBDENSITY": np.asarray(data.prob_density_sr, dtype=float),
+    })
+    result = SkyMap(
+        data.uniq, data.levels, data.ipix, data.prob_density_sr,
+        data.pixel_area_sr, data.pixel_probability, table,
+        source=data.source, ordering=data.ordering, raw_table=raw_table,
+    )
+    return result.normalized() if normalize else result
 
 
 def sky_map_footprint(skymap: SkyMap, *, max_depth: int | None = None):

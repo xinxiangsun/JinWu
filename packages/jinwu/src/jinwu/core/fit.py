@@ -32,6 +32,7 @@ from astropy.modeling.fitting import LMLSQFitter, TRFLSQFitter
 
 from jinwu.core.data import LightcurveData
 from jinwu.core.config import FitConfig, get_fit_settings
+from jinwu.core.utils import format_math_label
 
 if TYPE_CHECKING:
     from jinwu.core.datasets import LightcurveDataset
@@ -1231,7 +1232,7 @@ class LightcurveFitter:
 
         if ax is None:
             default_size = (10, 8) if show_residuals else (10, 6)
-            size = paper_figsize(default_size) if figsize is None else tuple(figsize)
+            size = paper_figsize(default_size, figsize)
             if show_residuals:
                 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=size, sharex=True,
                                                gridspec_kw={'height_ratios': [3, 1]})
@@ -1315,36 +1316,7 @@ class LightcurveFitter:
 
             def _format_math(name_math: str, val: float, lo: float | None, up: float | None) -> str:
                 # 统一指数：当需要科学计数法时，将值与误差共同提取 10^e
-                def _needs_sci(x: float) -> bool:
-                    ax = abs(x)
-                    if ax == 0 or not np.isfinite(ax):
-                        return False
-                    e = int(np.floor(np.log10(ax)))
-                    return (e <= -3) or (e >= 4)
-
-                use_sci = _needs_sci(val)
-                if (lo is not None and up is not None and np.isfinite(lo) and np.isfinite(up) and (lo>0 or up>0)):
-                    if use_sci:
-                        if val == 0:
-                            e = 0
-                        else:
-                            e = int(np.floor(np.log10(abs(val))))
-                        scale = 10.0 ** e
-                        m = val / scale
-                        um = up / scale
-                        lm = lo / scale
-                        return f"${name_math} = {m:.3g}^{{+{um:.2g}}}_{{-{lm:.2g}}} \\times 10^{{{e}}}$"
-                    else:
-                        return f"${name_math} = {val:.3g}^{{+{up:.2g}}}_{{-{lo:.2g}}}$"
-                else:
-                    if use_sci:
-                        if val == 0:
-                            return f"${name_math} = 0$"
-                        e = int(np.floor(np.log10(abs(val))))
-                        scale = 10.0 ** e
-                        m = val / scale
-                        return f"${name_math} = {m:.3g} \\times 10^{{{e}}}$"
-                    return f"${name_math} = {val:.3g}$"
+                return format_math_label(name_math, val, lo, up)
 
             vals = np.asarray(result.params)
             names = list(result.param_names)
@@ -2060,10 +2032,8 @@ def _model_parameter_index(model, parameter) -> int:
 
 def _prepared_error_parameters(
     model,
-    model_name: str,
     models=None,
     *,
-    intrinsic_nh_mode: str = "free",
     delta_stat: float = 1.0,
 ) -> str:
     # Cover every independently fitted parameter, including repeated components
@@ -2451,7 +2421,7 @@ def _link_parameter(parameter, reference) -> None:
         parameter.link = str(getattr(reference, "index", reference))
 
 
-def _link_default_prepared_model_groups(models, model_name: str, *, shared_absorption_only=False) -> None:
+def _link_default_prepared_model_groups(models, *, shared_absorption_only=False) -> None:
     if len(models) <= 1:
         return
     reference = models[0]
@@ -2935,7 +2905,7 @@ def fit_prepared(
             )
             _freeze_prepared_parameters(group_model, frozen_parameters)
         if joint_normalization == "independent":
-            _link_default_prepared_model_groups(group_models, model_name, shared_absorption_only=shared_absorption_only)
+            _link_default_prepared_model_groups(group_models, shared_absorption_only=shared_absorption_only)
         else:
             reference = group_models[0]
             if joint_normalization == "cross_calibration":
@@ -2969,9 +2939,7 @@ def fit_prepared(
 
         command = error_command or _prepared_error_parameters(
             model,
-            model_name,
             group_models,
-            intrinsic_nh_mode=intrinsic_nh_mode,
             delta_stat=error_delta_stat,
         )
         error_text = ""
@@ -3527,7 +3495,7 @@ def _candidate_is_well_constrained(
 
 def _xray_shape_diagnostics(spec: XRayModelSpec, result: Mapping[str, Any]) -> dict[str, Any]:
     """Keep unresolved curvature/mixtures explicit instead of a classification."""
-    constrained, problems = _candidate_is_well_constrained(spec, result)
+    _, problems = _candidate_is_well_constrained(spec, result)
     states = []
     groups = result.get("per_group") or [{"group_index": 1, "parameters": result.get("parameters") or {}}]
     thermal = []
@@ -3551,7 +3519,7 @@ def _xray_shape_diagnostics(spec: XRayModelSpec, result: Mapping[str, Any]) -> d
         states.append("shape_parameters_not_constrained")
     if spec.family in {"bbpl", "double_apec"} and any("norm" in problem for problem in problems):
         states.append("components_not_separately_constrained")
-    return {"status": "constrained" if constrained and not states else "requires_review",
+    return {"status": "constrained" if not problems and not states else "requires_review",
             "states": list(dict.fromkeys(states)), "problems": problems,
             **({"thermal_components": thermal} if thermal else {})}
 

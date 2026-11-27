@@ -67,6 +67,7 @@ from jinwu.core.fit import (
     calculate_bayesian_model_metrics,
     resolve_xray_model_specs,
 )
+from jinwu.core.products import jsonable
 
 __all__ = [
     "BXAPriorSpec",
@@ -158,7 +159,7 @@ def _unify_soft_bounds(parameter, low=None, high=None) -> tuple[float, float]:
     return bottom, top
 
 
-def _build_transformation(priors, model, parameter, spec, bottom, top):
+def _build_transformation(priors, model, parameter, spec, bottom):
     """Dispatch to the appropriate ``bxa.xspec.priors.create_*_prior_for``."""
     kind = spec.kind
     if kind == "uniform":
@@ -245,7 +246,7 @@ def resolve_priors(
                 bottom, top = _unify_soft_bounds(parameter, spec.low, spec.high)
                 transformations.append(
                     _build_transformation(
-                        priors, group_model, parameter, spec, bottom, top
+                        priors, group_model, parameter, spec, bottom
                     )
                 )
     if not transformations:
@@ -257,23 +258,12 @@ def resolve_priors(
 
 
 def _json_safe(value: Any) -> Any:
-    """Recursively convert numpy arrays/scalars into JSON-native containers."""
-    if isinstance(value, np.ndarray):
-        return [_json_safe(item) for item in value.tolist()]
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Mapping):
-        return {str(key): _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, (str, bool, int, float)) or value is None:
-        return value
-    if hasattr(value, "tolist"):
-        try:
-            return _json_safe(value.tolist())
-        except Exception:  # pragma: no cover - defensive
-            return str(value)
-    return str(value)
+    """Recursively convert a BXA payload into JSON-native containers.
+
+    Delegates to :func:`jinwu.core.products.jsonable`; unknown objects are
+    stringified so nested sampler objects cannot break ``json.dumps``.
+    """
+    return jsonable(value, stringify_unknown=True)
 
 
 @dataclass(slots=True)
@@ -542,7 +532,7 @@ def fit_prepared_bxa(
                 intrinsic_nh_mode=intrinsic_nh_mode,
             )
             _freeze_prepared_parameters(group_model, frozen_parameters)
-        _link_default_prepared_model_groups(group_models, model_name)
+        _link_default_prepared_model_groups(group_models)
 
         # Maximum-likelihood warm start so nested sampling begins near the peak.
         perform_text = _capture_xspec_log(

@@ -73,6 +73,38 @@ class ValidationReport:
         """
         return [m for m in self.messages if m.level == 'WARN']
 
+# ---------------- GTI helper ----------------
+
+def _read_gti_table(hdul: Any, *, continue_on_empty: bool = False) -> Optional[list[tuple[float, float]]]:
+    """Read the first GTI table from an opened HDUList.
+
+    START/STOP take precedence over TSTART/TSTOP. ``continue_on_empty`` keeps
+    scanning after an empty GTI extension; otherwise the first empty GTI returns
+    None. Numeric conversion failures return None.
+    """
+    if hdul is None:
+        return None
+    for hdu in hdul:
+        header = getattr(hdu, "header", {})
+        name = (header.get("EXTNAME") or "").upper() if header else ""
+        if name == "GTI" or getattr(hdu, "name", "").upper() == "GTI":
+            data = getattr(hdu, "data", None)
+            if data is None:
+                if continue_on_empty:
+                    continue
+                return None
+            columns = getattr(data, "columns", None)
+            names = [str(column).upper() for column in (columns.names if columns is not None else [])]
+            start_col = next((candidate for candidate in ("START", "TSTART") if candidate in names), None)
+            stop_col = next((candidate for candidate in ("STOP", "TSTOP") if candidate in names), None)
+            if start_col and stop_col:
+                try:
+                    return [(float(start), float(stop)) for start, stop in zip(data[start_col], data[stop_col])]
+                except Exception:
+                    return None
+    return None
+
+
 # ---------------- Base FITS Class ----------------
 
 @dataclass(slots=True, eq=False)
@@ -233,35 +265,7 @@ class OgipTimeSeriesBase(OgipFitsBase):
         参考：OGIP/93-003 "The Proposed Timing FITS File Format for High Energy
               Astrophysics Data"（GTI 扩展含 START/STOP 两列）。
         """
-        if hdul is None:
-            return None
-        for hdu in hdul:
-            hdr = getattr(hdu, 'header', {})
-            name = (hdr.get('EXTNAME') or '').upper() if hdr else ''
-            if name == 'GTI' or getattr(hdu, 'name', '').upper() == 'GTI':
-                data = getattr(hdu, 'data', None)
-                if data is None:
-                    return None
-                cols = getattr(data, 'columns', None)
-                colnames = [n.upper() for n in (cols.names if cols is not None else [])]
-                start_col = None
-                stop_col = None
-                for n in ['START', 'TSTART']:
-                    if n in colnames:
-                        start_col = n
-                        break
-                for n in ['STOP', 'TSTOP']:
-                    if n in colnames:
-                        stop_col = n
-                        break
-                if start_col and stop_col:
-                    arr_start = data[start_col]
-                    arr_stop = data[stop_col]
-                    try:
-                        return [(float(s), float(e)) for s, e in zip(arr_start, arr_stop)]
-                    except Exception:
-                        return None
-        return None
+        return _read_gti_table(hdul)
 
 @dataclass(slots=True, eq=False)
 class OgipSpectrumBase(OgipFitsBase):

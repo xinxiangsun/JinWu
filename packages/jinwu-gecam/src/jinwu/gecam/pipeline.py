@@ -150,8 +150,7 @@ class GECAMPipeline(InstrumentPipeline[GECAMInput, dict]):
         return tuple(deps)
 
     def _input_path(self, path):
-        path = Path(path).expanduser()
-        return (path if path.is_absolute() else self.input.resolved_root()/path).resolve()
+        return self.input.resolve_path(path)
 
     def validate_input(self):
         c = self.config
@@ -172,15 +171,9 @@ class GECAMPipeline(InstrumentPipeline[GECAMInput, dict]):
             raise ValueError("detectors must contain unique GRD integers from 1 to 25")
         if c.gain not in {"high", "low"}:
             raise ValueError("gain must be high or low; run gains separately")
-        bounds = backend._values(c.time_range, u.s, "time_range")
-        step = backend._values(c.time_bin, u.s, "time_bin")
-        edges = backend._values(c.energy_edges, u.keV, "energy_edges")
-        if bounds.shape != (2,) or bounds[1] <= bounds[0]:
-            raise ValueError("time_range must be increasing [start, stop] MET")
-        if step.ndim != 0 or step <= 0:
-            raise ValueError("time_bin must be a positive scalar")
-        if edges.ndim != 1 or len(edges) < 2 or np.any(edges <= 0) or np.any(np.diff(edges) <= 0):
-            raise ValueError("energy_edges must be positive and increasing")
+        bounds, step, edges = backend.validate_selection(
+            time_range=c.time_range, time_bin=c.time_bin, energy_edges=c.energy_edges,
+        )
         if (c.source_intervals is None) != (c.background_intervals is None):
             raise ValueError("Provide both source_intervals and background_intervals")
         if set(c.responses) - set(c.detectors):
@@ -245,6 +238,8 @@ class GECAMPipeline(InstrumentPipeline[GECAMInput, dict]):
             })
         output = Path(tempfile.mkdtemp(prefix=f"{stage.name}-", dir=self.workspace))
         paths, diagnostics = {}, {}
+        source_spectra: dict[int, str] = {}
+        background_spectra: dict[int, str] = {}
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             for detector in c.detectors:
@@ -288,9 +283,16 @@ class GECAMPipeline(InstrumentPipeline[GECAMInput, dict]):
                                 ):
                                     raise ValueError(f"Invalid spectrum values or exposure for {native_key}")
                         for kind, path in zip(("full", "background", "net"), products["spec_path_list"], strict=True):
-                            paths[f"{native_key}_{kind}"] = str(Path(path).resolve())
+                            resolved = str(Path(path).resolve())
+                            paths[f"{native_key}_{kind}"] = resolved
+                            if kind == "full":
+                                source_spectra[detector] = resolved
+                            elif kind == "background":
+                                background_spectra[detector] = resolved
                         diagnostics[native_key] = {"response_supplied": detector in c.responses}
         return StageResult(outputs=paths, data={"enabled": True, "detectors": diagnostics,
+                                               "source_spectra": source_spectra,
+                                               "background_spectra": background_spectra,
                                                "warnings": list(dict.fromkeys(str(w.message) for w in caught))})
 
     def _analyze(self, context):
@@ -310,12 +312,9 @@ class GECAMPipeline(InstrumentPipeline[GECAMInput, dict]):
                 context["lightcurve"].outputs, outdir=output / "lightcurves",
                 reference_utc=reference_utc, telescope=telescope, target_id=self.input.target_id,
             )
-            spectra, backgrounds = {}, {}
-            for key, path in context["spectra"].outputs.items():
-                if key.endswith("_full"):
-                    detector = int(key[2:4])  # GECAMTools keys such as bg17H_full
-                    spectra[detector] = path
-                    backgrounds[detector] = context["spectra"].outputs[key[:-5] + "_background"]
+            spectra_data = context["spectra"].data
+            spectra = {int(detector): path for detector, path in spectra_data.get("source_spectra", {}).items()}
+            backgrounds = {int(detector): path for detector, path in spectra_data.get("background_spectra", {}).items()}
         else:
             curves = tuple(replace(item, path=self._input_path(item.path)) for item in self.input.lightcurve_products)
             spectra = {d: self._input_path(p) for d, p in self.input.source_spectra.items()}

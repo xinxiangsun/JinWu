@@ -26,16 +26,14 @@ for multiple missions, and utilities for safe, precise UTC/MET conversions.
 """
 
 from astropy.time import Time, TimeDelta
-from astropy.time.formats import TimeFromEpoch, TimeUnix, TimeNumeric
+from astropy.time.formats import TimeFromEpoch, TimeNumeric
 from astropy.time.core import ScaleValueError
 import erfa
 import numpy as np
 import re
 from pathlib import Path
-from astropy.io import fits
 from typing import Tuple, List, Dict, Optional, Union, cast
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.dates import AutoDateLocator, DateFormatter
 import astropy.units as u
 
@@ -189,6 +187,7 @@ def _leap_seconds_from_elapsed(elapsed_seconds):
     if scalar_input:
         return float(leaps[0])
     return leaps.reshape(sec_array.shape)
+
 
 
 # 方法：闰秒换算采用 ERFA/astropy.time 口径：TAI−UTC（erfa.dat，等价 SOFA iauDat）在
@@ -1178,7 +1177,7 @@ def plot_time_intervals(
     if n_axes == 0:
         raise ValueError("At least one time axis must be shown")
 
-    figsize = paper_figsize((14, 6)) if figsize is None else tuple(figsize)
+    figsize = paper_figsize((14, 6), figsize)
     fig, axes = plt.subplots(n_axes, 1, figsize=figsize, sharex=False)
     narrow = fig.get_figwidth() < 7
     if n_axes == 1:

@@ -230,6 +230,81 @@ def _load_signal_counts_npz(npz_path: str, *, area_ratio: Optional[float],
 
 # ------------------------------ 主流程 API ------------------------------
 
+def _k_config_kwargs(cfg: XspecConfig) -> Dict[str, Any]:
+	"""Return the explicit XSPEC factory arguments encoded by ``cfg``."""
+	return {
+		'arf': cfg.arf,
+		'rmf': cfg.rmf,
+		'background': cfg.background,
+		'model': cfg.model,
+		'params': tuple(cfg.params),
+		'band': cfg.band,
+		'exposure': cfg.exposure,
+		'back_exposure': cfg.back_exposure,
+		'xspec_abund': cfg.xspec_abund,
+		'xspec_xsect': cfg.xspec_xsect,
+		'xspec_cosmo': cfg.xspec_cosmo,
+		'allow_prompting': cfg.allow_prompting,
+	}
+
+
+def _k_for_config(cfg: XspecConfig) -> float:
+	"""Return ``K`` for one explicit configuration."""
+	return _K_FACTORY.get_K(**_k_config_kwargs(cfg))
+
+
+def _flux_on_target_grid(
+	npz_path: str,
+	cfg_ref: XspecConfig,
+	cfg_tgt: Optional[XspecConfig],
+	*,
+	area_ratio: Optional[float],
+	input_background_rate: Optional[float],
+	z0: Optional[float],
+	z: Optional[float],
+	T0: Optional[float],
+	target_dt: Optional[float],
+) -> Tuple[np.ndarray, float, np.ndarray, float, float, float, float]:
+	"""Prepare target time/flux grids shared by single and ON/OFF builders.
+
+	Returns ``(time, dt, flux, K_ref, K_tgt, S_t, dt_in)``.  The time stretch,
+	linear interpolation and response-scaling order match the original public
+	builders; sampling and target-background policy remain with each caller.
+	"""
+	time, counts, dt_in = _load_signal_counts_npz(
+		npz_path, area_ratio=area_ratio, input_background_rate=input_background_rate)
+	rate_in = np.asarray(counts, dtype=float) / float(dt_in)
+	K_ref = _k_for_config(cfg_ref)
+	flux = rate_in / float(K_ref)
+
+	if (z0 is not None) and (z is not None):
+		S_t = float(1.0 + z) / float(1.0 + z0)
+		if T0 is None:
+			T0 = float(time[0])
+		t_out_native = T0 + (time - T0) * S_t
+		dt_out_native = float(dt_in) * S_t
+		if (target_dt is None) or (target_dt <= 0):
+			t_out = t_out_native
+			dt_out = dt_out_native
+			flux_out = flux.copy()
+		else:
+			dt_out = float(target_dt)
+			t_start = float(t_out_native[0])
+			t_stop = float(t_out_native[-1])
+			nbin = int(max(1, np.floor((t_stop - t_start) / dt_out)))
+			t_out = t_start + np.arange(nbin, dtype=float) * dt_out
+			flux_out = np.interp(T0 + (t_out - T0) / S_t, time, flux, left=0.0, right=0.0)
+	else:
+		t_out = time.copy()
+		dt_out = float(dt_in)
+		flux_out = flux.copy()
+		S_t = 1.0
+
+	cfg_eff = cfg_tgt if cfg_tgt is not None else cfg_ref
+	K_tgt = _k_for_config(cfg_eff)
+	return t_out, float(dt_out), flux_out, float(K_ref), float(K_tgt), float(S_t), float(dt_in)
+
+
 def build_fake_from_npz(
 	npz_path: str,
 	cfg_ref: XspecConfig,
@@ -257,71 +332,12 @@ def build_fake_from_npz(
 	  background_rate 只指定目标观测背景，不参与源光谱/红移缩放。
 	- 返回：`LCSimResult(time, counts, dt, rate, error, meta)`
 	"""
-	# 1) 读入 NPZ 计数光变 | Read counts LC
-	time, counts, dt_in = _load_signal_counts_npz(
-		npz_path, area_ratio=area_ratio, input_background_rate=input_background_rate)
-	rate_in = np.asarray(counts, dtype=float) / float(dt_in)
-
-	# 2) 计算 K_ref 并得到 flux(t) | Compute K_ref and flux(t)
-	K_ref = _K_FACTORY.get_K(
-		arf=cfg_ref.arf,
-		rmf=cfg_ref.rmf,
-		background=cfg_ref.background,
-		model=cfg_ref.model,
-		params=tuple(cfg_ref.params),
-		band=cfg_ref.band,
-		exposure=cfg_ref.exposure,
-		back_exposure=cfg_ref.back_exposure,
-		xspec_abund=cfg_ref.xspec_abund,
-		xspec_xsect=cfg_ref.xspec_xsect,
-		xspec_cosmo=cfg_ref.xspec_cosmo,
-		allow_prompting=cfg_ref.allow_prompting,
-	)
-	flux = rate_in / float(K_ref)
-
-	# 3) 时间伸缩（如需要）| Time-stretch if requested
-	if (z0 is not None) and (z is not None):
-		S_t = float(1.0 + z) / float(1.0 + z0)
-		if T0 is None:
-			T0 = float(time[0])
-		t_out_native = T0 + (time - T0) * S_t
-		dt_out_native = float(dt_in) * S_t
-		if (target_dt is None) or (target_dt <= 0):
-			t_out = t_out_native
-			dt_out = dt_out_native
-			flux_out = flux.copy()
-		else:
-			dt_out = float(target_dt)
-			t_start = float(t_out_native[0])
-			t_stop = float(t_out_native[-1])
-			nbin = int(max(1, np.floor((t_stop - t_start) / dt_out)))
-			t_out = t_start + np.arange(nbin, dtype=float) * dt_out
-			# s(t)=flux/F_ref 再映射也可以；这里直接对 flux 做线性插值（守恒可后续增强）
-			# Alternatively, rebin by integrating flux; here we use linear interp for simplicity.
-			flux_out = np.interp(T0 + (t_out - T0) / S_t, time, flux, left=0.0, right=0.0)
-	else:
-		# 不伸缩
-		t_out = time.copy()
-		dt_out = float(dt_in)
-		flux_out = flux.copy()
-		S_t = 1.0
-
-	# 4) 计算 K_tgt 并得到 rate'(t) | Compute K_tgt and source rate
-	cfg_eff = cfg_tgt if cfg_tgt is not None else cfg_ref
-	K_tgt = _K_FACTORY.get_K(
-		arf=cfg_eff.arf,
-		rmf=cfg_eff.rmf,
-		background=cfg_eff.background,
-		model=cfg_eff.model,
-		params=tuple(cfg_eff.params),
-		band=cfg_eff.band,
-		exposure=cfg_eff.exposure,
-		back_exposure=cfg_eff.back_exposure,
-		xspec_abund=cfg_eff.xspec_abund,
-		xspec_xsect=cfg_eff.xspec_xsect,
-		xspec_cosmo=cfg_eff.xspec_cosmo,
-		allow_prompting=cfg_eff.allow_prompting,
-	)
+	# 1–4) 读取模板、K_ref→flux、时间伸缩/重采样、K_tgt→源率
+	t_out, dt_out, flux_out, K_ref, K_tgt, S_t, dt_in = _flux_on_target_grid(
+		npz_path, cfg_ref, cfg_tgt,
+		area_ratio=area_ratio,
+		input_background_rate=input_background_rate,
+		z0=z0, z=z, T0=T0, target_dt=target_dt)
 	rate_src = np.clip(flux_out * float(K_tgt), a_min=0.0, a_max=None)
 
 	# 5) 背景与泊松采样 | Background add and Poisson draw
@@ -389,68 +405,12 @@ def build_fake_on_off_from_npz(
 	- 输出 counts_on = n_signal + n_bkg_on，counts_off = n_bkg_off。
 	"""
 
-	# 1) 读入 NPZ（只用时间轴与源区域输入的计数来推导源信号形状）
-	time, counts, dt_in = _load_signal_counts_npz(
-		npz_path, area_ratio=alpha, input_background_rate=input_background_rate)
-	rate_in = np.asarray(counts, dtype=float) / float(dt_in)
-
-	# 2) K_ref → flux
-	K_ref = _K_FACTORY.get_K(
-		arf=cfg_ref.arf,
-		rmf=cfg_ref.rmf,
-		background=cfg_ref.background,
-		model=cfg_ref.model,
-		params=tuple(cfg_ref.params),
-		band=cfg_ref.band,
-		exposure=cfg_ref.exposure,
-		back_exposure=cfg_ref.back_exposure,
-		xspec_abund=cfg_ref.xspec_abund,
-		xspec_xsect=cfg_ref.xspec_xsect,
-		xspec_cosmo=cfg_ref.xspec_cosmo,
-		allow_prompting=cfg_ref.allow_prompting,
-	)
-	flux = rate_in / float(K_ref)
-
-	# 3) 时间伸缩（如需要）
-	if (z0 is not None) and (z is not None):
-		S_t = float(1.0 + z) / float(1.0 + z0)
-		if T0 is None:
-			T0 = float(time[0])
-		t_out_native = T0 + (time - T0) * S_t
-		dt_out_native = float(dt_in) * S_t
-		if (target_dt is None) or (target_dt <= 0):
-			t_out = t_out_native
-			dt_out = dt_out_native
-			flux_out = flux.copy()
-		else:
-			dt_out = float(target_dt)
-			t_start = float(t_out_native[0])
-			t_stop = float(t_out_native[-1])
-			nbin = int(max(1, np.floor((t_stop - t_start) / dt_out)))
-			t_out = t_start + np.arange(nbin, dtype=float) * dt_out
-			flux_out = np.interp(T0 + (t_out - T0) / S_t, time, flux, left=0.0, right=0.0)
-	else:
-		t_out = time.copy()
-		dt_out = float(dt_in)
-		flux_out = flux.copy()
-		S_t = 1.0
-
-	# 4) K_tgt → 源信号速率（仅 ON）
-	cfg_eff = cfg_tgt if cfg_tgt is not None else cfg_ref
-	K_tgt = _K_FACTORY.get_K(
-		arf=cfg_eff.arf,
-		rmf=cfg_eff.rmf,
-		background=cfg_eff.background,
-		model=cfg_eff.model,
-		params=tuple(cfg_eff.params),
-		band=cfg_eff.band,
-		exposure=cfg_eff.exposure,
-		back_exposure=cfg_eff.back_exposure,
-		xspec_abund=cfg_eff.xspec_abund,
-		xspec_xsect=cfg_eff.xspec_xsect,
-		xspec_cosmo=cfg_eff.xspec_cosmo,
-		allow_prompting=cfg_eff.allow_prompting,
-	)
+	# 1–4) 读取模板、K_ref→flux、时间伸缩/重采样、K_tgt→ON 源率
+	t_out, dt_out, flux_out, K_ref, K_tgt, S_t, dt_in = _flux_on_target_grid(
+		npz_path, cfg_ref, cfg_tgt,
+		area_ratio=alpha,
+		input_background_rate=input_background_rate,
+		z0=z0, z=z, T0=T0, target_dt=target_dt)
 	rate_signal_on = np.clip(flux_out * float(K_tgt), a_min=0.0, a_max=None)
 
 	# 5) 背景率（OFF 与 ON）
@@ -690,20 +650,7 @@ def generate_redshift_lightcurves(
 	from jinwu.background.backprior import BackgroundCountsPosterior
 	
 	# 1. 通过 XspecKFactory 获取目标红移的 K, rate, flux
-	K_z, rate_z, flux_z = _K_FACTORY.get_K_with_values(
-		arf=cfg.arf,
-		rmf=cfg.rmf,
-		background=cfg.background,
-		model=cfg.model,
-		params=tuple(cfg.params),
-		band=cfg.band,
-		exposure=cfg.exposure,
-		back_exposure=cfg.back_exposure,
-		xspec_abund=cfg.xspec_abund,
-		xspec_xsect=cfg.xspec_xsect,
-		xspec_cosmo=cfg.xspec_cosmo,
-		allow_prompting=cfg.allow_prompting,
-	)
+	K_z, rate_z, flux_z = _K_FACTORY.get_K_with_values(**_k_config_kwargs(cfg))
 	
 	# 2. 红移缩放因子
 	time_scale = (1 + z) / (1 + z0)

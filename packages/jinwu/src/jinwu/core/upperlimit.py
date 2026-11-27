@@ -28,7 +28,7 @@ from scipy.optimize import brentq, minimize, minimize_scalar
 from scipy.special import gammaincc, gammainccinv, xlogy
 
 from jinwu.core.config import InstrumentConfig, UpperLimitConfig
-from jinwu.core.products import sha256_file
+from jinwu.core.products import jsonable as _json_safe, sha256_file
 from jinwu.core.fit import (
     XspecChainResult,
     _require_xspec,
@@ -148,10 +148,10 @@ class OneSidedLevel:
         if not math.isfinite(value) or not 0.5 < value < 1.0:
             raise ValueError("one-sided confidence must be between 0.5 and 1")
         sigma = NormalDist().inv_cdf(value)
-        return cls(
-            sigma=float(sigma),
+        level = cls.from_sigma(float(sigma))
+        return replace(
+            level,
             confidence=value,
-            delta_stat=float(sigma * sigma),
             label=f"one-sided {100.0 * value:g}%",
         )
 
@@ -1572,29 +1572,20 @@ class _ProfileLikelihood:
         return float(total)
 
 
-def estimate_upper_limit(
+def _prepare_profile_context(
     observations: UpperLimitObservation | Sequence[UpperLimitObservation],
     *,
     model: CountTemplateModel | str | Any,
     instrument_config: InstrumentConfig,
     interval: tuple[float, float],
-    energy_band: tuple[float, float] | None = None,
-    sensitivity_adapter: DetectionSensitivityAdapter | None = None,
-    output_dir: str | Path | None = None,
-    seed: int = 42,
-    plots: bool = True,
-) -> ResponseAwareUpperLimitResult:
-    """Estimate instrument-configured observed bounds and sensitivities.
-
-    The model shape is fixed.  Each observation must either contain
-    ``unit_source_counts`` or the supplied :class:`CountTemplateModel` must
-    fold the model through that observation's response.  No ``method``
-    argument is accepted: the strategy is selected by
-    ``instrument_config.upper_limit``.
-    """
+    energy_band: tuple[float, float] | None,
+    label: str,
+    disabled_reason: str,
+) -> tuple[Any, Any, tuple[float, float], tuple[float, float], list[UpperLimitObservation], list[Any], list[str]]:
+    """Validate policy/observations and prepare the shared profile context."""
     policy = instrument_config.upper_limit
     if not policy.enabled or policy.strategy == "unsupported":
-        reason = policy.unavailable_reason or "Upper-limit calculation is disabled."
+        reason = policy.unavailable_reason or disabled_reason
         raise NotImplementedError(f"{instrument_config.name}: {reason}")
     strategy = _UPPER_LIMIT_STRATEGIES.get(policy.strategy)
     if strategy is None:
@@ -1616,13 +1607,12 @@ def estimate_upper_limit(
         else list(observations)
     )
     if not raw_observations:
-        raise ValueError("At least one upper-limit observation is required")
+        raise ValueError(f"At least one {label.lower()} observation is required")
     names = [str(item.name) for item in raw_observations]
     if any(not name.strip() for name in names) or len(set(names)) != len(names):
-        raise ValueError("Upper-limit observation names must be non-empty and unique")
+        raise ValueError(f"{label} observation names must be non-empty and unique")
     _validate_combination_count(policy, len(raw_observations))
 
-    model_info = _model_information(model)
     warnings_list: list[str] = []
     prepared = [
         _prepare_observation(
@@ -1635,39 +1625,121 @@ def estimate_upper_limit(
         )
         for observation in raw_observations
     ]
+    return policy, strategy, interval_checked, band_checked, raw_observations, prepared, warnings_list
+
+
+def _rapid_xmm_bound(
+    prepared: Sequence[_PreparedObservation],
+    raw_observations: Sequence[UpperLimitObservation],
+    *,
+    level: OneSidedLevel,
+    model_info: Mapping[str, Any],
+    warnings_list: list[str],
+) -> tuple[dict[str, float], _ProfileLikelihood, _ProfileFitState, ObservedUpperBound]:
+    """Pool aperture counts and build the fixed-background posterior bound.
+
+    RapidXMM pools aperture counts (Ruiz et al. 2022, eq. 10); it is not the
+    product of the channel/module posteriors for a common flux.  Validation,
+    pooling, the level rewrite and the result construction stay together so
+    the posterior branch has one auditable state.
+    """
+    if any(np.any(item.source_counts != np.floor(item.source_counts)) for item in prepared):
+        raise ValueError("rapid_xmm requires integer total aperture counts, not net rates")
+    if any(
+        raw.background_sigma is not None or raw.background_covariance is not None
+        for raw in raw_observations
+    ):
+        raise ValueError("rapid_xmm assumes fixed background; background errors are not supported")
+    counts = float(sum(np.sum(item.source_counts) for item in prepared))
+    background = float(sum(
+        np.sum(item.alpha * item.background_counts)
+        if item.background_counts is not None
+        else np.sum(item.background_model)
+        for item in prepared
+    ))
+    conversion = float(sum(np.sum(item.unit_source_counts) for item in prepared))
+    aperture_totals = {
+        "counts": counts,
+        "background": background,
+        "unit_source_counts": conversion,
+    }
+    aperture = replace(
+        prepared[0],
+        source_counts=np.asarray([counts]),
+        unit_source_counts=np.asarray([conversion]),
+        background_model=np.asarray([background]),
+        background_counts=None,
+        alpha=None,
+    )
+    likelihood = _ProfileLikelihood([aperture], "known_background")
+    fit_state = likelihood.fit()
+    warnings_list.append(
+        "RapidXMM uses a uniform prior on non-negative source counts and a fixed "
+        "background expectation; background uncertainty is not propagated. "
+        "Selected channels/modules are pooled into one aperture count measurement."
+    )
+    amplitude_upper = rapid_xmm_upper_limit(
+        counts, background, confidence=level.confidence,
+    ) / conversion
+    amplitude_mle = fit_state.amplitude_mle
+    observed = ObservedUpperBound(
+        amplitude_mle=amplitude_mle,
+        amplitude_upper=amplitude_upper,
+        amplitude_unit=model_info["amplitude_unit"],
+        flux_upper=_scaled_value(amplitude_upper, model_info["flux_per_amplitude"]),
+        flux_unit=model_info["flux_unit"],
+        fluence_upper=_scaled_value(
+            amplitude_upper, model_info["fluence_per_amplitude"]
+        ),
+        fluence_unit=model_info["fluence_unit"],
+        level=replace(
+            level, delta_stat=None, label=f"posterior {100 * level.confidence:g}%",
+        ),
+        fit_statistic=fit_state.fit_statistic,
+        null_statistic=fit_state.null_statistic,
+        construction="rapid_xmm",
+        calibration_status="conditional_model",
+        signed_mle=amplitude_mle,
+        constrained_mle=amplitude_mle,
+        profile_status="not_applicable",
+        confidence_convention="posterior_quantile",
+    )
+    return aperture_totals, likelihood, fit_state, observed
+
+
+def estimate_upper_limit(
+    observations: UpperLimitObservation | Sequence[UpperLimitObservation],
+    *,
+    model: CountTemplateModel | str | Any,
+    instrument_config: InstrumentConfig,
+    interval: tuple[float, float],
+    energy_band: tuple[float, float] | None = None,
+    sensitivity_adapter: DetectionSensitivityAdapter | None = None,
+    output_dir: str | Path | None = None,
+    seed: int = 42,
+    plots: bool = True,
+) -> ResponseAwareUpperLimitResult:
+    """Estimate instrument-configured observed bounds and sensitivities.
+
+    The model shape is fixed.  Each observation must either contain
+    ``unit_source_counts`` or the supplied :class:`CountTemplateModel` must
+    fold the model through that observation's response.  No ``method``
+    argument is accepted: the strategy is selected by
+    ``instrument_config.upper_limit``.
+    """
+    policy, strategy, interval_checked, band_checked, raw_observations, prepared, warnings_list = _prepare_profile_context(
+        observations,
+        model=model,
+        instrument_config=instrument_config,
+        interval=interval,
+        energy_band=energy_band,
+        label="Upper-limit",
+        disabled_reason="Upper-limit calculation is disabled.",
+    )
+
+    model_info = _model_information(model)
     likelihood = _ProfileLikelihood(prepared, policy.background_likelihood)
     aperture_totals = None
-    if policy.observed_method == "rapid_xmm":
-        if any(np.any(item.source_counts != np.floor(item.source_counts)) for item in prepared):
-            raise ValueError("rapid_xmm requires integer total aperture counts, not net rates")
-        if any(raw.background_sigma is not None or raw.background_covariance is not None
-               for raw in raw_observations):
-            raise ValueError("rapid_xmm assumes fixed background; background errors are not supported")
-        counts = float(sum(np.sum(item.source_counts) for item in prepared))
-        background = float(sum(
-            np.sum(item.alpha * item.background_counts)
-            if item.background_counts is not None else np.sum(item.background_model)
-            for item in prepared
-        ))
-        conversion = float(sum(np.sum(item.unit_source_counts) for item in prepared))
-        aperture_totals = {
-            "counts": counts, "background": background,
-            "unit_source_counts": conversion,
-        }
-        # RapidXMM pools aperture counts (Ruiz et al. eq. 10); it is not the
-        # product of the channel/module posteriors for a common flux.
-        aperture = replace(
-            prepared[0], source_counts=np.asarray([counts]),
-            unit_source_counts=np.asarray([conversion]),
-            background_model=np.asarray([background]),
-            background_counts=None, alpha=None,
-        )
-        likelihood = _ProfileLikelihood([aperture], "known_background")
-        warnings_list.append(
-            "RapidXMM uses a uniform prior on non-negative source counts and a fixed "
-            "background expectation; background uncertainty is not propagated. "
-            "Selected channels/modules are pooled into one aperture count measurement."
-        )
     level = OneSidedLevel.from_sigma(policy.default_sigma)
     configured_false_alarm_probability = (
         1.0 - float(level.confidence)
@@ -1688,44 +1760,42 @@ def estimate_upper_limit(
         "delta_stat": np.asarray([], dtype=float),
     }
     if "observed_upper_bound" in policy.result_modes:
-        fit_state = likelihood.fit()
-        if aperture_totals is None:
+        if policy.observed_method == "rapid_xmm":
+            aperture_totals, likelihood, fit_state, observed = _rapid_xmm_bound(
+                prepared,
+                raw_observations,
+                level=level,
+                model_info=model_info,
+                warnings_list=warnings_list,
+            )
+        else:
+            fit_state = likelihood.fit()
             amplitude_mle, amplitude_upper, fit_statistic, null_statistic = (
                 likelihood.upper_bound(level, fit_state=fit_state)
             )
-        else:
-            amplitude_mle = fit_state.amplitude_mle
-            amplitude_upper = rapid_xmm_upper_limit(
-                aperture_totals["counts"], aperture_totals["background"],
-                confidence=level.confidence,
-            ) / aperture_totals["unit_source_counts"]
-            fit_statistic, null_statistic = fit_state.fit_statistic, fit_state.null_statistic
-        observed = ObservedUpperBound(
-            amplitude_mle=amplitude_mle,
-            amplitude_upper=amplitude_upper,
-            amplitude_unit=model_info["amplitude_unit"],
-            flux_upper=_scaled_value(amplitude_upper, model_info["flux_per_amplitude"]),
-            flux_unit=model_info["flux_unit"],
-            fluence_upper=_scaled_value(
-                amplitude_upper, model_info["fluence_per_amplitude"]
-            ),
-            fluence_unit=model_info["fluence_unit"],
-            level=(level if aperture_totals is None else replace(
-                level, delta_stat=None, label=f"posterior {100 * level.confidence:g}%",
-            )),
-            fit_statistic=fit_statistic,
-            null_statistic=null_statistic,
-            construction=policy.observed_method,
-            calibration_status="conditional_model",
-            signed_mle=amplitude_mle,
-            constrained_mle=amplitude_mle,
-            profile_status="ready" if aperture_totals is None else "not_applicable",
-            confidence_convention=(
-                "one_sided_gaussian_equivalent" if aperture_totals is None
-                else "posterior_quantile"
-            ),
+            observed = ObservedUpperBound(
+                amplitude_mle=amplitude_mle,
+                amplitude_upper=amplitude_upper,
+                amplitude_unit=model_info["amplitude_unit"],
+                flux_upper=_scaled_value(amplitude_upper, model_info["flux_per_amplitude"]),
+                flux_unit=model_info["flux_unit"],
+                fluence_upper=_scaled_value(
+                    amplitude_upper, model_info["fluence_per_amplitude"]
+                ),
+                fluence_unit=model_info["fluence_unit"],
+                level=level,
+                fit_statistic=fit_statistic,
+                null_statistic=null_statistic,
+                construction=policy.observed_method,
+                calibration_status="conditional_model",
+                signed_mle=amplitude_mle,
+                constrained_mle=amplitude_mle,
+                profile_status="ready",
+                confidence_convention="one_sided_gaussian_equivalent",
+            )
+        scan_amplitudes = np.linspace(
+            0.0, max(1e-12, 1.25 * observed.amplitude_upper), 240,
         )
-        scan_amplitudes = np.linspace(0.0, max(1e-12, 1.25 * amplitude_upper), 240)
         scan = {
             "amplitude": scan_amplitudes,
             "delta_stat": np.asarray(
@@ -1938,46 +2008,15 @@ def profile_source_amplitude(
     Gaussian-model background likelihood, so a pipeline cannot accidentally
     classify an event with one statistical contract and limit it with another.
     """
-    policy = instrument_config.upper_limit
-    if not policy.enabled or policy.strategy == "unsupported":
-        reason = policy.unavailable_reason or "Profile likelihood is disabled."
-        raise NotImplementedError(f"{instrument_config.name}: {reason}")
-    strategy = _UPPER_LIMIT_STRATEGIES.get(policy.strategy)
-    if strategy is None:
-        raise NotImplementedError(f"No upper-limit engine for strategy {policy.strategy!r}")
-    if policy.background_likelihood not in strategy.supported_likelihoods:
-        raise ValueError(
-            f"Strategy {policy.strategy} does not support "
-            f"{policy.background_likelihood}"
-        )
-    _validate_instrument_policy(instrument_config, policy)
-    interval_checked = _validate_interval(interval)
-    band_checked = _validate_energy_band(
-        instrument_config.energy_range_keV if energy_band is None else energy_band
+    policy, _strategy, interval_checked, band_checked, _raw_observations, prepared, warnings_list = _prepare_profile_context(
+        observations,
+        model=model,
+        instrument_config=instrument_config,
+        interval=interval,
+        energy_band=energy_band,
+        label="Profile",
+        disabled_reason="Profile likelihood is disabled.",
     )
-    raw_observations = (
-        [observations]
-        if isinstance(observations, UpperLimitObservation)
-        else list(observations)
-    )
-    if not raw_observations:
-        raise ValueError("At least one profile observation is required")
-    names = [str(item.name) for item in raw_observations]
-    if any(not name.strip() for name in names) or len(set(names)) != len(names):
-        raise ValueError("Profile observation names must be non-empty and unique")
-    _validate_combination_count(policy, len(raw_observations))
-    warnings_list: list[str] = []
-    prepared = [
-        _prepare_observation(
-            observation,
-            model=model,
-            interval=interval_checked,
-            energy_band=band_checked,
-            policy=policy,
-            warnings_list=warnings_list,
-        )
-        for observation in raw_observations
-    ]
     state = _ProfileLikelihood(prepared, policy.background_likelihood).fit()
     model_info = _model_information(model)
     # 方法：单侧渐近显著度 Z = sqrt(TS)：TS = 2*(lnL_max - lnL(A=0)) 为 A=0 边界处的似然比，
@@ -2894,20 +2933,6 @@ def _result_to_json(result: ResponseAwareUpperLimitResult) -> dict[str, Any]:
         "artifacts": dict(result.artifacts),
         "status": result.status,
     }
-
-
-def _json_safe(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {str(key): _json_safe(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    return value
 
 
 def _render_summary(result: ResponseAwareUpperLimitResult) -> str:

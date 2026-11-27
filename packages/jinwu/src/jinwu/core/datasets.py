@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING, List, Optional, Literal, Union, cast
 
 import numpy as np
 
-from jinwu.core.base import LightcurveDataBase, PhaBase, RegionArea
-from jinwu.core.ops import rebin_lightcurve
+from jinwu.core.base import LightcurveDataBase, PhaBase
+from jinwu.core.ops import _lc_to_counts, rebin_lightcurve
 
 if TYPE_CHECKING:
     from jinwu.core.data import LightcurveData, PhaData
@@ -433,32 +433,8 @@ def netdata(
         if not grid_matches(bkg_aligned):
             raise ValueError("source/background bin centers and edges do not align after rebinning")
     
-    # ========== 3. 转换到计数空间 ==========
-    def _to_counts(lc):
-        """转到计数空间 / Return counts, count error and exposure array.
-
-        曝光优先 bin_exposure，再 dt，最后 1.0；rate 乘曝光还原计数。
-        无误差时取 sqrt(max(counts, 0))；value 缺失抛 ValueError。
-        Prefer bin_exposure, then dt, then 1.0. Multiply rates/errors by exposure;
-        absent errors use sqrt(max(counts, 0)). Missing value raises ValueError.
-        """
-        if lc.value is None:
-            raise ValueError("LightcurveData.value is None")
-        exp = lc.bin_exposure if lc.bin_exposure is not None else (lc.dt if lc.dt is not None else 1.0)
-        exp_arr = np.asarray(exp, dtype=float)
-        val = np.asarray(lc.value, dtype=float)
-        
-        if lc.is_rate:
-            counts = val * exp_arr
-            err_counts = (np.asarray(lc.error, dtype=float) * exp_arr) if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
-        else:
-            counts = val
-            err_counts = np.asarray(lc.error, dtype=float) if lc.error is not None else np.sqrt(np.maximum(counts, 0.0))
-        
-        return counts, err_counts, exp_arr
-    
-    src_counts, src_err, src_exp_arr = _to_counts(src_lc)
-    bkg_counts, bkg_err, _ = _to_counts(bkg_aligned)
+    src_counts, src_err, src_exp_arr = _lc_to_counts(src_lc, exposure_policy="raw")[3:]
+    bkg_counts, bkg_err, _ = _lc_to_counts(bkg_aligned, exposure_policy="raw")[3:]
     
     # ========== 4. 执行减法（计数空间） ==========
     net_counts = src_counts - float(ratio) * bkg_counts - float(offset)

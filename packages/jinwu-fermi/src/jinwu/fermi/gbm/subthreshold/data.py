@@ -2,14 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-import re
 import warnings
 import numpy as np
 import astropy.units as u
 
 from jinwu.core.time import Time
-from ..pipeline import _intersect_intervals, _merge_intervals, validate_background_residuals
+from ..pipeline import _intersect_intervals, validate_background_residuals
 from .models import CHANNEL_EDGES, seconds
 
 

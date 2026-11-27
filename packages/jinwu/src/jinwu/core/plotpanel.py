@@ -263,7 +263,7 @@ def _default_ylabel(ykey: str) -> str:
     }.get(ykey, "Y")
 
 
-def _series_from_mapping(obj: Mapping, ykind: str) -> SeriesData:
+def _series_from_mapping(obj: Mapping) -> SeriesData:
     x = y = None
     xkey = ykey = ""
     for k in ("time", "x", "channels"):
@@ -311,7 +311,7 @@ def _extract_series(obj, ykind: str = "auto") -> SeriesData:
     if kind == "pha" or hasattr(obj, "channels"):
         return _series_from_pha(obj, ykind)
     if isinstance(obj, Mapping):
-        return _series_from_mapping(obj, ykind)
+        return _series_from_mapping(obj)
     if _is_raw_array_tuple(obj):
         return _series_from_tuple(obj)
 

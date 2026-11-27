@@ -92,9 +92,6 @@ class DockerRunner:
             args += ["--env", f"{key}={value}"]
         return args + [str(target)] + [os.fspath(arg) for arg in command]
 
-    def _build_command(self, command, existing=False, env=None):
-        """Compatibility with the original local draft."""
-        return self.build_command(command, existing=existing, env=env)
 
     def run(self, command, *, existing=False, env=None, timeout=None,
             capture_output=True, check=True, log_path=None):

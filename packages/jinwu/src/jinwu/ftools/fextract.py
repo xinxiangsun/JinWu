@@ -12,34 +12,10 @@ from typing import Optional
 
 import numpy as np
 
-from ..core.base import OgipMeta
 from ..core.data import PhaData, EventData
 from ..core.io import read_evt
 from ..core import gti as gtimod
 from . import region as regionmod
-
-def _estimate_exposure_from_eventdata(ev: EventData, *, tmin=None, tmax=None) -> float:
-    def clipped_width(starts, stops):
-        starts = np.asarray(starts, dtype=float)
-        stops = np.asarray(stops, dtype=float)
-        if tmin is not None:
-            starts = np.maximum(starts, float(tmin))
-        if tmax is not None:
-            stops = np.minimum(stops, float(tmax))
-        return float(np.maximum(stops - starts, 0.0).sum())
-
-    if ev.gti_start is not None and ev.gti_stop is not None:
-        ms, me = gtimod.merge_gti(ev.gti_start, ev.gti_stop)
-        if ms is not None and me is not None and ms.size > 0:
-            return clipped_width(ms, me)
-    if ev.meta is not None and isinstance(ev.meta, OgipMeta):
-        tstart = getattr(ev.meta, 'tstart', None)
-        tstop = getattr(ev.meta, 'tstop', None)
-        if tstart is not None and tstop is not None:
-            return clipped_width([tstart], [tstop])
-    if hasattr(ev, 'time') and ev.time is not None and getattr(ev.time, 'size', 0) > 0:
-        return clipped_width([np.min(ev.time)], [np.max(ev.time)])
-    return 0.0
 
 def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None,
             tmin: Optional[float] = None, tmax: Optional[float] = None,
@@ -84,7 +60,7 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
         arr = arr[arr <= int(ch_max)]
 
     if arr.size == 0 and nbins is None:
-        exposure = _estimate_exposure_from_eventdata(ev, tmin=tmin, tmax=tmax)
+        exposure = gtimod.estimate_exposure_from_eventdata(ev, tmin=tmin, tmax=tmax)
         # PhaData.kind 是 ClassVar，不需要在构造函数中传入
         return PhaData(path=ev.path, channels=np.array([], dtype=int), counts=np.array([], dtype=float),
                        stat_err=None, exposure=exposure, backscal=None, areascal=None,
@@ -103,7 +79,7 @@ def extract(path_or_ev: str | Path | EventData, *, region: Optional[dict] = None
         counts, _ = np.histogram(arr, bins=bins)
 
     stat_err = np.sqrt(counts.astype(float))
-    exposure = _estimate_exposure_from_eventdata(ev, tmin=tmin, tmax=tmax)
+    exposure = gtimod.estimate_exposure_from_eventdata(ev, tmin=tmin, tmax=tmax)
 
     # 构造 PhaData 时同样不需要传入 kind
     pha = PhaData(path=ev.path, channels=channels, counts=counts.astype(float), stat_err=stat_err,

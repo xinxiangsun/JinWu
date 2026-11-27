@@ -1037,6 +1037,27 @@ class TestMagnitude:
         assert hasattr(flux, 'error') or flux.error is not None, \
             "Integrated flux should have propagated error"
 
+    @pytest.mark.parametrize("method_name,unit", [
+        ("to_fnu", "erg/(cm2 s Hz)"),
+        ("to_flam", "erg/(cm2 s Angstrom)"),
+        ("to_flux", "erg/(cm2 s)"),
+    ])
+    def test_flux_error_matches_first_order_magnitude_propagation(self, r_filter, method_name, unit):
+        mag = Magnitude(18.0, r_filter, system="Vega", error=0.1)
+
+        flux = getattr(mag, method_name)(unit=unit)
+
+        expected = flux * (np.log(10) / 2.5) * 0.1
+        assert flux.error.unit == flux.unit
+        assert flux.error.value == pytest.approx(expected.value, rel=0, abs=0)
+
+    def test_flux_without_magnitude_error_has_no_error_attribute(self, r_filter):
+        mag = Magnitude(18.0, r_filter, system="Vega")
+
+        assert not hasattr(mag.to_fnu(), "error")
+        assert not hasattr(mag.to_flam(), "error")
+        assert not hasattr(mag.to_flux(), "error")
+
     def test_str_representation(self, r_filter):
         """
         Test Magnitude string representation.
