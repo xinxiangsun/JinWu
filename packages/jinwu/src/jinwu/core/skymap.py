@@ -198,7 +198,7 @@ def _load_skymap(
         density_name = names.get("PROBDENSITY")
         if prob_name is None and density_name is None:
             raise ValueError("HEALPix table must contain PROB or PROBDENSITY")
-        values = np.asarray(table_hdu.data[density_name or prob_name], dtype=float)
+        values = np.asarray(table_hdu.data[density_name or prob_name], dtype=float).ravel()
         nside = int(header.get("NSIDE", primary_header.get("NSIDE", 0)))
         if nside <= 0:
             nside = int(round(float(np.sqrt(values.size / 12.0))))
@@ -221,7 +221,7 @@ def _load_skymap(
         if prob_name is not None:
             density = values / area_value
         else:
-            density = _density_column(table_hdu, density_name)
+            density = _density_column(table_hdu, density_name).ravel()
         return _finish(
             uniq, levels, ipix, density, area,
             ordering=ordering, source=label, normalize=normalize,

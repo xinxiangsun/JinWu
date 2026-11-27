@@ -131,3 +131,21 @@ def test_fermi_sources_do_not_import_jinwu_gw():
         and re.search(r"^\s*(from|import)\s+jinwu\.gw\b", path.read_text(encoding="utf-8"), re.M)
     ]
     assert offenders == [], f"jinwu-fermi imports jinwu.gw (forbidden): {offenders}"
+
+
+@pytest.mark.parametrize("column", ["PROB", "PROBDENSITY"])
+def test_flat_skymap_with_multiple_pixels_per_row(tmp_path, column):
+    masses = np.arange(1.0, 13.0)
+    values = masses if column == "PROB" else masses / (np.pi / 3.0)
+    hdu = fits.BinTableHDU.from_columns([
+        fits.Column(name=column, format="4D", array=values.reshape(3, 4),
+                    unit="sr-1" if column == "PROBDENSITY" else None),
+    ])
+    hdu.header["NSIDE"] = 1
+    hdu.header["ORDERING"] = "NESTED"
+    path = tmp_path / "vector_cells.fits"
+    fits.HDUList([fits.PrimaryHDU(), hdu]).writeto(path)
+
+    data = load_skymap(path)
+    np.testing.assert_array_equal(data.ipix, np.arange(12))
+    np.testing.assert_allclose(data.pixel_probability, masses / masses.sum())
