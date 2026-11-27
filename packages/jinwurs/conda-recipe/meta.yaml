@@ -1,9 +1,9 @@
 {% set name = "jinwurs" %}
-{% set version = "0.3.4" %}
+{% set version = "0.3.5" %}
 
 package:
   name: {{ name|lower }}
-  version: {{ version }}
+  version: "0.3.5"
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/jinwurs-{{ version }}.tar.gz

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jinwu-fermi"
-version = "0.3.4"
+version = "0.3.5"
 description = "Fermi/GBM instrument support for the jinwu analysis toolkit."
 readme = "README.md"
 license = { text = "GPL-3.0-or-later" }
