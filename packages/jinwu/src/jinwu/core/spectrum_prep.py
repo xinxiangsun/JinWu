@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from numbers import Integral
 from pathlib import Path
 import shutil
@@ -258,6 +259,7 @@ def _prepared_from_bundle(
     *,
     outdir: Path,
     group_min: int | None,
+    fit_energy_range_keV: tuple[float, float] | None,
     overwrite: bool,
 ) -> PreparedSpectrum:
     """准备单组已扫描谱 / Prepare one scanned spectrum bundle for fitting.
@@ -275,9 +277,13 @@ def _prepared_from_bundle(
     instrument_name = bundle.source_pha.instrument if bundle.source_pha else (
         "FXT" if bundle.module else "WXT"
     )
-    cfg = instrument(instrument_name)
-    resolved_group_min = int(group_min if group_min is not None else cfg.spectrum.group_min_counts or cfg.group_min_counts or 1)
-    fit_energy_range = cfg.spectrum.fit_energy_range_keV or cfg.energy_range_keV
+    if group_min is None or fit_energy_range_keV is None:
+        cfg = instrument(instrument_name)
+        if group_min is None:
+            group_min = cfg.spectrum.group_min_counts or cfg.group_min_counts or 1
+        if fit_energy_range_keV is None:
+            fit_energy_range_keV = cfg.spectrum.fit_energy_range_keV or cfg.energy_range_keV
+    resolved_group_min = int(group_min)
     diagnostics = list(bundle.diagnostics)
 
     if not bundle.ready or any(path is None for path in (source, background, arf, rmf)):
@@ -294,7 +300,7 @@ def _prepared_from_bundle(
             arf=arf,
             rmf=rmf,
             group_min=resolved_group_min,
-            energy_range_keV=fit_energy_range,
+            energy_range_keV=fit_energy_range_keV,
             diagnostics=diagnostics,
             status="partial",
         )
@@ -369,7 +375,7 @@ def _prepared_from_bundle(
         arf=arf,
         rmf=rmf,
         group_min=resolved_group_min,
-        energy_range_keV=fit_energy_range,
+        energy_range_keV=fit_energy_range_keV,
         diagnostics=diagnostics,
         status=status,
     )
@@ -407,6 +413,7 @@ def prepare_spectra(
     *,
     outdir: str | Path | None = None,
     group_min: int | None = None,
+    fit_energy_range_keV: tuple[float, float] | None = None,
     overwrite: bool = False,
 ) -> PreparedCatalog:
     """准备已扫描的能谱供拟合 / Group scanned spectra into prepared inputs.
@@ -422,6 +429,9 @@ def prepare_spectra(
     group_min : int or None
         最小分组计数；None 使用仪器配置，最终回退到 1。
         Minimum grouping counts; None uses instrument configuration, then 1.
+    fit_energy_range_keV : tuple of float or None
+        记录供下游拟合使用的能段。None 使用仪器配置。
+        Record the fit range for downstream use. None uses instrument configuration.
     overwrite : bool
         默认 False，已有分组谱会报 FileExistsError；True 允许工具覆盖。
         Default False rejects existing grouped PHA; True permits tool overwrite.
@@ -435,6 +445,11 @@ def prepare_spectra(
         all-ready spectra; any failed gives failed, otherwise partial. Inspect
         individual statuses. This function writes products but does not fit them.
     """
+    if fit_energy_range_keV is not None:
+        limits = tuple(map(float, fit_energy_range_keV))
+        if len(limits) != 2 or not all(map(math.isfinite, limits)) or not 0 < limits[0] < limits[1]:
+            raise ValueError("fit_energy_range_keV must contain finite, positive, increasing limits")
+        fit_energy_range_keV = limits
     target_root = Path(outdir).expanduser().resolve() if outdir is not None else _default_outdir(data)
     manifests = _manifests(data)
     spectra: list[PreparedSpectrum] = []
@@ -450,6 +465,7 @@ def prepare_spectra(
                     bundle,
                     outdir=target_root,
                     group_min=group_min,
+                    fit_energy_range_keV=fit_energy_range_keV,
                     overwrite=overwrite,
                 )
             )

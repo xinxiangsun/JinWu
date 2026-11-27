@@ -43,13 +43,6 @@ from ..fit_kwargs import model_fit_options
 
 __all__ = ["FXTInput", "FXTPipeline", "FXTResult"]
 
-#: Conservative fit band used when no calibrated band is supplied. The FXT
-#: preset's 0.3--10 keV ``spectrum.fit_energy_range_keV`` is a nominal
-#: calibration envelope, not a fit decision for arbitrary L2/L3 products.
-_FXT_CONSERVATIVE_FIT_BAND_KEV = (0.5, 10.0)
-_FXT_PRESET_FIT_BAND_KEV = FXT().spectrum.fit_energy_range_keV or ()
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class FXTInput(PipelineInput):
     """One source's FXT products, optionally containing several observations.
@@ -178,10 +171,10 @@ class FXTPipeline:
     model class, absorption mode, selection metric, fit/flux bands and upper-limit
     sigma come from the instrument config; a configured candidate set still wins
     over model class/absorption mode. Galactic NH is resolved through UKSSDC
-    unless explicitly supplied (XSPEC 1e22 cm^-2). The conservative default fit
-    band is 0.5--10 keV: the preset's 0.3--10 keV is a nominal calibration
-    envelope, so a non-default configured band or explicit ``fit_energy_range``
-    is required to fit below 0.5 keV. Each epoch has its own NH/shape/flux.
+    unless explicitly supplied (XSPEC 1e22 cm^-2). The fit band comes from
+    ``fit_energy_range``, then ``config.spectrum.fit_energy_range_keV``, then
+    ``config.energy_range_keV``. The FXT preset supplies a 0.5–10 keV fit band.
+    Each epoch has its own NH/shape/flux.
     Non-detections require an explicit fixed ``upper_limit_shape`` (Gamma and
     additional NH); no spectrum from another epoch is silently inherited.
     """
@@ -209,16 +202,16 @@ class FXTPipeline:
             self.candidates = None
         else:
             self.candidates = ("powerlaw_nh0", "powerlaw_free_nh")
-        band = (fit_energy_range if fit_energy_range is not None
-                else self.config.spectrum.fit_energy_range_keV)
-        if fit_energy_range is None and (
-            band is None or tuple(map(float, band)) == tuple(map(float, _FXT_PRESET_FIT_BAND_KEV))
-        ):
-            band = _FXT_CONSERVATIVE_FIT_BAND_KEV
-        self.fit_band = tuple(map(float, band))
-        band = (flux_band_keV if flux_band_keV is not None
-                else self.config.flux_curve.energy_range_keV)
-        self.flux_band = tuple(map(float, band or EP_FLUX_BAND_KEV))
+        fit_band = fit_energy_range
+        if fit_band is None:
+            fit_band = self.config.spectrum.fit_energy_range_keV
+        if fit_band is None:
+            fit_band = self.config.energy_range_keV
+        self.fit_band = tuple(map(float, fit_band))
+        flux_band = flux_band_keV
+        if flux_band is None:
+            flux_band = self.config.flux_curve.energy_range_keV
+        self.flux_band = tuple(map(float, flux_band if flux_band is not None else EP_FLUX_BAND_KEV))
         self.ul_shape = None if upper_limit_shape is None else dict(upper_limit_shape)
         self.ul_sigma = float(
             upper_limit_sigma if upper_limit_sigma is not None else self.config.upper_limit.default_sigma
@@ -257,8 +250,10 @@ class FXTPipeline:
             if key in seen:
                 raise ValueError(f"Ambiguous FXT spectra for {key}; select a version/region explicitly")
             seen.add(key)
-        prepared = prepare_spectra(catalog, outdir=outdir / "prepared",
-                                   group_min=self.config.spectrum.group_min_counts, overwrite=overwrite)
+        prepared = prepare_spectra(
+            catalog, outdir=outdir / "prepared", group_min=self.config.spectrum.group_min_counts,
+            fit_energy_range_keV=self.fit_band, overwrite=overwrite,
+        )
         source_ids = {bundle.source_pha.path: bundle.source_pha.source_id
                       for bundle in catalog.bundles if bundle.source_pha is not None}
         for spectrum in prepared.spectra:
@@ -309,7 +304,11 @@ class FXTPipeline:
                 DataFile(Path(spectrum.arf), "arf", "supplied", "EP", "FXT"),
                 DataFile(Path(spectrum.rmf), "rmf", "supplied", "EP", "FXT"), spectrum.module, spectrum.obsid)
             manifest = Manifest(outdir, "EP", "FXT", "explicit", bundles=[bundle])
-            extracted.extend(prepare_spectra(manifest, outdir=outdir / "prepared", overwrite=overwrite).spectra)
+            prepared = prepare_spectra(
+                manifest, outdir=outdir / "prepared", group_min=self.config.spectrum.group_min_counts,
+                fit_energy_range_keV=self.fit_band, overwrite=overwrite,
+            )
+            extracted.extend(prepared.spectra)
         return extracted
 
     def _upper_limit(self, observations, interval, outdir, nh):

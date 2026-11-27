@@ -897,7 +897,11 @@ class InstrumentConfig:
 
 @register_instrument
 class FXT(InstrumentConfig):
-    """Einstein Probe Follow-up X-ray Telescope."""
+    """Einstein Probe Follow-up X-ray Telescope.
+
+    The nominal instrument range is 0.3–10 keV. The default spectral fit
+    uses the more conservative 0.5–10 keV range.
+    """
 
     aliases = ("EP_FXT",)
 
@@ -913,7 +917,7 @@ class FXT(InstrumentConfig):
             "background_type": "spatial",
             "stat_method": "wstat",
             "response_type": "rmf",
-            "spectrum": SpectrumConfig(group_min_counts=3, fit_energy_range_keV=(0.3, 10.0)),
+            "spectrum": SpectrumConfig(group_min_counts=3, fit_energy_range_keV=(0.5, 10.0)),
             "fitting": FitConfig(
                 model_name="tbabs*ztbabs*cflux*powerlaw",
                 statistic="cstat",

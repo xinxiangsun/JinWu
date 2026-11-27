@@ -5,7 +5,7 @@ Einstein Probe：WXT 与 FXT
 ------------
 
 WXT normal-pointing 提供从官方事件、响应和曝光产品到报告的可恢复流程。
-FXT 提供目录扫描、仪器配置与共享 OGIP/能谱分析组件，没有独立端到端 FXT pipeline。
+FXT 提供目录扫描和 L2/L3 后随分析流程，使用已配对的谱和响应完成逐观测分析。
 WXT slew 的运动曝光与响应需要专门验证，不能直接套用 pointing 假设。
 
 WXT 输入与最小运行
@@ -104,7 +104,26 @@ FXT 扫描与能谱
 
 检查每个 module 的源/背景 PHA、RMF 和 ARF 是否匹配，再按 :doc:`spectral` 拟合。
 FXT 时间仍使用 EP 格式，通道能量优先从 RMF 读取。
-API：:mod:`jinwu.ep.wxt.pipeline`、:mod:`jinwu.core.instruments`。
+``FXT().energy_range_keV`` 是 0.3–10 keV 仪器名义能段。``FXT().spectrum.fit_energy_range_keV``
+默认采用较保守的 0.5–10 keV。使用已确认适用的低能标定时，可通过谱配置明确启用 0.3–10 keV。
+
+.. code-block:: python
+
+   from dataclasses import replace
+   from jinwu.core.config import FXT
+   from jinwu.ep.fxt import FXTInput, FXTPipeline
+
+   config = FXT()
+   config.spectrum = replace(config.spectrum, fit_energy_range_keV=(0.3, 10.0))
+   inputs = FXTInput(target_id="source", root="/data/fxt_observation",
+                     ra_deg=158.08, dec_deg=65.50)
+   pipeline = FXTPipeline(inputs, config=config)
+
+若传入 ``fit_energy_range``，该次运行使用显式参数。若谱配置的拟合能段为 ``None``，
+使用仪器名义能段。有效能段传给谱准备、计数、XSPEC 和通量上限。
+通量的积分能段由 ``config.flux_curve.energy_range_keV`` 或 ``flux_band_keV`` 指定。
+
+API：:mod:`jinwu.ep.fxt.pipeline`、:mod:`jinwu.core.instruments`。
 
 Docker 中运行官方 Level-1 处理
 ------------------------------
